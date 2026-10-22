@@ -53,7 +53,7 @@ export async function githubApiGet<T>(
     throw new Error("githubApiGet requires an api.github.com URL");
   }
 
-  const token = getGithubGradingApiToken();
+  const token = await getGithubGradingApiToken();
   try {
     const response = await safeGet<T>(requestUrl, {
       headers: {
