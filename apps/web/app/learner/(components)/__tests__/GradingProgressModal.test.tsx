@@ -3,6 +3,7 @@
  */
 
 import React, { createElement } from "react";
+import { setStoredUiLanguage } from "@/lib/ui-language";
 import { fireEvent, render, screen } from "@testing-library/react";
 import GradingProgressModal, {
   type ProgressState,
@@ -205,6 +206,18 @@ describe("GradingProgressModal unable to grade", () => {
       screen.getByTestId("unable-to-grade").closest(".bg-amber-50"),
     ).not.toBeNull();
     expect(document.querySelector(".bg-red-500")).toBeNull();
+  });
+
+  it("renders the advice in the learner's UI language", async () => {
+    setStoredUiLanguage("fr");
+    renderUnable();
+
+    expect(
+      await screen.findByText("Évaluation impossible"),
+    ).toBeInTheDocument();
+    expect(screen.getAllByTestId("unable-to-grade-issue")[0]).toHaveTextContent(
+      "https://github.com/me/private",
+    );
   });
 
   it("offers no report button", () => {
