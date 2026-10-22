@@ -88,7 +88,7 @@ export const MAX_ISSUE_FILE_NAME_LENGTH = 200;
 export function sanitizeIssueUrl(url: string | undefined): string | undefined {
   if (!url) return undefined;
   let cleaned = url.trim();
-  // userinfo (https://user:token@host) is never echoed back. pragma: allowlist secret
+  // Credentials embedded before the host (URL userinfo) are never echoed back.
   cleaned = cleaned.replace(/^([a-z][\d+.a-z-]*:\/\/)[^\s/@]*@/i, "$1");
   return cleaned.slice(0, MAX_ISSUE_URL_LENGTH) || undefined;
 }
