@@ -270,6 +270,7 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
           this.logger?.warn("file_response.content_too_large", {
             filename: file.filename,
             serializedLength: error.length,
+            reason: error.reason,
           });
           throw new BadRequestException("Invalid file response");
         }
