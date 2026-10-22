@@ -256,18 +256,34 @@ export function buildGradingIssue(
   return issue;
 }
 
+/** Longest `progress` string the job state keeps. */
+export const MAX_PROGRESS_SUMMARY_LENGTH = 255;
+
+/** Shortens text to a word boundary so a cut message never ends mid-word. */
+function fitWords(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const cut = text.slice(0, Math.max(0, max - 1));
+  const lastSpace = cut.lastIndexOf(" ");
+  return `${(lastSpace > 0 ? cut.slice(0, lastSpace) : cut).trimEnd()}…`;
+}
+
 /**
- * One-line English summary for clients that only read `progress` (255 chars).
+ * One-line English summary for clients that only read `progress`, bounded
+ * to what the job state keeps.
  */
 export function summarizeGradingFailure(failure: GradingFailure): string {
   if (failure.kind === "grading_failed" || failure.issues.length === 0) {
     return "Grading failed on our side. Please try again later. No new grade was saved.";
   }
   const [first] = failure.issues;
-  if (failure.issues.length === 1) {
-    return `${first.message} No new grade was saved.`;
-  }
-  return `We couldn't grade ${failure.issues.length} of your answers as submitted. ${first.message} No new grade was saved.`;
+  const prefix =
+    failure.issues.length === 1
+      ? ""
+      : `We couldn't grade ${failure.issues.length} of your answers as submitted. `;
+  const suffix = " No new grade was saved.";
+  const full = `${prefix}${first.message}${suffix}`;
+  if (full.length <= MAX_PROGRESS_SUMMARY_LENGTH) return full;
+  return `${prefix}${fitWords(first.message, MAX_PROGRESS_SUMMARY_LENGTH - prefix.length)}`;
 }
 
 /** Shape check for a failure that crossed a JSON boundary (HTTP body, Redis). */

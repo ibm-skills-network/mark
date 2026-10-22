@@ -89,6 +89,24 @@ describe("grading issue payload", () => {
       /^We couldn't grade 2 of your answers as submitted\. We couldn't open https:\/\/github\.com\/o\/r\./,
     );
     expect(isGradingFailure(failure)).toBe(true);
+    const long = {
+      kind: "unable_to_grade" as const,
+      issues: [1, 2, 3].map((id) =>
+        buildGradingIssue(id, {
+          code: "url_unreachable",
+          source: {
+            kind: "url",
+            url: `https://github.com/o/${"r".repeat(150)}`,
+          },
+        }),
+      ),
+    };
+    const summary = summarizeGradingFailure(long);
+    expect(summary.length).toBeLessThanOrEqual(255);
+    expect(summary).toMatch(
+      /^We couldn't grade 3 of your answers as submitted\. /,
+    );
+    expect(summary).toMatch(/\S…$/);
     expect(isGradingFailure({ kind: "unable_to_grade", issues: [{}] })).toBe(
       false,
     );
