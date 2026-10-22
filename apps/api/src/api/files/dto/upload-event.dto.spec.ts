@@ -16,7 +16,8 @@ const VALID = {
   fileExtension: "pdf",
   responseServer: "BlueCoat-ProxySG",
   hasAmzRequestId: false,
-  responseBodySnippet: "Access Denied",
+  responseErrorCode: "AccessDenied",
+  responseBodyLength: 412,
   isWebView: true,
   isCourseraApp: true,
   inIframe: false,
@@ -71,7 +72,12 @@ describe("UploadEventDto", () => {
     ["fileExtension", "averyverylongext"],
     ["responseServer", "x".repeat(101)],
     ["responseServer", "bad\nheader"],
-    ["responseBodySnippet", "x".repeat(201)],
+    ["responseErrorCode", "Access Denied"],
+    ["responseErrorCode", "jane@corp.example"],
+    ["responseErrorCode", "2001:db8::1"],
+    ["responseErrorCode", `A${"x".repeat(64)}`],
+    ["responseBodyLength", -1],
+    ["responseBodyLength", 1.5],
     ["assignmentId", 0],
     ["assignmentId", -1],
     ["assignmentId", 2_147_483_648],
@@ -80,6 +86,15 @@ describe("UploadEventDto", () => {
   ])("rejects %s = %p", async (field, value) => {
     const errors = await errorsFor({ ...VALID, [field]: value });
     expect(errors.map((error) => error.property)).toContain(field);
+  });
+
+  it("does not carry a free-text response body", async () => {
+    const dto = plainToInstance(UploadEventDto, {
+      ...VALID,
+      responseBodySnippet: "Blocked for Jane Doe",
+    });
+    expect(await validate(dto, { whitelist: true })).toHaveLength(0);
+    expect(dto).not.toHaveProperty("responseBodySnippet");
   });
 
   it.each([

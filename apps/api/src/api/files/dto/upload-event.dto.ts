@@ -57,11 +57,45 @@ export type UploadSizeBucket = (typeof UPLOAD_SIZE_BUCKETS)[number];
 const MAX_DB_INT = 2_147_483_647;
 
 /**
+ * An error code as storage writes it (`<Code>AccessDenied</Code>`, or a JSON
+ * `code`/`error` string): one identifier, no spaces, colons or `@`, so it
+ * cannot carry a name, email, IP address or credential.
+ */
+export const STORAGE_ERROR_CODE_PATTERN = /^[A-Za-z][\w.-]{0,63}$/;
+
+// One product token of a `Server` header ("nginx/1.18.0"): HTTP token
+// characters with an optional version. Comments in parentheses are dropped.
+const SERVER_PRODUCT_TOKEN = /^[\w!#$%&'*+.^`|~-]+(?:\/[\w!#$%&'*+.^`|~-]+)?$/;
+const MAX_SERVER_TOKEN_LENGTH = 64;
+
+/** The storage error code, when the value is exactly one. */
+export function allowlistedErrorCode(value: unknown): string | undefined {
+  return typeof value === "string" && STORAGE_ERROR_CODE_PATTERN.test(value)
+    ? value
+    : undefined;
+}
+
+/**
+ * The first product token of a `Server` header, which is enough to name the
+ * intermediary; anything after it (comments, a second product) is dropped.
+ */
+export function serverProductToken(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const [first] = value.trim().split(/\s/);
+  return first &&
+    first.length <= MAX_SERVER_TOKEN_LENGTH &&
+    SERVER_PRODUCT_TOKEN.test(first)
+    ? first
+    : undefined;
+}
+
+/**
  * A browser's report that a learner upload failed, or only succeeded through
  * the API fallback. Every field is observational: nothing here is trusted for
  * identity or authorization (the user comes from the session), and every
  * string is bounded and shape-checked so a hostile client cannot write
- * arbitrary text into the logs.
+ * arbitrary text into the logs. No free-text field from the response is
+ * accepted at all.
  */
 export class UploadEventDto {
   @IsIn(UPLOAD_EVENT_PHASES)
@@ -119,11 +153,22 @@ export class UploadEventDto {
   @IsBoolean()
   hasAmzRequestId?: boolean;
 
-  /** Client-scrubbed start of a readable storage-leg rejection's body. */
+  /**
+   * Error code read from a readable storage-leg rejection's body. The body
+   * itself is never sent: block pages echo names, emails, IPs and presigned
+   * URLs.
+   */
   @IsOptional()
   @IsString()
-  @MaxLength(200)
-  responseBodySnippet?: string;
+  @Matches(STORAGE_ERROR_CODE_PATTERN)
+  responseErrorCode?: string;
+
+  /** Length of that body, in characters. */
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(MAX_DB_INT)
+  responseBodyLength?: number;
 
   @IsBoolean()
   isWebView: boolean;
