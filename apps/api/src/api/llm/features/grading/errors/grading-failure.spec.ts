@@ -58,7 +58,7 @@ describe("grading issue payload", () => {
       code: "url_unreachable",
       source: {
         kind: "url",
-        url: `https://user:ghp_secret@github.com/o/r/${"x".repeat(400)}`,
+        url: `https://user:ghp_secret@github.com/o/r/${"x".repeat(400)}`, // pragma: allowlist secret
       },
     });
     expect(issue.source?.url).not.toContain("ghp_secret");
