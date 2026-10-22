@@ -156,3 +156,6 @@ export {
 export type { QuestionGrade, GradeCommitV1 } from "./grading-result";
 
 export * from "./attempt";
+
+export * from "./artifact";
+export * from "./capabilities";
