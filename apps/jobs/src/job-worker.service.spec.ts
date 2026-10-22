@@ -5,6 +5,7 @@ import { writeFile } from "node:fs/promises";
 import IORedis from "ioredis";
 import { JobExecutorService } from "../../api/src/job-queue/job-executor.service";
 import { JobStateService } from "../../api/src/job-queue/job-state.service";
+import type { ArtifactService } from "../../api/src/api/attempt/artifacts/artifact.service";
 import type { GradingProgressService } from "../../api/src/api/attempt/services/grading-progress.service";
 import { OversizedSubmissionError } from "../../api/src/api/llm/features/grading/errors/oversized-submission.error";
 import { RetryableUrlFetchError } from "../../api/src/api/llm/features/grading/errors/retryable-url-fetch.error";
@@ -34,7 +35,13 @@ import { createRedisConnection } from "./redis.connection";
 type JobWorkerServiceTestAccessor = JobWorkerService & {
   handleAssignmentV1Job: (job: Job) => Promise<void>;
   handleAssignmentV2Job: (job: Job) => Promise<void>;
-  handleAttemptJob: (job: Job) => Promise<void>;
+  handleAttemptJob: (
+    job: Job,
+    queueName?:
+      | typeof JOB_QUEUE_NAMES.ATTEMPT
+      | typeof JOB_QUEUE_NAMES.ATTEMPT_HEAVY,
+  ) => Promise<void>;
+  handleAttemptWorkerFailure: (job: Job, error: Error) => Promise<void>;
   handleAdminTranslationJob: (job: Job) => Promise<void>;
   handleTranslationJob: (job: Job) => Promise<void>;
   getConnection: () => IORedis;
@@ -187,6 +194,7 @@ describe("JobWorkerService", () => {
     pipeline: jest.fn(() => mockPipeline),
   };
   const fetchMock = jest.fn();
+  const mockArtifactService = { process: jest.fn() };
 
   let logSpy: jest.SpyInstance;
   let errorSpy: jest.SpyInstance;
@@ -233,13 +241,94 @@ describe("JobWorkerService", () => {
     mockStructuredLogger.debug.mockClear();
     mockJobStateService.updateJobStatus.mockReset();
     mockGradingProgressService.markFailed.mockReset();
+    mockArtifactService.process.mockReset();
 
     service = new JobWorkerService(
       mockJobExecutorService as unknown as JobExecutorService,
       mockJobStateService as unknown as JobStateService,
       mockGradingProgressService as unknown as GradingProgressService,
       mockParentWinstonLogger,
+      mockArtifactService as unknown as ArtifactService,
     );
+  });
+
+  describe("canonical artifact extraction", () => {
+    const operationId = "00a3d280-160b-437e-b459-f275e98ea150";
+    function artifactJob(payload: unknown = { operationId }): Job {
+      return {
+        name: JOB_NAMES.ARTIFACT_EXTRACT,
+        id: "artifact-job",
+        data: encryptJobPayload(payload),
+        opts: { attempts: 3 },
+        attemptsMade: 3,
+      } as Job;
+    }
+    it.each(["true", "false", undefined])(
+      "always executes on the heavy worker when local execution is %s",
+      async (flag) => {
+        if (flag === undefined) delete process.env.JOBS_EXECUTE_LOCALLY;
+        else process.env.JOBS_EXECUTE_LOCALLY = flag;
+        await asTestAccessor(service).handleAttemptJob(
+          artifactJob(),
+          JOB_QUEUE_NAMES.ATTEMPT_HEAVY,
+        );
+        expect(mockArtifactService.process).toHaveBeenCalledWith(operationId);
+        expect(fetchMock).not.toHaveBeenCalled();
+        expect(mockJobExecutorService.executeJob).not.toHaveBeenCalled();
+      },
+    );
+    it("rejects wrong queues and malformed/overloaded payloads before any extraction", async () => {
+      await expect(
+        asTestAccessor(service).handleAttemptJob(
+          artifactJob(),
+          JOB_QUEUE_NAMES.ATTEMPT,
+        ),
+      ).rejects.toBeInstanceOf(UnrecoverableError);
+      for (const payload of [
+        { operationId: "invalid" },
+        { operationId, attemptId: 123 },
+        { operationId, sourceText: "secret" },
+      ])
+        await expect(
+          asTestAccessor(service).handleAttemptJob(
+            artifactJob(payload),
+            JOB_QUEUE_NAMES.ATTEMPT_HEAVY,
+          ),
+        ).rejects.toBeInstanceOf(UnrecoverableError);
+      expect(mockArtifactService.process).not.toHaveBeenCalled();
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+    it("sanitizes extraction failures and never touches grading progress or grade jobs", async () => {
+      mockArtifactService.process.mockRejectedValue(
+        new Error("SECRET storage credential"),
+      );
+      const job = artifactJob();
+      await expect(
+        asTestAccessor(service).handleAttemptJob(
+          job,
+          JOB_QUEUE_NAMES.ATTEMPT_HEAVY,
+        ),
+      ).rejects.toThrow("Artifact extraction failed.");
+      await asTestAccessor(service).handleAttemptWorkerFailure(
+        job,
+        new UnrecoverableError("failed"),
+      );
+      expect(mockGradingProgressService.markFailed).not.toHaveBeenCalled();
+      expect(mockJobStateService.updateJobStatus).not.toHaveBeenCalled();
+      expect(mockConnection.pipeline).not.toHaveBeenCalled();
+    });
+    it("respects terminal extraction outcomes without grading failure classification", async () => {
+      mockArtifactService.process.mockRejectedValue(
+        Object.assign(new Error("private"), { retryable: false }),
+      );
+      await expect(
+        asTestAccessor(service).handleAttemptJob(
+          artifactJob(),
+          JOB_QUEUE_NAMES.ATTEMPT_HEAVY,
+        ),
+      ).rejects.toBeInstanceOf(UnrecoverableError);
+      expect(mockGradingProgressService.markFailed).not.toHaveBeenCalled();
+    });
   });
 
   afterEach(() => {

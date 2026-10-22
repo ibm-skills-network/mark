@@ -61,7 +61,7 @@ COPY --chown=node:node --from=build ${DIR}/apps/api/ensureDb.js ./ensureDb.js
 COPY --chown=node:node --from=build ${DIR}/apps/api/src/scripts ./scripts
 
 # Fail the image build if the compiled workspace cannot resolve at runtime.
-RUN node -e "require('backend-contracts')"
+RUN node -e "require('backend-contracts'); require('node:fs').accessSync('./dist/api/attempt/artifacts/parser/artifact.worker.js')"
 
 USER node
 ENTRYPOINT ["/usr/bin/dumb-init", "--"]

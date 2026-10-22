@@ -1,11 +1,44 @@
 /* eslint-disable unicorn/prefer-module -- Nest emits CommonJS; worker paths must resolve relative to the compiled module. */
 import { spawn, execFile } from "node:child_process";
 import { dirname, join } from "node:path";
-import { realpathSync, readFile, existsSync } from "node:fs";
+import { realpathSync, readFile, readFileSync, existsSync } from "node:fs";
 
 import type { ParserLimits, ParserDocument } from "./parser.types";
 export type { ParserLimits, ParserDocument } from "./parser.types";
 export const ARTIFACT_EXTRACTOR_VERSION = "1.0.0";
+function dependencyVersion(name: string): string {
+  try {
+    let directory = dirname(require.resolve(name));
+    for (;;) {
+      const metadataPath = join(directory, "package.json");
+      if (existsSync(metadataPath)) {
+        const metadata = JSON.parse(readFileSync(metadataPath, "utf8")) as {
+          name?: unknown;
+          version?: unknown;
+        };
+        if (metadata.name === name && typeof metadata.version === "string")
+          return metadata.version;
+      }
+      const parent = dirname(directory);
+      if (parent === directory) return "unavailable";
+      directory = parent;
+    }
+  } catch {
+    return "unavailable";
+  }
+}
+/** Package export maps need not expose package.json; resolve from the installed entrypoint. */
+export const ARTIFACT_EXTRACTOR_DEPENDENCIES = Object.freeze({
+  ...Object.fromEntries(
+    ["pdfjs-dist", "sharp", "unzipper", "xml2js", "cheerio"].map((name) => [
+      name,
+      dependencyVersion(name),
+    ]),
+  ),
+  node: process.versions.node,
+  platform: `${process.platform}/${process.arch}`,
+});
+
 export const PARSER_LIMITS: Readonly<ParserLimits> = Object.freeze({
   inputBytes: 20 * 1024 * 1024,
   expandedBytes: 8 * 1024 * 1024,
@@ -39,6 +72,9 @@ export async function parseArtifactIsolated(
   signal?: AbortSignal,
   overrides: Partial<ParserLimits> = {},
 ): Promise<ParserDocument> {
+  if (Object.values(ARTIFACT_EXTRACTOR_DEPENDENCIES).includes("unavailable")) {
+    throw new ArtifactParserError("dependency_unavailable");
+  }
   const limits = { ...PARSER_LIMITS, ...overrides };
   for (const [key, value] of Object.entries(limits)) {
     if (

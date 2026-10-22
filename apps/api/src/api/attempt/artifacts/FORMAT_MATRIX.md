@@ -36,7 +36,7 @@ Existing multipart `FileUpload` rows identify a user, upload ID, key and bucket 
 
 The canonical adapter must therefore authorize the attempt and question, establish completed server-observed source bytes, and bind the source to that attempt. A matching checksum never grants access. Reuse requires source identity, digest, parser/configuration identity and independent ownership checks. Changing bytes under an existing key must fail integrity checks rather than replace historical evidence.
 
-Existing generic delete/move/rename/folder operations predate immutable artifacts. Retained originals must be protected from these paths or placed in a namespace these operations cannot mutate. An artifact manifest pointing at a deleted mutable upload is insufficient retention. Cleanup must respect historical submissions and active processing; delayed retries must not use another attempt's source.
+The canonical integration now reserves generic delete/move/rename/folder mutations under the same PostgreSQL object lock used by attempt source binding. Bound originals and overwrite destinations are protected. A committed deletion reservation prevents a concurrent or later binding, including after an uncertain storage failure; the learner must upload under a new key. The real PostgreSQL tests cover this race, batch rollback, and idempotent reservations. Storage checksums are rechecked before evidence acceptance and original-resource reads; a changed object never silently replaces a pinned original.
 
 ## Isolation and release evidence
 

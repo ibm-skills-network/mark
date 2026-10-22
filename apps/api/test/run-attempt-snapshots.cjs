@@ -30,7 +30,6 @@ function run(command, args, options = {}) {
     await new Promise((resolve) => listener.close(resolve));
     run("docker", [
       "run",
-      "--rm",
       "-d",
       "--name",
       name,
@@ -57,7 +56,10 @@ function run(command, args, options = {}) {
       }
       await setTimeout(100);
     }
-    if (!ready) throw new Error("PostgreSQL did not become ready");
+    if (!ready)
+      throw new Error(
+        `PostgreSQL did not become ready:\n${spawnSync("docker", ["logs", name], { encoding: "utf8" }).stderr ?? ""}`,
+      );
     const port = run("docker", ["port", name, "5432"]).trim().split(":").at(-1);
     const url = `postgresql://postgres@127.0.0.1:${port}/mark_part03`;
     // Container readiness can precede Docker's host port forwarding. Probe the actual client path.
@@ -129,13 +131,17 @@ function run(command, args, options = {}) {
         "--single-transaction",
       ],
       {
-        input: readFileSync(
-          path.join(
-            api,
-            "prisma/migrations/20261022153000_attempt_snapshots/migration.sql",
-          ),
-          "utf8",
-        ),
+        input: [
+          "20261022153000_attempt_snapshots",
+          "20261022170000_canonical_artifacts",
+        ]
+          .map((migration) =>
+            readFileSync(
+              path.join(api, "prisma/migrations", migration, "migration.sql"),
+              "utf8",
+            ),
+          )
+          .join("\n"),
       },
     );
     console.log(
@@ -162,12 +168,15 @@ function run(command, args, options = {}) {
         "../../node_modules/jest/bin/jest.js",
         "--runInBand",
         "src/api/attempt/immutable/attempt-snapshot.integration.spec.ts",
+        "src/api/files/services/source-retention.integration.spec.ts",
+        "src/api/attempt/artifacts/artifact.integration.spec.ts",
       ],
       { cwd: api, env, stdio: "inherit" },
     );
     if (result.status !== 0) process.exitCode = 1;
   } finally {
-    if (started) run("docker", ["stop", name]);
+    if (started)
+      spawnSync("docker", ["rm", "-f", "-v", name], { stdio: "ignore" });
   }
 })().catch((error) => {
   console.error(error.message);

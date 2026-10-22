@@ -1,3 +1,4 @@
+import { ArtifactService } from "../artifacts/artifact.service";
 import { AttemptSubmissionService } from "../services/attempt-submission.service";
 import { QuestionResponseService } from "../services/question-response/question-response.service";
 import { QuestionVariantService } from "../services/question-variant/question-variant.service";
@@ -274,10 +275,34 @@ suite("immutable attempts (real PostgreSQL)", () => {
       expectedRevision: 0,
       answers: [{ questionId: 1, sourceIds: [source.id] }],
     });
-    const frozen = await submit(f, {
-      operationId: randomUUID(),
-      expectedRevision: 1,
-    });
+    const command = { operationId: randomUUID(), expectedRevision: 1 };
+    await expect(submit(f, command)).rejects.toMatchObject({ status: 409 });
+    const evidence = {
+      sourceId: source.id,
+      artifactId: randomUUID(),
+      checksum: "a".repeat(64),
+    };
+    const validateSources = jest.fn().mockResolvedValue([evidence]);
+    const validatedService = new AttemptSnapshotService(
+      prisma as unknown as PrismaService,
+      { validateSources } as unknown as ArtifactService,
+    );
+    await expect(
+      validatedService.submit(f.attemptId, f.assignmentId, f.userId, {
+        ...command,
+        expectedRevision: 2,
+      }),
+    ).rejects.toMatchObject({ status: 409 });
+    expect(validateSources).not.toHaveBeenCalled();
+    const frozen = await validatedService.submit(
+      f.attemptId,
+      f.assignmentId,
+      f.userId,
+      command,
+    );
+    expect((frozen.answers as { artifacts: unknown[] }).artifacts).toEqual([
+      evidence,
+    ]);
     expect(
       (frozen.answers as { sources: { storageKey: string }[] }).sources[0]
         .storageKey,
@@ -286,10 +311,18 @@ suite("immutable attempts (real PostgreSQL)", () => {
       where: { uploadId },
       data: { storageKey: "changed.pdf" },
     });
+    const reloaded = await validatedService.read(
+      f.attemptId,
+      f.assignmentId,
+      f.userId,
+    );
     expect(
-      (await service.loadForGrading(f.attemptId, f.assignmentId, f.userId))
-        .updateDto.responsesForQuestions[0].learnerFileResponse[0].key,
+      (reloaded.submission.answers as { sources: { storageKey: string }[] })
+        .sources[0].storageKey,
     ).toBe("synthetic/long.pdf");
+    await expect(
+      validatedService.loadForGrading(f.attemptId, f.assignmentId, f.userId),
+    ).rejects.toMatchObject({ status: 409 });
   });
   it("database rejects evidence mutation and rolls failed transactions back", async () => {
     const f = await fixture();
@@ -358,17 +391,17 @@ suite("immutable attempts (real PostgreSQL)", () => {
       answers: [{ questionId: 1, boolean: false, number: 0 }],
     });
     await submit(f, { operationId: randomUUID(), expectedRevision: 1 });
-    const loaded = await service.loadForGrading(
-      f.attemptId,
-      f.assignmentId,
-      f.userId,
-    );
-    expect(loaded.updateDto.responsesForQuestions[0].learnerAnswerChoice).toBe(
-      false,
-    );
-    expect(loaded.updateDto.responsesForQuestions[0].learnerTextResponse).toBe(
-      "0",
-    );
+    const loaded = await service.read(f.attemptId, f.assignmentId, f.userId);
+    expect(
+      (
+        loaded.submission.answers as {
+          answers: { boolean: boolean; number: number }[];
+        }
+      ).answers[0],
+    ).toMatchObject({ boolean: false, number: 0 });
+    await expect(
+      service.loadForGrading(f.attemptId, f.assignmentId, f.userId),
+    ).rejects.toMatchObject({ status: 409 });
   });
   it("retains pre-migration active/completed attempts with missing historical questions", async () => {
     const legacy = await prisma.assignmentAttempt.findMany({
@@ -384,6 +417,140 @@ suite("immutable attempts (real PostgreSQL)", () => {
           attempt.userId,
         ),
       ).toBeUndefined();
+  });
+
+  it("enables non-choice artifact previews only through the separate allowlist and keeps grading closed", async () => {
+    const assignment = await prisma.assignment.create({
+      data: {
+        name: "Artifact preview journey",
+        type: "AI_GRADED",
+        published: true,
+        questionOrder: [],
+      },
+    });
+    const question = await prisma.question.create({
+      data: {
+        assignmentId: assignment.id,
+        question: "Upload evidence",
+        type: "UPLOAD",
+        totalPoints: 2,
+        gradingContextQuestionIds: [],
+        choices: [],
+      },
+    });
+    await prisma.assignment.update({
+      where: { id: assignment.id },
+      data: { questionOrder: [question.id] },
+    });
+    const submissions = new AttemptSubmissionService(
+      prisma as unknown as PrismaService,
+      { validateNewAttempt: jest.fn() } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      new QuestionVariantService(prisma as unknown as PrismaService),
+      {} as never,
+      service,
+    );
+    const session = {
+      userId: `preview-${randomUUID()}`,
+      role: UserRole.LEARNER,
+      assignmentId: assignment.id,
+      groupId: "synthetic",
+    };
+    const oldChoice = process.env.ATTEMPT_SNAPSHOT_ASSIGNMENT_IDS;
+    const oldPreview = process.env.ARTIFACT_PREVIEW_ASSIGNMENT_IDS;
+    process.env.ATTEMPT_SNAPSHOT_ASSIGNMENT_IDS = String(assignment.id);
+    delete process.env.ARTIFACT_PREVIEW_ASSIGNMENT_IDS;
+    try {
+      await expect(
+        submissions.createAssignmentAttempt(
+          assignment.id,
+          session,
+          true,
+          randomUUID(),
+        ),
+      ).rejects.toThrow("choice-only");
+      expect(
+        await prisma.assignmentAttempt.count({
+          where: { assignmentId: assignment.id },
+        }),
+      ).toBe(0);
+      delete process.env.ATTEMPT_SNAPSHOT_ASSIGNMENT_IDS;
+      process.env.ARTIFACT_PREVIEW_ASSIGNMENT_IDS = String(assignment.id);
+      const created = await submissions.createAssignmentAttempt(
+        assignment.id,
+        session,
+        true,
+        randomUUID(),
+      );
+      const initial = await service.read(
+        created.id,
+        assignment.id,
+        session.userId,
+      );
+      expect(initial.definition.questions[0]).toMatchObject({
+        id: question.id,
+        type: "UPLOAD",
+      });
+      expect(initial.draft.revision).toBe(0);
+      const upload = await prisma.fileUpload.create({
+        data: {
+          uploadId: randomUUID(),
+          userId: session.userId,
+          storageKey: `synthetic/${randomUUID()}.pdf`,
+          bucket: "local-only",
+          uploadType: "learner",
+          status: "COMPLETED",
+        },
+      });
+      const source = await service.bindSource(
+        created.id,
+        assignment.id,
+        session.userId,
+        upload.uploadId,
+      );
+      const queue = { enqueue: jest.fn().mockResolvedValue({}) };
+      const artifacts = new ArtifactService(
+        prisma as unknown as PrismaService,
+        {} as never,
+        queue as never,
+      );
+      const pending = await artifacts.request(
+        created.id,
+        assignment.id,
+        session.userId,
+        source.id,
+      );
+      expect(pending).toMatchObject({
+        state: "PENDING",
+        status: "pending",
+        gradeable: false,
+      });
+      expect(queue.enqueue).toHaveBeenCalledTimes(1);
+      await service.submit(created.id, assignment.id, session.userId, {
+        operationId: randomUUID(),
+        expectedRevision: 0,
+      });
+      await expect(
+        service.loadForGrading(created.id, assignment.id, session.userId),
+      ).rejects.toThrow("Part 05 evidence gate");
+      expect(
+        (
+          await prisma.assignmentAttempt.findUniqueOrThrow({
+            where: { id: created.id },
+          })
+        ).grade,
+      ).toBeNull();
+    } finally {
+      if (oldChoice === undefined)
+        delete process.env.ATTEMPT_SNAPSHOT_ASSIGNMENT_IDS;
+      else process.env.ATTEMPT_SNAPSHOT_ASSIGNMENT_IDS = oldChoice;
+      if (oldPreview === undefined)
+        delete process.env.ARTIFACT_PREVIEW_ASSIGNMENT_IDS;
+      else process.env.ARTIFACT_PREVIEW_ASSIGNMENT_IDS = oldPreview;
+    }
   });
 
   it("creates, resumes, snapshots, grades and reloads a real choice attempt after republishing", async () => {

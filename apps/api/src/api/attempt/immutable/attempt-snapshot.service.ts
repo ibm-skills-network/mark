@@ -1,8 +1,11 @@
+import { ArtifactService } from "../artifacts/artifact.service";
+import { lockSourceObject } from "../../files/services/source-retention";
 /* eslint-disable unicorn/no-null */
 import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Optional,
   NotFoundException,
   UnprocessableEntityException,
 } from "@nestjs/common";
@@ -52,12 +55,27 @@ function parsedArray(value: unknown): Record<string, unknown>[] {
 
 @Injectable()
 export class AttemptSnapshotService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly artifacts?: ArtifactService,
+  ) {}
 
   /** Empty by default. Existing attempts never change lanes when this list changes. */
   enabled(assignmentId: number): boolean {
-    return (process.env.ATTEMPT_SNAPSHOT_ASSIGNMENT_IDS ?? "")
+    return (
+      this.artifactPreviewEnabled(assignmentId) ||
+      (process.env.ATTEMPT_SNAPSHOT_ASSIGNMENT_IDS ?? "")
+        .split(",")
+        .map((value) => value.trim())
+        .includes(String(assignmentId))
+    );
+  }
+
+  /** Development/staging preprocessing only; does not enable AI grading. */
+  artifactPreviewEnabled(assignmentId: number): boolean {
+    return (process.env.ARTIFACT_PREVIEW_ASSIGNMENT_IDS ?? "")
       .split(",")
+      .map((value) => value.trim())
       .includes(String(assignmentId));
   }
 
@@ -112,7 +130,7 @@ export class AttemptSnapshotService {
           totalPoints: question.totalPoints,
           configuration: json(configuration),
           choices: parsedArray(pick.randomizedChoices ?? []).map((raw) => {
-            const choice = raw ;
+            const choice = raw;
             return {
               id: randomUUID(),
               choice: choice.choice,
@@ -183,6 +201,15 @@ export class AttemptSnapshotService {
     if (!submission)
       throw new ConflictException("Submit a persisted draft revision first");
     const definition = attemptDefinitionSchema.parse(record.snapshot);
+    if (
+      definition.questions.some(
+        (question) =>
+          !["SINGLE_CORRECT", "MULTIPLE_CORRECT"].includes(question.type),
+      )
+    )
+      throw new ConflictException(
+        "Canonical artifact grading requires the Part 05 evidence gate",
+      );
     const snapshot = submission.answers as unknown as {
       answers: DraftAnswer[];
       sources: { id: string; storageKey: string; bucket: string }[];
@@ -402,6 +429,40 @@ export class AttemptSnapshotService {
     if (!result.success)
       throw new BadRequestException("Invalid submission command");
     const command = result.data;
+    // Validate bytes outside the short freeze transaction. The expected revision
+    // below fences any draft edits made while storage is being read.
+    const candidate = await this.prisma.attemptDraft.findFirst({
+      where: { attemptId, attempt: { assignmentId, userId } },
+    });
+    const sourceIdsToPin =
+      (candidate?.answers as DraftAnswer[] | undefined)?.flatMap(
+        (answer) => answer.sourceIds ?? [],
+      ) ?? [];
+    const existingSubmission = await this.prisma.attemptSubmission.findFirst({
+      where: { attemptId, attempt: { assignmentId, userId } },
+    });
+    if (
+      !existingSubmission &&
+      candidate &&
+      candidate.revision !== command.expectedRevision
+    )
+      throw new ConflictException({
+        code: "DRAFT_CONFLICT",
+        revision: candidate.revision,
+      });
+    let artifacts: {
+      sourceId: string;
+      artifactId: string;
+      checksum: string;
+    }[] = [];
+    if (!existingSubmission && sourceIdsToPin.length > 0) {
+      if (!this.artifacts)
+        throw new ConflictException("Artifact extraction is unavailable");
+      artifacts = await this.artifacts.validateSources(
+        attemptId,
+        sourceIdsToPin,
+      );
+    }
     return this.prisma.$transaction(async (tx) => {
       const { attempt, definition } = await this.lock(
         tx,
@@ -457,12 +518,20 @@ export class AttemptSnapshotService {
       });
       if (new Set(sourceIds).size !== sources.length)
         throw new BadRequestException("Invalid submission source");
+      const verifiedSourceIds = new Set(
+        artifacts.map((artifact) => artifact.sourceId),
+      );
+      if (
+        verifiedSourceIds.size !== new Set(sourceIds).size ||
+        sourceIds.some((id) => !verifiedSourceIds.has(id))
+      )
+        throw new ConflictException("Draft sources changed during validation");
       return tx.attemptSubmission.create({
         data: {
           attemptId,
           operationId: command.operationId,
           draftRevision: draft.revision,
-          answers: json({ answers, sources }),
+          answers: json({ answers, sources, artifacts }),
         },
       });
     });
@@ -498,6 +567,19 @@ export class AttemptSnapshotService {
         where: { uploadId, userId, status: "COMPLETED" },
       });
       if (!upload) throw new NotFoundException("Completed upload not found");
+      await lockSourceObject(tx, upload.bucket, upload.storageKey);
+      const deletion = await tx.sourceObjectDeletion.findUnique({
+        where: {
+          bucket_storageKey: {
+            bucket: upload.bucket,
+            storageKey: upload.storageKey,
+          },
+        },
+      });
+      if (deletion)
+        throw new ConflictException(
+          "This upload was reserved for deletion. Upload the file again.",
+        );
       const existing = await tx.attemptSource.findUnique({
         where: { uploadId },
       });

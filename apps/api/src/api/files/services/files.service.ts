@@ -30,6 +30,7 @@ import { FileProcessingBudgetService } from "./file-processing-budget.service";
 import { sanitizeUploadPath } from "./path-sanitizer";
 import { S3Service } from "./s3.service";
 import { generateStorageKeyId } from "./storage-key";
+import { reserveSourceObjectDeletion } from "./source-retention";
 
 const CHATBOT_ALLOWED_FILE_TYPES: Record<string, string[]> = {
   "text/plain": [
@@ -905,6 +906,10 @@ export class FilesService {
       throw new BadRequestException("Invalid upload type");
     }
 
+    await this.prisma.$transaction((tx) =>
+      reserveSourceObjectDeletion(tx, bucket, [key]),
+    );
+
     await this.s3Service.deleteObject({
       Bucket: bucket,
       Key: key,
@@ -946,6 +951,14 @@ export class FilesService {
         Quiet: false,
       },
     };
+
+    await this.prisma.$transaction((tx) =>
+      reserveSourceObjectDeletion(
+        tx,
+        bucket,
+        deleteParameters.Delete.Objects.map((object) => object.Key),
+      ),
+    );
 
     const deleteResult = await this.s3Service.deleteObjects(deleteParameters);
 
@@ -1116,6 +1129,10 @@ export class FilesService {
     const newKey =
       targetPath === "/" ? fileName : `${targetPath.slice(1)}/${fileName}`;
 
+    await this.prisma.$transaction((tx) =>
+      reserveSourceObjectDeletion(tx, bucket, [sourceKey, newKey]),
+    );
+
     await this.s3Service.copyObject({
       Bucket: bucket,
       CopySource: `${bucket}/${sourceKey}`,
@@ -1145,6 +1162,10 @@ export class FilesService {
     pathParts.pop();
     const prefix = pathParts.join("/");
     const newKey = prefix ? `${prefix}/${newFileName}` : newFileName;
+
+    await this.prisma.$transaction((tx) =>
+      reserveSourceObjectDeletion(tx, bucket, [sourceKey, newKey]),
+    );
 
     await this.s3Service.copyObject({
       Bucket: bucket,

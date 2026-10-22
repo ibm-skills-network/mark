@@ -169,3 +169,33 @@ export const artifactFormatCapabilities: readonly ArtifactFormatCapability[] = [
     limitations: ["A URL alone is not an immutable repository snapshot."],
   },
 ];
+
+/** Implemented canonical variants. Presence here is parser availability, not
+ * rollout authorization or evidence sufficiency. URL capture accepts HTML/plain
+ * text through its own bounded remote capture endpoint. */
+export const canonicalArtifactExtensions: Readonly<
+  Record<ArtifactFormat, readonly string[]>
+> = {
+  pdf: [".pdf"],
+  spreadsheet: [".xlsx"],
+  notebook: [".ipynb"],
+  archive: [".zip"],
+  image: [".png", ".jpg", ".jpeg", ".webp", ".gif", ".tiff"],
+  presentation: [".pptx"],
+  document: [".docx"],
+  url: [],
+  repository: [],
+  text: [
+    ".txt",
+    ".md",
+    ".json",
+    ".py",
+    ".js",
+    ".ts",
+    ".java",
+    ".c",
+    ".cpp",
+    ".html",
+    ".css",
+  ],
+};

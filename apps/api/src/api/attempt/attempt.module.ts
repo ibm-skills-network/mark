@@ -1,3 +1,5 @@
+import { ArtifactController } from "./artifacts/artifact.controller";
+import { ArtifactModule } from "./artifacts/artifact.module";
 import { AttemptSnapshotController } from "./immutable/attempt-snapshot.controller";
 import { AttemptSnapshotService } from "./immutable/attempt-snapshot.service";
 import { Module } from "@nestjs/common";
@@ -54,6 +56,7 @@ import { TranslationService } from "./services/translation/translation.service";
 
 @Module({
   imports: [
+    ArtifactModule,
     LlmModule,
     AssignmentModuleV2,
     LtiSyncModule,
@@ -61,7 +64,7 @@ import { TranslationService } from "./services/translation/translation.service";
     AdminAuthModule,
     AttemptAccessCacheModule,
   ],
-  controllers: [AttemptControllerV2, AttemptSnapshotController],
+  controllers: [AttemptControllerV2, AttemptSnapshotController, ArtifactController],
   providers: [
     AttemptSnapshotService,
     AttemptServiceV2,

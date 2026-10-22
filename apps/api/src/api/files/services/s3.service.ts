@@ -141,9 +141,12 @@ export class S3Service {
 
   async getObject(
     parameters: GetObjectCommandInput,
+    signal?: AbortSignal,
   ): Promise<GetObjectCommandOutput> {
     const client = this.getS3Client(parameters.Bucket);
-    return client.send(new GetObjectCommand(parameters));
+    return client.send(new GetObjectCommand(parameters), {
+      abortSignal: signal,
+    });
   }
 
   async getSignedUrl(
@@ -209,9 +212,12 @@ export class S3Service {
 
   async putObject(
     parameters: PutObjectCommandInput,
+    signal?: AbortSignal,
   ): Promise<PutObjectCommandOutput> {
     const client = this.getS3Client(parameters.Bucket);
-    return client.send(new PutObjectCommand(parameters));
+    return client.send(new PutObjectCommand(parameters), {
+      abortSignal: signal,
+    });
   }
 
   async deleteObject(

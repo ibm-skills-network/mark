@@ -17,6 +17,7 @@ export const JOB_NAMES = {
   ASSIGNMENT_V2_RETRY_FAILED_TRANSLATIONS:
     "assignment-v2.retry-failed-translations",
   ATTEMPT_GRADE: "attempt.grade",
+  ARTIFACT_EXTRACT: "artifact.extract",
   ATTEMPT_AUTHOR_PREVIEW: "attempt.author-preview",
   ADMIN_FIX_MISSING_TRANSLATIONS: "admin.fix-missing-translations",
   ADMIN_SWEEP_MISSING_TRANSLATIONS: "admin.sweep-missing-translations",
@@ -36,6 +37,7 @@ export const JOB_NAMES = {
 // admin maintenance).
 export const JOB_PRIORITIES: Partial<Record<JobName, number>> = {
   [JOB_NAMES.ATTEMPT_GRADE]: 1,
+  [JOB_NAMES.ARTIFACT_EXTRACT]: 1,
   [JOB_NAMES.ATTEMPT_AUTHOR_PREVIEW]: 10,
   [JOB_NAMES.TRANSLATE_QUESTION]: 1,
   [JOB_NAMES.TRANSLATE_VARIANT]: 1,

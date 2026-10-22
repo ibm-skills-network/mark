@@ -1,3 +1,4 @@
+import { parseArtifactExtractionJob } from "backend-contracts";
 import { Injectable, Logger, OnModuleDestroy } from "@nestjs/common";
 import { Job, JobsOptions, JobState, Queue } from "bullmq";
 import IORedis from "ioredis";
@@ -7,6 +8,7 @@ import {
 } from "./attempt-retry-backoff";
 import {
   JOB_PRIORITIES,
+  JOB_NAMES,
   JOB_QUEUE_NAMES,
   JobName,
 } from "./job-queue.constants";
@@ -116,6 +118,11 @@ export class JobQueueService implements OnModuleDestroy {
     payload: unknown,
     options: JobsOptions = {},
   ): Promise<void> {
+    if (jobName === JOB_NAMES.ARTIFACT_EXTRACT) {
+      if (queueName !== JOB_QUEUE_NAMES.ATTEMPT_HEAVY)
+        throw new Error("Artifact extraction requires the heavy queue.");
+      payload = parseArtifactExtractionJob(payload);
+    }
     // Centralized priority assignment: BullMQ runs unprioritized jobs before
     // ALL prioritized ones, so every job class on a prioritized queue must
     // get its priority here — call sites cannot be trusted to remember.

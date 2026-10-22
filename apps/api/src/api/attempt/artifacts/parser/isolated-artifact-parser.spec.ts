@@ -141,6 +141,7 @@ describe("isolated artifact parser (real child and PDF dependency)", () => {
   it("denies public network calls, filesystem writes, subprocesses and inherited secrets", async () => {
     const adapter = join(folder, "adapter-pdf.js");
     const original = readFileSync(adapter);
+    process.env.MARK_PARSER_ISOLATION_TEST = "synthetic-environment-value";
     writeFileSync(
       adapter,
       `exports.extractPdf = async () => {
@@ -148,13 +149,14 @@ describe("isolated artifact parser (real child and PDF dependency)", () => {
       for (const operation of [() => require('node:net').connect(80, '127.0.0.1'), () => require('node:fs').writeFileSync('/tmp/mark-parser-denied', 'bad'), () => require('node:child_process').spawn('true')]) {
         try { operation(); } catch { blocked++; }
       }
-      return { blocks: [{kind:'text',text:String(blocked),location:{}, inherited:process.env.HOME}], omissions:[], expandedBytes:0 };
+      return { blocks: [{kind:'text',text:String(blocked + (process.env.MARK_PARSER_ISOLATION_TEST ? 0 : 1)),location:{}}], omissions:[], expandedBytes:0 };
     };`,
     );
     try {
-      expect((await parse(Buffer.alloc(0), "pdf")).blocks[0].text).toBe("3");
+      expect((await parse(Buffer.alloc(0), "pdf")).blocks[0].text).toBe("4");
     } finally {
       writeFileSync(adapter, original);
+      delete process.env.MARK_PARSER_ISOLATION_TEST;
     }
   });
   it("records legitimately empty input", async () => {

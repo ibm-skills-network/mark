@@ -1,5 +1,6 @@
 import {
   parseGradingJob,
+  parseArtifactExtractionJob,
   GradingContractError,
   InvalidGradingResultError,
 } from "backend-contracts";
@@ -9,6 +10,7 @@ import {
   Logger,
   OnModuleDestroy,
   OnModuleInit,
+  Optional,
 } from "@nestjs/common";
 import { Job, UnrecoverableError, Worker } from "bullmq";
 import IORedis from "ioredis";
@@ -36,6 +38,7 @@ import { createRedisConnection } from "./redis.connection";
 import { calculateAttemptRetryDelayMs } from "../../api/src/job-queue/attempt-retry-backoff";
 import { JobExecutorService } from "../../api/src/job-queue/job-executor.service";
 import { JobStateService } from "../../api/src/job-queue/job-state.service";
+import type { ArtifactService } from "../../api/src/api/attempt/artifacts/artifact.service";
 import type { GradingProgressService } from "../../api/src/api/attempt/services/grading-progress.service";
 import { LearnerFacingGradingError } from "../../api/src/api/llm/features/grading/errors/learner-facing-grading.error";
 
@@ -117,6 +120,9 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
     @Inject("GradingProgressService")
     private readonly gradingProgressService: GradingProgressService,
     @Inject(WINSTON_MODULE_PROVIDER) parentLogger: WinstonLogger,
+    @Optional()
+    @Inject("ArtifactService")
+    private readonly artifactService?: ArtifactService,
   ) {
     this.structuredLogger = parentLogger.child({
       context: JobWorkerService.name,
@@ -629,6 +635,10 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
     job: Job,
     queueName: JobQueueName = JOB_QUEUE_NAMES.ATTEMPT,
   ): Promise<void> {
+    if (job.name === JOB_NAMES.ARTIFACT_EXTRACT) {
+      await this.handleArtifactExtractionJob(job, queueName);
+      return;
+    }
     try {
       // Validate before either local execution or forwarding to an older API.
       if (job.name === JOB_NAMES.ATTEMPT_GRADE) {
@@ -676,6 +686,40 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
         throw new UnrecoverableError(error.message);
       }
       await this.classifyAttemptError(job, error);
+    }
+  }
+
+  // Extraction never enters API-forwarding or grading-progress mutation paths.
+  private async handleArtifactExtractionJob(
+    job: Job,
+    queueName: JobQueueName,
+  ): Promise<void> {
+    if (queueName !== JOB_QUEUE_NAMES.ATTEMPT_HEAVY)
+      throw new UnrecoverableError(
+        "Artifact extraction requires the heavy queue.",
+      );
+    let operationId: string;
+    try {
+      operationId = parseArtifactExtractionJob(
+        this.getDecryptedJobData<unknown>(job),
+      ).operationId;
+    } catch {
+      throw new UnrecoverableError("Invalid artifact extraction job.");
+    }
+    if (!this.artifactService)
+      throw new Error("Artifact extraction service is unavailable.");
+    try {
+      await this.artifactService.process(operationId);
+    } catch (error: unknown) {
+      // Never leak storage credentials, source content or parser diagnostics in
+      // BullMQ's failedReason or the worker's lifecycle logs.
+      const retryable =
+        error && typeof error === "object" && "retryable" in error
+          ? error.retryable
+          : undefined;
+      if (retryable === false)
+        throw new UnrecoverableError("Artifact extraction failed.");
+      throw new Error("Artifact extraction failed.");
     }
   }
 
@@ -845,7 +889,7 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
     job: Job | undefined,
     error: Error,
   ): Promise<void> {
-    if (!job) return;
+    if (!job || job.name === JOB_NAMES.ARTIFACT_EXTRACT) return;
     const maxAttempts = job.opts?.attempts ?? 1;
     const errorName = error instanceof Error ? error.name : undefined;
     const isUnrecoverable =

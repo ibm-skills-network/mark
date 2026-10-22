@@ -1,4 +1,4 @@
-import type { GradingJobV1 } from "backend-contracts";
+import type { ArtifactExtractionJob, GradingJobV1 } from "backend-contracts";
 import {
   QuestionDto,
   UpdateAssignmentQuestionsDto,
@@ -59,6 +59,7 @@ export type AttemptWorkerUserSession = Pick<
 >;
 
 export type AttemptGradeJobPayload = GradingJobV1;
+export type ArtifactExtractionJobPayload = ArtifactExtractionJob;
 
 export interface TranslateQuestionJobPayload {
   parentJobId: string;

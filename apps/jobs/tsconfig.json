@@ -12,5 +12,14 @@
     "useDefineForClassFields": false,
     "resolveJsonModule": true
   },
-  "exclude": ["dist", "test", "**/*spec.ts", "**/*.test.ts", "**/tests/**"]
+  "exclude": [
+    "dist",
+    "test",
+    "**/*spec.ts",
+    "**/*.test.ts",
+    "**/tests/**",
+    "../api/**/*.spec.ts",
+    "../api/**/*.test.ts"
+  ],
+  "include": ["src/**/*", "../api/src/api/attempt/artifacts/parser/**/*.ts"]
 }

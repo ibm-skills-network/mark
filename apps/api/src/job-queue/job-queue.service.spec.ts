@@ -4,7 +4,7 @@ import { encryptJobPayload } from "./job-payload.crypto";
 import { createRedisConnection } from "./redis.connection";
 import { JobQueueService } from "./job-queue.service";
 import { ATTEMPT_RETRY_BACKOFF } from "./attempt-retry-backoff";
-import { JOB_QUEUE_NAMES } from "./job-queue.constants";
+import { JOB_NAMES, JOB_QUEUE_NAMES } from "./job-queue.constants";
 
 jest.mock("./job-payload.crypto", () => ({
   encryptJobPayload: jest.fn(),
@@ -65,6 +65,37 @@ describe("JobQueueService", () => {
 
   afterEach(() => {
     loggerSpy.mockRestore();
+  });
+
+  it("accepts only strict operation identities on the heavy artifact queue and encrypts them", async () => {
+    const payload = { operationId: "00a3d280-160b-437e-b459-f275e98ea150" };
+    await service.enqueue(
+      JOB_QUEUE_NAMES.ATTEMPT_HEAVY,
+      JOB_NAMES.ARTIFACT_EXTRACT,
+      payload,
+    );
+    expect(encryptJobPayload).toHaveBeenCalledWith(payload);
+    expect(queueAdd).toHaveBeenCalledWith(
+      JOB_NAMES.ARTIFACT_EXTRACT,
+      { encrypted: payload },
+      { priority: 1 },
+    );
+    queueAdd.mockClear();
+    await expect(
+      service.enqueue(
+        JOB_QUEUE_NAMES.ATTEMPT,
+        JOB_NAMES.ARTIFACT_EXTRACT,
+        payload,
+      ),
+    ).rejects.toThrow("heavy queue");
+    await expect(
+      service.enqueue(
+        JOB_QUEUE_NAMES.ATTEMPT_HEAVY,
+        JOB_NAMES.ARTIFACT_EXTRACT,
+        { ...payload, sourceText: "untrusted" },
+      ),
+    ).rejects.toThrow("artifact");
+    expect(queueAdd).not.toHaveBeenCalled();
   });
 
   it("encrypts payloads before enqueueing and forwards job options", async () => {

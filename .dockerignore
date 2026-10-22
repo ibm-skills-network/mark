@@ -10,3 +10,7 @@ dist
 coverage
 out
 .tmp
+
+# Local task cache is not an application build input.
+.turbo
+**/.turbo

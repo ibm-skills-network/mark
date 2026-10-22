@@ -1210,6 +1210,10 @@ model AttemptSource {
   createdAt  DateTime          @default(now())
 
   @@index([attemptId])
+  original ArtifactOriginal?
+  extractions ArtifactExtraction[]
+  manifests ArtifactManifest[]
+
 }
 
 model AttemptCreationOperation {
@@ -1222,4 +1226,64 @@ model AttemptCreationOperation {
 
   @@id([assignmentId, userId, operationId])
   @@index([attemptId])
+}
+
+model ArtifactOriginal {
+  sourceId String @id
+  source AttemptSource @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  checksum String
+  byteSize Int
+  mediaType String
+  filename String
+  etag String?
+  objectVersion String?
+  originalUrl String?
+  resolvedUrl String?
+  createdAt DateTime @default(now())
+}
+
+model ArtifactExtraction {
+  id String @id @default(uuid())
+  sourceId String
+  source AttemptSource @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  extractorVersion String
+  configHash String
+  state String @default("PENDING")
+  leaseToken String?
+  leaseExpiresAt DateTime?
+  manifestId String?
+  errorCode String?
+  retryable Boolean @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@unique([sourceId, extractorVersion, configHash])
+  @@index([state, leaseExpiresAt])
+}
+
+model ArtifactManifest {
+  id String @id
+  sourceId String
+  source AttemptSource @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  manifest Json
+  createdAt DateTime @default(now())
+  resources ArtifactResource[]
+  @@index([sourceId])
+}
+
+model ArtifactResource {
+  artifactId String
+  artifact ArtifactManifest @relation(fields: [artifactId], references: [id], onDelete: Restrict)
+  resourceId String
+  mediaType String
+  checksum String
+  bytes Bytes
+  @@id([artifactId, resourceId])
+}
+
+/// A delete request reserves its keys before contacting storage; future bindings cannot race it.
+model SourceObjectDeletion {
+  bucket String
+  storageKey String
+  createdAt DateTime @default(now())
+  @@id([bucket, storageKey])
 }

@@ -558,7 +558,8 @@ export class AttemptSubmissionService {
       if (
         orderedQuestions.some(
           (q) => !["SINGLE_CORRECT", "MULTIPLE_CORRECT"].includes(q.type),
-        )
+        ) &&
+        !this.snapshots.artifactPreviewEnabled(assignment.id)
       )
         throw new BadRequestException(
           "The first snapshot cohort supports choice-only assignments",
