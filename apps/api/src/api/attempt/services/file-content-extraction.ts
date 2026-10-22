@@ -12,6 +12,7 @@ import * as unzipper from "unzipper";
 import * as XLSX from "xlsx";
 import { parseStringPromise } from "xml2js";
 import { OversizedSubmissionError } from "../../llm/features/grading/errors/oversized-submission.error";
+import { describeFileSignature } from "../common/utils/file-issue-classification";
 import {
   CODE_WHOLE_FILE_BLOCK_MAX_CHARS,
   isCodeLikeFilename,
@@ -152,6 +153,10 @@ export interface ExtractedFileContent {
     mimeType?: string;
     hash?: string;
     structureQuality?: "high" | "medium" | "low";
+    /** Format the leading bytes identify, independent of the extension. */
+    sniffedType?: string;
+    /** Password-protected PDF/Office container. */
+    encrypted?: boolean;
   };
 }
 
@@ -824,6 +829,7 @@ export class FileContentExtractionService {
           structuredContent: submission,
           metadata: {
             size: fileContent.length,
+            ...describeFileSignature(fileContent),
             mimeType: file.fileType,
             pageCount: submission.metadata.pageCount,
             hash: submission.metadata.checksum,
@@ -957,6 +963,7 @@ export class FileContentExtractionService {
         language: extractedContent.detectedLanguage,
         mimeType: file.fileType,
         hash: hash,
+        ...describeFileSignature(fileContent),
         ...extractedContent.additionalMetadata,
       },
     };
