@@ -1,4 +1,9 @@
-import type { Extensions } from "@tiptap/core";
+import { markInputRule, type Extensions } from "@tiptap/core";
+import {
+  Bold,
+  starInputRegex as boldStarInputRegex,
+} from "@tiptap/extension-bold";
+import { Italic } from "@tiptap/extension-italic";
 import { CodeBlockLowlight } from "@tiptap/extension-code-block-lowlight";
 import { Image } from "@tiptap/extension-image";
 import { Subscript } from "@tiptap/extension-subscript";
@@ -44,6 +49,9 @@ export function createRichTextExtensions({
     StarterKit.configure({
       codeBlock: false,
 
+      bold: false,
+      italic: false,
+
       trailingNode: false,
 
       link: {
@@ -53,6 +61,26 @@ export function createRichTextExtensions({
           rel: "noopener noreferrer nofollow",
           target: "_blank",
         },
+      },
+    }),
+
+    // Learners paste code: the stock markdown rules turn `__name__` into bold
+    // "name" and `a * b * c` into italics, deleting characters the grader
+    // needs. Only typing `**text**` still bolds; toolbar and shortcuts remain.
+    Bold.extend({
+      addInputRules() {
+        return [markInputRule({ find: boldStarInputRegex, type: this.type })];
+      },
+      addPasteRules() {
+        return [];
+      },
+    }),
+    Italic.extend({
+      addInputRules() {
+        return [];
+      },
+      addPasteRules() {
+        return [];
       },
     }),
 
