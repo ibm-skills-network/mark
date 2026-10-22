@@ -171,6 +171,10 @@ export class JobExecutorService {
     switch (jobName) {
       case JOB_NAMES.ATTEMPT_GRADE: {
         const jobPayload = payload as AttemptGradeJobPayload;
+        const receivedAtMs =
+          typeof jobPayload.submissionReceivedAt === "string"
+            ? Date.parse(jobPayload.submissionReceivedAt)
+            : Number.NaN;
         await this.attemptService.processGradingJob(
           jobPayload.gradingJobId,
           jobPayload.attemptId,
@@ -178,6 +182,8 @@ export class JobExecutorService {
           jobPayload.updateDto,
           jobPayload.authCookie ?? "",
           { userSession: jobPayload.userSession } as UserSessionRequest,
+          // A job queued before this field existed is judged at grading time.
+          Number.isNaN(receivedAtMs) ? undefined : new Date(receivedAtMs),
         );
         return;
       }

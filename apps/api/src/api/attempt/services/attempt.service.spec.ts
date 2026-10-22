@@ -4,6 +4,7 @@ import { JobQueueService } from "../../../job-queue/job-queue.service";
 import { OversizedSubmissionError } from "../../llm/features/grading/errors/oversized-submission.error";
 import { UnsupportedImageFormatError } from "../../llm/features/grading/errors/unsupported-image-format.error";
 import { AttemptSubmissionService } from "./attempt-submission.service";
+import { AttemptClosedException } from "../../assignment/attempt/helper/submission-deadline.helper";
 import { GradingProgressService } from "./grading-progress.service";
 import {
   JobStateRecord,
@@ -705,6 +706,89 @@ describe("AttemptServiceV2", () => {
         42,
         "boom",
       );
+    });
+  });
+  describe("late submits", () => {
+    it("tells the learner an attempt closed at its time limit was closed, not that grading failed", async () => {
+      const closed = new AttemptClosedException(1873208, "time_limit");
+      mockSubmissionService.updateAssignmentAttempt!.mockRejectedValue(closed);
+      mockGradingProgressService.markFailed!.mockResolvedValue(undefined);
+      const updateStatusSpy = jest
+        .spyOn(service, "updateGradingJobStatus")
+        .mockResolvedValue(undefined);
+
+      await expect(
+        service.processGradingJob(
+          "job-closed",
+          1873208,
+          771,
+          {} as never,
+          "cookie",
+          makeRequest(),
+        ),
+      ).rejects.toBe(closed);
+
+      expect(updateStatusSpy).toHaveBeenCalledWith("job-closed", {
+        status: "Failed",
+        progress: "This attempt was already closed at its time limit.",
+        percentage: 0,
+      });
+      const progressWrites = updateStatusSpy.mock.calls.map(
+        ([, update]) => update.progress,
+      );
+      expect(progressWrites.join(" ")).not.toContain("Grading failed");
+      expect(mockGradingProgressService.markFailed).toHaveBeenCalledWith(
+        1873208,
+        "This attempt was already closed at its time limit.",
+      );
+    });
+
+    it("stamps the server receive time into the grading job", async () => {
+      mockJobQueueService.enqueue!.mockResolvedValue(undefined as never);
+      const receivedAt = new Date("2026-10-21T01:16:15.160Z");
+
+      await service.enqueueGradingJob(
+        "job-stamp",
+        1873208,
+        771,
+        { submitted: true, responsesForQuestions: [] } as never,
+        "",
+        makeRequest(),
+        "mark.attempt" as never,
+        receivedAt,
+      );
+
+      expect(mockJobQueueService.enqueue).toHaveBeenCalledWith(
+        "mark.attempt",
+        expect.any(String),
+        expect.objectContaining({
+          submissionReceivedAt: "2026-10-21T01:16:15.160Z",
+        }),
+        expect.anything(),
+      );
+    });
+
+    it("grades against the receive time carried by the job", async () => {
+      mockSubmissionService.updateAssignmentAttempt!.mockResolvedValue({
+        id: 1873208,
+      } as never);
+      jest
+        .spyOn(service, "updateGradingJobStatus")
+        .mockResolvedValue(undefined);
+      const receivedAt = new Date("2026-10-21T01:16:15.160Z");
+
+      await service.processGradingJob(
+        "job-received",
+        1873208,
+        771,
+        {} as never,
+        "cookie",
+        makeRequest(),
+        receivedAt,
+      );
+
+      const call = mockSubmissionService.updateAssignmentAttempt!.mock.calls[0];
+      expect(call[8]).toEqual(receivedAt);
     });
   });
 });

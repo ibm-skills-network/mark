@@ -50,6 +50,7 @@ import {
   GradingProgressService,
   type GradingProgressDetails,
 } from "./grading-progress.service";
+import { AttemptClosedException } from "../../assignment/attempt/helper/submission-deadline.helper";
 
 @Injectable()
 export class AttemptServiceV2 {
@@ -265,6 +266,7 @@ export class AttemptServiceV2 {
     authCookie: string,
     request: UserSessionRequest,
     queueName: JobQueueName,
+    submissionReceivedAt?: Date,
   ): Promise<void> {
     try {
       await this.jobQueueService.enqueue(
@@ -275,6 +277,11 @@ export class AttemptServiceV2 {
           attemptId,
           gradingJobId,
           updateDto,
+          // Server-stamped, outside the client-supplied updateDto, so the
+          // deadline is judged on arrival rather than on queue drain.
+          ...(submissionReceivedAt
+            ? { submissionReceivedAt: submissionReceivedAt.toISOString() }
+            : {}),
           userSession: {
             gradingCallbackRequired:
               request.userSession.gradingCallbackRequired,
@@ -435,6 +442,7 @@ export class AttemptServiceV2 {
     updateDto: LearnerUpdateAssignmentAttemptRequestDto,
     authCookie: string,
     request: UserSessionRequest,
+    submissionReceivedAt?: Date,
   ): Promise<void> {
     try {
       const cache = newJobScopedCache();
@@ -490,6 +498,7 @@ export class AttemptServiceV2 {
             });
           },
           cache,
+          submissionReceivedAt,
         );
       } finally {
         // Must beat the terminal write: a late sibling reopens the job.
@@ -505,10 +514,14 @@ export class AttemptServiceV2 {
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
-      const learnerReason =
-        error instanceof LearnerFacingGradingError
+      // A closed attempt is not a grading failure; say what happened.
+      const learnerFacingMessage =
+        error instanceof LearnerFacingGradingError ||
+        error instanceof AttemptClosedException
           ? error.learnerMessage
-          : `Grading failed: ${errorMessage}`;
+          : undefined;
+      const learnerReason =
+        learnerFacingMessage ?? `Grading failed: ${errorMessage}`;
       // Idempotent; covers a throw before grading started.
       this.gradingProgressService?.removeProgressCallback(attemptId);
       await this.updateGradingJobStatus(gradingJobId, {
@@ -521,9 +534,7 @@ export class AttemptServiceV2 {
       if (this.gradingProgressService && attemptId > 0) {
         await this.gradingProgressService.markFailed(
           attemptId,
-          error instanceof LearnerFacingGradingError
-            ? error.learnerMessage
-            : errorMessage,
+          learnerFacingMessage ?? errorMessage,
         );
       }
       throw error;
@@ -731,6 +742,7 @@ export class AttemptServiceV2 {
     authCookie: string,
     gradingCallbackRequired: boolean,
     request: UserSessionRequest,
+    submissionReceivedAt?: Date,
   ): Promise<UpdateAssignmentAttemptResponseDto> {
     return this.submissionService.updateAssignmentAttempt(
       attemptId,
@@ -739,7 +751,29 @@ export class AttemptServiceV2 {
       authCookie,
       gradingCallbackRequired,
       request,
+      undefined,
+      undefined,
+      submissionReceivedAt,
     );
+  }
+
+  /**
+   * Reject a learner submit on a closed or past-deadline attempt before
+   * anything is queued.
+   */
+  async assertLearnerAttemptOpenForSubmit(
+    attemptId: number,
+    receivedAt: Date,
+  ): Promise<void> {
+    return this.submissionService.assertLearnerAttemptOpenForSubmit(
+      attemptId,
+      receivedAt,
+    );
+  }
+
+  /** Submission state of an attempt with a fresh server clock reading. */
+  async getAttemptSubmissionStatus(attemptId: number) {
+    return this.submissionService.getAttemptSubmissionStatus(attemptId);
   }
 
   /**
