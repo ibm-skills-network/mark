@@ -100,7 +100,7 @@
     "tailwind-merge": "^2.6.1",
     "tailwindcss-animate": "^1.0.7",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.2/xlsx-0.20.2.tgz",
-    "zod": "^3.25.76",
+    "zod": "^4.6.6",
     "zustand": "^4.4.1"
   },
   "devDependencies": {
