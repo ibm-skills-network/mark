@@ -134,6 +134,26 @@ describe("cleaning a pasted learner link", () => {
       "https://github.com/Zobrist02/java-database-capstone/blob/main/Dockerfile",
     ],
     [
+      "the same link pasted twice after a slash",
+      "https://github.com/o/r/https://github.com/o/r",
+      "https://github.com/o/r/",
+    ],
+    [
+      "a URL carried as a query value",
+      "https://host.example/view?url=https://other.example/file",
+      "https://host.example/view?url=https://other.example/file",
+    ],
+    [
+      "a URL in a later query parameter",
+      "https://host.example/view?a=1&next=https://other.example/x",
+      "https://host.example/view?a=1&next=https://other.example/x",
+    ],
+    [
+      "an archived page with the original URL in its path",
+      "https://web.archive.org/web/2024/https://example.com/page",
+      "https://web.archive.org/web/2024/https://example.com/page",
+    ],
+    [
       "word joiner copied with the link",
       "https://github.com/firstcontributions/first-contributions/blob/main/CONTRIBUTING.md\u2060",
       "https://github.com/firstcontributions/first-contributions/blob/main/CONTRIBUTING.md",

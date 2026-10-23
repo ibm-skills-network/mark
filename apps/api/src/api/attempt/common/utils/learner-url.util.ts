@@ -149,6 +149,34 @@ function cutUnbalancedParen(url: string): string {
   return url;
 }
 
+function hostOf(url: string): string {
+  return (/^https?:\/\/([^#/?]*)/i.exec(url)?.[1] ?? "").toLowerCase();
+}
+
+/**
+ * Cuts a second URL pasted straight onto the first ("…/Dockerfilehttps://…").
+ * A URL carried inside the first one is kept: as a query value
+ * ("?url=https://…"), after a fragment or encoded, or as a path segment
+ * pointing at another host ("web.archive.org/web/2020/https://…"). A
+ * path-segment URL on the same host is the same link pasted twice.
+ */
+function cutPastedSecondUrl(text: string): string {
+  const schemeLength = /^https?:\/\//i.exec(text)?.[0].length ?? 0;
+  let from = schemeLength;
+  while (from < text.length) {
+    const offset = text.slice(from).search(URL_START_RE);
+    if (offset === -1) return text;
+    const index = from + offset;
+    const before = text[index - 1];
+    const embedded =
+      /[#%&:=?]/.test(before) ||
+      (before === "/" && hostOf(text.slice(index)) !== hostOf(text));
+    if (!embedded) return text.slice(0, index);
+    from = index + 1;
+  }
+  return text;
+}
+
 /**
  * Pulls the link out of a pasted answer. Learners paste a URL followed by
  * notes ("…/App.jsx Grading Feedback"), a Markdown link ("…](https://…"), the
@@ -168,9 +196,7 @@ export function cleanLearnerUrlText(raw: string | null | undefined): string {
   if (whitespace !== -1) text = text.slice(0, whitespace);
   const markdownJoin = text.indexOf("](");
   if (markdownJoin !== -1) text = text.slice(0, markdownJoin);
-  const schemeLength = /^https?:\/\//i.exec(text)?.[0].length ?? 0;
-  const secondUrl = text.slice(schemeLength).search(URL_START_RE);
-  if (secondUrl !== -1) text = text.slice(0, schemeLength + secondUrl);
+  text = cutPastedSecondUrl(text);
   text = cutUnbalancedParen(text);
 
   // A trailing ">" only closes an <https://…> wrapper. Inside a placeholder
