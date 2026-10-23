@@ -27,6 +27,12 @@ describe("FilesService", () => {
   } as unknown as S3Service;
 
   const mockPrismaService = {
+    question: {
+      // A report-style question accepts documents and images.
+      findFirst: jest
+        .fn()
+        .mockResolvedValue({ type: "UPLOAD", responseType: "REPORT" }),
+    },
     fileUpload: {
       create: jest.fn(),
       findUnique: jest.fn(),
@@ -487,6 +493,103 @@ describe("FilesService", () => {
 
       expect(s3.putObject).not.toHaveBeenCalled();
       expect(mockBudget.release).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("learner file type must fit the question", () => {
+    const prisma = mockPrismaService as unknown as {
+      question: { findFirst: jest.Mock };
+    };
+    const request = (fileName: string) => ({
+      fileName,
+      fileType: "application/octet-stream",
+      fileSize: 4833,
+      uploadType: UploadType.LEARNER,
+      context: { assignmentId: 2688, questionId: 8645 },
+    });
+
+    beforeEach(() => {
+      const s3 = mockS3Service as unknown as {
+        getBucketName: jest.Mock;
+        getSignedUrl: jest.Mock;
+      };
+      s3.getBucketName.mockReturnValue("learner-bucket");
+      s3.getSignedUrl.mockResolvedValue("https://signed-upload-url");
+    });
+
+    it("rejects a notebook on an image question before signing anything", async () => {
+      prisma.question.findFirst.mockResolvedValueOnce({
+        type: "UPLOAD",
+        responseType: "IMAGES",
+      });
+
+      await expect(
+        service.generateUploadUrl(
+          request("DataScienceEcosystem.ipynb"),
+          "learner@example.com",
+          UserRole.LEARNER,
+        ),
+      ).rejects.toThrow(
+        "This question doesn't accept .ipynb files. Allowed types: .png, .jpg, .jpeg, .gif, .webp.",
+      );
+      expect(prisma.question.findFirst).toHaveBeenCalledWith({
+        where: { id: 8645, assignmentId: 2688, isDeleted: false },
+        select: { type: true, responseType: true },
+      });
+      expect(
+        (mockS3Service as unknown as { getSignedUrl: jest.Mock }).getSignedUrl,
+      ).not.toHaveBeenCalled();
+    });
+
+    it("accepts an image on an image question, whatever the case of its extension", async () => {
+      prisma.question.findFirst.mockResolvedValueOnce({
+        type: "UPLOAD",
+        responseType: "IMAGES",
+      });
+
+      await expect(
+        service.generateUploadUrl(
+          request("admin_login.PNG"),
+          "learner@example.com",
+          UserRole.LEARNER,
+        ),
+      ).resolves.toMatchObject({ bucket: "learner-bucket" });
+    });
+
+    it("rejects a question that is not in the named assignment", async () => {
+      prisma.question.findFirst.mockResolvedValueOnce(null);
+
+      await expect(
+        service.initiateMultipartUpload(
+          request("admin_login.png"),
+          "learner@example.com",
+          UserRole.LEARNER,
+        ),
+      ).rejects.toThrow("Invalid upload context");
+    });
+
+    it("leaves a question with no type list unrestricted", async () => {
+      prisma.question.findFirst.mockResolvedValueOnce({
+        type: "UPLOAD",
+        responseType: "VIDEO",
+      });
+
+      await expect(
+        service.generateUploadUrl(
+          request("talk.mp4"),
+          "learner@example.com",
+          UserRole.LEARNER,
+        ),
+      ).resolves.toMatchObject({ bucket: "learner-bucket" });
+    });
+
+    it("does not check author uploads", async () => {
+      await service.assertLearnerFileFitsQuestion(
+        request("anything.ipynb"),
+        "author@example.com",
+        UserRole.AUTHOR,
+      );
+      expect(prisma.question.findFirst).not.toHaveBeenCalled();
     });
   });
 });
