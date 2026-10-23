@@ -679,9 +679,10 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
   //   A. Learner-facing grading error (instanceof the shared base class, with
   //      a name-match fallback for the concrete classes that live in apps/api):
   //      always permanent. Covers oversized submissions and unsupported image
-  //      formats. Log and rewrap as UnrecoverableError so BullMQ skips
-  //      remaining retries; the learner-facing message rides along when the
-  //      typed error survives.
+  //      formats. A learner-fixable failure (unable_to_grade) is published
+  //      and the job completes; anything else is rewrapped as
+  //      UnrecoverableError so BullMQ skips remaining retries. The
+  //      learner-facing message rides along when the typed error survives.
   //   B. V8 OOM / worker OOM (message regex + code === "ERR_WORKER_OUT_OF_MEMORY"):
   //      per-attempt strike counter in Redis with 24h TTL. Two strikes →
   //      permanent fail. One strike → rethrow original so BullMQ retries.
@@ -777,9 +778,17 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
               ? reason
               : `${errorName ?? "LearnerFacingGradingError"}: ${reason}`,
         );
-      // Rides to the 'failed' listener (BullMQ passes this same object), so
-      // the terminal notification can publish the structured failure.
+      // Rides to markAttemptGradingFailed (directly below, or via the 'failed'
+      // listener, which BullMQ hands this same object), so the terminal
+      // notification can publish the structured failure.
       terminal.gradingFailure = failure;
+      if (failure.kind === "unable_to_grade") {
+        // The learner's to fix, and the job did its work: notify, then return
+        // so BullMQ records the job as completed and the Instana span is a
+        // success rather than an error. The attempt stays open for a resubmit.
+        await this.markAttemptGradingFailed(job, terminal);
+        return;
+      }
       throw terminal;
     }
 

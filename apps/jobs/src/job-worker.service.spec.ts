@@ -1389,16 +1389,20 @@ describe("JobWorkerService", () => {
       });
       mockJobExecutorService.executeJob.mockRejectedValueOnce(oversized);
 
-      let thrown: unknown;
-      try {
-        await asTestAccessor(service).handleAttemptJob(makeAttemptJob());
-      } catch (err) {
-        thrown = err;
-      }
+      // Learner-fixable: published directly and the job completes.
+      await expect(
+        asTestAccessor(service).handleAttemptJob(makeAttemptJob()),
+      ).resolves.toBeUndefined();
 
-      expect(thrown).toBeInstanceOf(UnrecoverableError);
-      expect((thrown as Error).name).toBe("UnrecoverableError");
-      expect((thrown as Error).message).toBe(oversized.learnerMessage);
+      expect(mockGradingProgressService.markFailed).toHaveBeenCalledWith(
+        861298,
+        oversized.learnerMessage,
+        expect.objectContaining({ kind: "unable_to_grade" }),
+      );
+      expect(mockJobStateService.updateJobStatus).toHaveBeenCalledWith(
+        "grading-classify",
+        expect.objectContaining({ status: "Failed" }),
+      );
       expect(mockConnection.pipeline).not.toHaveBeenCalled();
       expect(mockStructuredLogger.warn).toHaveBeenCalledWith(
         "attempt.grade.learner.terminal",
@@ -1435,16 +1439,20 @@ describe("JobWorkerService", () => {
       });
       mockJobExecutorService.executeJob.mockRejectedValueOnce(unsupported);
 
-      let thrown: unknown;
-      try {
-        await asTestAccessor(service).handleAttemptJob(makeAttemptJob());
-      } catch (err) {
-        thrown = err;
-      }
+      // Learner-fixable: published directly and the job completes.
+      await expect(
+        asTestAccessor(service).handleAttemptJob(makeAttemptJob()),
+      ).resolves.toBeUndefined();
 
-      expect(thrown).toBeInstanceOf(UnrecoverableError);
-      expect((thrown as Error).name).toBe("UnrecoverableError");
-      expect((thrown as Error).message).toBe(unsupported.learnerMessage);
+      expect(mockGradingProgressService.markFailed).toHaveBeenCalledWith(
+        861298,
+        unsupported.learnerMessage,
+        expect.objectContaining({ kind: "unable_to_grade" }),
+      );
+      expect(mockJobStateService.updateJobStatus).toHaveBeenCalledWith(
+        "grading-classify",
+        expect.objectContaining({ status: "Failed" }),
+      );
       expect(mockConnection.pipeline).not.toHaveBeenCalled();
       expect(mockStructuredLogger.warn).toHaveBeenCalledWith(
         "attempt.grade.learner.terminal",
@@ -1788,23 +1796,16 @@ describe("JobWorkerService", () => {
         }),
       ]);
 
-    async function terminalErrorFor(job: Job): Promise<Error> {
-      try {
-        await asTestAccessor(service).handleAttemptJob(job);
-      } catch (error) {
-        return error as Error;
-      }
-      throw new Error("expected the attempt job to fail");
-    }
-
     it("publishes every blocked question with status Failed and an English progress", async () => {
       process.env.JOBS_EXECUTE_LOCALLY = "true";
       await service.onModuleInit();
       mockJobExecutorService.executeJob.mockRejectedValueOnce(blocked());
 
-      const terminal = await terminalErrorFor(attemptJob());
-      expect(terminal).toBeInstanceOf(UnrecoverableError);
-      await failedHandler()(attemptJob(), terminal);
+      // Learner-fixable: the job completes (no BullMQ failure, no Instana
+      // error) after publishing the failure itself.
+      await expect(
+        asTestAccessor(service).handleAttemptJob(attemptJob()),
+      ).resolves.toBeUndefined();
 
       const failure = {
         kind: "unable_to_grade",
@@ -1875,8 +1876,9 @@ describe("JobWorkerService", () => {
         ),
       });
 
-      const terminal = await terminalErrorFor(attemptJob());
-      await failedHandler()(attemptJob(), terminal);
+      await expect(
+        asTestAccessor(service).handleAttemptJob(attemptJob()),
+      ).resolves.toBeUndefined();
 
       expect(mockJobStateService.updateJobStatus).toHaveBeenCalledWith(
         "grading-issues",
