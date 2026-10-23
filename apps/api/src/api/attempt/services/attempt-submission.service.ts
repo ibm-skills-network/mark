@@ -885,7 +885,7 @@ export class AttemptSubmissionService {
       assignmentAttempt.grade === null ? null : preVisibilityGrade;
 
     return {
-      ...assignmentAttempt,
+      ...this.withoutAnswerKeyRelations(assignmentAttempt),
       serverNow: readServerClock(),
       grade: displayGrade,
       questions: finalQuestions,
@@ -1095,7 +1095,7 @@ export class AttemptSubmissionService {
     // persisted grade would contradict the verdict the learner is shown on the
     // success page. Pass/fail belongs to the completed and submit responses.
     return {
-      ...assignmentAttempt,
+      ...this.withoutAnswerKeyRelations(assignmentAttempt),
       serverNow: readServerClock(),
       // The spread carries the persisted grade, which must not reach a learner
       // whose assignment hides the score.
@@ -2089,6 +2089,43 @@ export class AttemptSubmissionService {
   /**
    * Remove sensitive data from questions
    */
+
+  /**
+   * The attempt is loaded with its pinned `assignmentVersion.questionVersions`
+   * and each `questionVariants[].questionVariant` (plus `variantOf`) because
+   * grading and translation need them. None of that may reach the client:
+   * question versions carry `answer`, `choices[].isCorrect`, rubrics and
+   * author comments for every question, regardless of the assignment's
+   * correct-answer visibility. The UI reads only the version's scalar fields
+   * (`allotedTimeMinutes`) and never reads `questionVariants`.
+   */
+  private withoutAnswerKeyRelations<
+    T extends {
+      assignmentVersion?: { questionVersions?: unknown } | null;
+      questionVariants?: unknown;
+    },
+  >(
+    attempt: T,
+  ): Omit<T, "assignmentVersion" | "questionVariants"> & {
+    assignmentVersion: Omit<
+      NonNullable<T["assignmentVersion"]>,
+      "questionVersions"
+    > | null;
+  } {
+    type Stripped = Omit<T, "assignmentVersion" | "questionVariants"> & {
+      assignmentVersion: Omit<
+        NonNullable<T["assignmentVersion"]>,
+        "questionVersions"
+      > | null;
+    };
+    const { assignmentVersion, questionVariants: _variants, ...rest } = attempt;
+    if (!assignmentVersion) {
+      return { ...rest, assignmentVersion: null } as Stripped;
+    }
+    const { questionVersions: _versions, ...versionScalars } =
+      assignmentVersion;
+    return { ...rest, assignmentVersion: versionScalars } as Stripped;
+  }
 
   private removeSensitiveData(
     questions: AttemptQuestionDto[],

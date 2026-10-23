@@ -1288,6 +1288,126 @@ describe("AttemptSubmissionService - Grading Validation", () => {
       buildSpy.mockRestore();
     });
 
+    it("strips the pinned version's question versions and the variant rows from in-progress attempt reads", async () => {
+      mockTranslationService.getTranslationsForAttempt.mockResolvedValue(
+        new Map(),
+      );
+      mockPrisma.assignment.findUnique.mockResolvedValue({
+        id: 99,
+        questionOrder: [101, 202],
+        displayOrder: null,
+        passingGrade: 50,
+        showAssignmentScore: true,
+        showSubmissionFeedback: true,
+        showQuestionScore: true,
+        showQuestions: true,
+        updatedAt: new Date("2026-04-26T00:00:00.000Z"),
+        currentVersionId: 12,
+        currentVersion: { correctAnswerVisibility: "NEVER" },
+      });
+      mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+        ...assignmentAttempt,
+        submitted: false,
+        assignmentVersion: {
+          id: 12,
+          allotedTimeMinutes: 45,
+          questionVersions: [
+            {
+              id: 1001,
+              questionId: 101,
+              answer: "the answer",
+              authorComment: "secret",
+            },
+          ],
+        },
+        questionVariants: [
+          {
+            assignmentAttemptId: 71,
+            questionId: 101,
+            questionVariantId: 5,
+            randomizedChoices: [
+              { id: 0, choice: "A", isCorrect: true, points: 5 },
+            ],
+            questionVariant: {
+              id: 5,
+              answer: "the answer",
+              variantOf: {
+                id: 101,
+                answer: "the answer",
+                authorComment: "secret",
+              },
+            },
+          },
+        ],
+      });
+
+      const result = await service.getAssignmentAttempt(71, "en");
+      const serialized = JSON.stringify(result);
+
+      expect(result.assignmentVersion).toEqual({
+        id: 12,
+        allotedTimeMinutes: 45,
+      });
+      expect(result).not.toHaveProperty("questionVariants");
+      expect(serialized).not.toContain("the answer");
+      expect(serialized).not.toContain("secret");
+      expect(serialized).not.toContain("isCorrect");
+    });
+
+    it("strips the pinned version's question versions and the variant rows from completed attempt reads", async () => {
+      const buildSpy = jest
+        .spyOn(AttemptQuestionsMapper, "buildQuestionsWithResponses")
+        .mockResolvedValue([{ id: 101 }, { id: 202 }]);
+      const visibilitySpy = jest
+        .spyOn(service as never, "applyVisibilitySettings")
+        .mockImplementation(() => undefined);
+      mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+        ...assignmentAttempt,
+        assignmentVersion: {
+          id: 12,
+          allotedTimeMinutes: 45,
+          questionVersions: [
+            {
+              id: 1001,
+              questionId: 101,
+              answer: "the answer",
+              authorComment: "secret",
+            },
+          ],
+        },
+        questionVariants: [
+          {
+            assignmentAttemptId: 71,
+            questionId: 101,
+            questionVariantId: 5,
+            randomizedChoices: [
+              { id: 0, choice: "A", isCorrect: true, points: 5 },
+            ],
+            questionVariant: { id: 5, answer: "the answer", variantOf: null },
+          },
+        ],
+      });
+
+      const result = await service.getLearnerAssignmentAttempt(71, {
+        userId: "learner-1",
+        role: UserRole.LEARNER,
+        assignmentId: 99,
+        groupId: "group-1",
+      });
+      const serialized = JSON.stringify(result);
+
+      expect(result.assignmentVersion).toEqual({
+        id: 12,
+        allotedTimeMinutes: 45,
+      });
+      expect(result).not.toHaveProperty("questionVariants");
+      expect(serialized).not.toContain("the answer");
+      expect(serialized).not.toContain("secret");
+
+      buildSpy.mockRestore();
+      visibilitySpy.mockRestore();
+    });
+
     it("serves a region-coded language its own translation instead of the authored English", async () => {
       const removeSensitiveSpy = jest
         .spyOn(service as never, "removeSensitiveData")

@@ -311,8 +311,19 @@ export class AssignmentRepository {
     }
 
     if (isLearner) {
+      // Version rows carry every question's answer, correct choices, rubrics
+      // and author comments. Authors need them for the version UI; learners
+      // only need the merged scalar fields above.
+      const learnerFields: Partial<
+        typeof processedAssignment & {
+          currentVersion?: unknown;
+          versions?: unknown;
+        }
+      > = { ...processedAssignment };
+      delete learnerFields.currentVersion;
+      delete learnerFields.versions;
       return {
-        ...processedAssignment,
+        ...learnerFields,
         success: true,
         questions: undefined,
       } as LearnerGetAssignmentResponseDto;
