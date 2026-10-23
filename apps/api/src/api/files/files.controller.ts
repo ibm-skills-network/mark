@@ -372,6 +372,17 @@ export class FilesController {
       userId,
       request.userSession.role,
     );
+    await this.filesService.assertLearnerFileFitsQuestion(
+      {
+        fileName: file.originalname,
+        fileType: file.mimetype,
+        fileSize: file.size,
+        uploadType: body.uploadType,
+        context,
+      },
+      userId,
+      request.userSession.role,
+    );
 
     let result: { etag?: string };
     try {
