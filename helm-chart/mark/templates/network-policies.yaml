@@ -20,7 +20,7 @@ spec:
     - Egress
 ---
 
-# For mark-api-gateway: allow ingress traffic from ingress and egress traffic to mark-api and lti-credentials-manager only
+# For mark-api-gateway: allow ingress traffic from ingress and egress traffic to mark-api, lti-credentials-manager, and mark-rust-api when enabled
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -40,11 +40,16 @@ spec:
             {{- include "mark.api.labels" $ | nindent 12 }}
       - podSelector:
           matchLabels:
-            {{- include "mark.lti-credentials-manager.labels" $ | nindent 12 }}      
+            {{- include "mark.lti-credentials-manager.labels" $ | nindent 12 }}
+      {{- if .Values.rustApi.enabled }}
+      - podSelector:
+          matchLabels:
+            {{- include "mark.rustApi.labels" $ | nindent 12 }}
+      {{- end }}
   policyTypes:
     - Ingress
-    - Egress    
----    
+    - Egress
+---
 
 # For mark-ui: allow ingress traffic from ingress and egress traffic to api-gateway only
 apiVersion: networking.k8s.io/v1
