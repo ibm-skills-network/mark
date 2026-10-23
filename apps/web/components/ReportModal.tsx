@@ -5,7 +5,7 @@ import { submitReportAuthor, submitReportLearner } from "@/lib/talkToBackend";
 import { Dialog, DialogPanel, DialogTitle } from "@headlessui/react";
 import { XMarkIcon } from "@heroicons/react/24/outline";
 import { motion } from "framer-motion";
-import React, { FC, useState } from "react";
+import React, { FC, useRef, useState } from "react";
 import { toast } from "sonner";
 
 const ReportModal: FC<{
@@ -25,13 +25,19 @@ const ReportModal: FC<{
     REPORT_TYPE.BUG,
   );
   const [description, setDescription] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  // Ref guards clicks that land before the disabled state re-renders.
+  const submittingRef = useRef(false);
 
   const handleSubmitReport = async () => {
+    if (submittingRef.current) return;
     if (!description.trim()) {
       toast.error("Please provide a description for the report.");
       return;
     }
 
+    submittingRef.current = true;
+    setIsSubmitting(true);
     try {
       const response = isAuthor
         ? await submitReportAuthor(assignmentId, issueType, description)
@@ -48,6 +54,9 @@ const ReportModal: FC<{
     } catch (error) {
       console.error("Error submitting report:", error);
       toast.error("Failed to submit the report. Please try again.");
+    } finally {
+      submittingRef.current = false;
+      setIsSubmitting(false);
     }
   };
   return (
@@ -96,6 +105,7 @@ const ReportModal: FC<{
                 <select
                   className="w-full p-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                   value={issueType}
+                  disabled={isSubmitting}
                   onChange={(e) =>
                     setReportIssueType(e.target.value as REPORT_TYPE)
                   }
@@ -122,6 +132,7 @@ const ReportModal: FC<{
                   className="w-full p-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500"
                   rows={5}
                   value={description}
+                  disabled={isSubmitting}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder="Provide details about the issue..."
                 ></textarea>
@@ -129,9 +140,17 @@ const ReportModal: FC<{
               <div className="text-center">
                 <button
                   onClick={handleSubmitReport}
-                  className="px-6 py-2 bg-violet-600 hover:bg-violet-500 text-white rounded-md transition shadow-lg"
+                  disabled={isSubmitting}
+                  aria-busy={isSubmitting}
+                  className="inline-flex items-center gap-2 px-6 py-2 bg-violet-600 hover:bg-violet-500 disabled:hover:bg-violet-600 disabled:opacity-60 disabled:cursor-not-allowed text-white rounded-md transition shadow-lg"
                 >
-                  Submit Report
+                  {isSubmitting && (
+                    <span
+                      className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin"
+                      aria-hidden="true"
+                    />
+                  )}
+                  {isSubmitting ? "Submitting…" : "Submit Report"}
                 </button>
               </div>
             </div>
