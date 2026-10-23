@@ -1059,8 +1059,16 @@ export class AttemptSubmissionService {
       })),
     };
 
+    // Every visibility setting is defined relative to submission ("shown after
+    // submission", "shown on pass"). While the attempt is open there is nothing
+    // to reveal yet, so the setting is only consulted once it is submitted.
+    const visibilityForAttempt: CorrectAnswerVisibility =
+      assignmentAttempt.submitted
+        ? assignment.currentVersion?.correctAnswerVisibility || "NEVER"
+        : "NEVER";
+
     const shouldShowAllQuestions = this.shouldShowCorrectAnswers(
-      assignment.currentVersion?.correctAnswerVisibility || "NEVER",
+      visibilityForAttempt,
       assignmentAttempt.grade || 0,
       assignment.passingGrade,
     );
@@ -1083,10 +1091,7 @@ export class AttemptSubmissionService {
 
     this.removeSensitiveData(
       finalQuestions,
-      {
-        correctAnswerVisibility:
-          assignment.currentVersion?.correctAnswerVisibility || "NEVER",
-      },
+      { correctAnswerVisibility: visibilityForAttempt },
       assignmentAttempt.grade || 0,
       assignment.passingGrade,
     );

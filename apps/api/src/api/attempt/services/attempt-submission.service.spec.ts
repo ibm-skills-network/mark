@@ -1361,6 +1361,71 @@ describe("AttemptSubmissionService - Grading Validation", () => {
       expect(serialized).not.toContain("isCorrect");
     });
 
+    const choiceQuestion = () => ({
+      id: 101,
+      question: "Question 101",
+      type: "MULTIPLE_CORRECT",
+      choices: [
+        { choice: "A", isCorrect: true, points: 5, feedback: "right" },
+        { choice: "B", isCorrect: false, points: 0, feedback: "wrong" },
+      ],
+      randomizedChoices: JSON.stringify([
+        { choice: "B", isCorrect: false, points: 0, feedback: "wrong" },
+        { choice: "A", isCorrect: true, points: 5, feedback: "right" },
+      ]),
+      scoring: { type: "CRITERIA_BASED", rubrics: [] },
+      answer: "A",
+      authorComment: "secret",
+    });
+
+    it("hides correct answers on an open attempt even when visibility is ALWAYS", async () => {
+      mockTranslationService.getTranslationsForAttempt.mockResolvedValue(
+        new Map(),
+      );
+      mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+        ...assignmentAttempt,
+        submitted: false,
+        grade: null,
+      });
+      const translationBuildSpy = jest
+        .spyOn(AttemptQuestionsMapper, "buildQuestionsWithTranslations")
+        .mockResolvedValue([choiceQuestion()] as never);
+
+      const result = await service.getAssignmentAttempt(71, "en");
+      const serialized = JSON.stringify(result.questions);
+
+      expect(serialized).not.toContain("isCorrect");
+      expect(serialized).not.toContain("feedback");
+      expect(serialized).not.toContain("points");
+      expect(serialized).not.toContain("secret");
+      expect(result.questions[0]).not.toHaveProperty("answer");
+
+      translationBuildSpy.mockRestore();
+    });
+
+    it("applies the visibility setting once the attempt is submitted", async () => {
+      mockTranslationService.getTranslationsForAttempt.mockResolvedValue(
+        new Map(),
+      );
+      mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+        ...assignmentAttempt,
+        submitted: true,
+      });
+      const translationBuildSpy = jest
+        .spyOn(AttemptQuestionsMapper, "buildQuestionsWithTranslations")
+        .mockResolvedValue([choiceQuestion()] as never);
+
+      const result = await service.getAssignmentAttempt(71, "en");
+
+      expect(result.questions[0].choices?.[0]).toMatchObject({
+        choice: "A",
+        isCorrect: true,
+      });
+      expect(result.questions[0].choices?.[0]).not.toHaveProperty("points");
+
+      translationBuildSpy.mockRestore();
+    });
+
     it("strips the pinned version's question versions and the variant rows from completed attempt reads", async () => {
       const buildSpy = jest
         .spyOn(AttemptQuestionsMapper, "buildQuestionsWithResponses")
