@@ -242,6 +242,11 @@ export class AttemptControllerV2 {
     type: String,
     description: GRADE_SUBMISSION_EXCEPTION,
   })
+  @ApiResponse({
+    status: 409,
+    description:
+      "The attempt is already submitted or was closed at its time limit; the body carries a code saying which.",
+  })
   @ApiResponse({ status: 403 })
   async updateAssignmentAttempt(
     @Param("attemptId") attemptId: number,
@@ -253,12 +258,56 @@ export class AttemptControllerV2 {
     | { gradingJobId: string; message: string }
     | UpdateAssignmentAttemptResponseDto
   > {
+    // Taken first: the deadline is judged on arrival, so nothing this handler
+    // or the grading queue does afterwards can make an on-time submit late.
+    const receivedAt = new Date();
     const parsedAttemptId = Number(attemptId);
     const parsedAssignmentId = Number(assignmentId);
 
     this.logger.info(
       `Updating attempt: attemptId=${parsedAttemptId}, assignmentId=${parsedAssignmentId}`,
     );
+
+    const isAuthorMode = request.userSession.role === UserRole.AUTHOR;
+
+    // A closed or past-deadline attempt gets its 409 here, synchronously,
+    // before the kill-switch (a closed attempt is closed whether or not AI
+    // grading is paused) and before a grading job could be queued for it.
+    if (!isAuthorMode) {
+      let inFlightGradingJobId: string | null;
+      try {
+        ({ inFlightGradingJobId } =
+          await this.attemptService.assertLearnerAttemptOpenForSubmit(
+            parsedAttemptId,
+            parsedAssignmentId,
+            request.userSession.userId,
+            receivedAt,
+          ));
+      } catch (error) {
+        this.logger.warn("Submit rejected before grading", {
+          attemptId: parsedAttemptId,
+          assignmentId: parsedAssignmentId,
+          userId: request.userSession.userId,
+          reason: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+      }
+      // A duplicate submit (retry, second tab) while the accepted one is still
+      // grading gets that job back; its own payload is never queued.
+      if (inFlightGradingJobId) {
+        this.logger.info("Submit reused in-flight grading job", {
+          attemptId: parsedAttemptId,
+          assignmentId: parsedAssignmentId,
+          userId: request.userSession.userId,
+          gradingJobId: inFlightGradingJobId,
+        });
+        return {
+          gradingJobId: inFlightGradingJobId,
+          message:
+            "A grading job is already running for this attempt. Reusing existing job.",
+        };
+      }
+    }
 
     // Kill-switch: block submitting/grading an AI-graded attempt while grading
     // is disabled. Throwing here means the attempt is neither marked submitted
@@ -277,7 +326,6 @@ export class AttemptControllerV2 {
     const gradingCallbackRequired =
       request?.userSession.gradingCallbackRequired ?? false;
 
-    const isAuthorMode = request.userSession.role === UserRole.AUTHOR;
     // Deterministic-only learner attempts grade synchronously in-request —
     // no queue, no SSE. Author previews always queue (the sync path is the
     // learner pipeline), and any classification gap degrades to the queued
@@ -307,6 +355,7 @@ export class AttemptControllerV2 {
         authCookie,
         request,
         queueName,
+        receivedAt,
       );
 
       return { gradingJobId, message };
@@ -337,9 +386,35 @@ export class AttemptControllerV2 {
         authCookie,
         gradingCallbackRequired,
         request,
+        receivedAt,
       );
       return result;
     }
+  }
+
+  @Get(":attemptId/submission-status")
+  @Roles(UserRole.LEARNER, UserRole.AUTHOR)
+  @UseGuards(AssignmentAttemptAccessControlGuard)
+  @ApiOperation({
+    summary:
+      "Whether an attempt still accepts a submit, with a fresh server clock reading.",
+  })
+  @ApiResponse({ status: 200 })
+  @ApiResponse({ status: 403 })
+  async getAttemptSubmissionStatus(
+    @Param("attemptId") attemptId: number,
+    @Req() request: UserSessionRequest,
+  ) {
+    const parsedAttemptId = Number(attemptId);
+    const status =
+      await this.attemptService.getAttemptSubmissionStatus(parsedAttemptId);
+    this.logger.debug("Attempt submission status read", {
+      attemptId: parsedAttemptId,
+      userId: request.userSession?.userId,
+      submitted: status.submitted,
+      acceptingSubmissions: status.acceptingSubmissions,
+    });
+    return status;
   }
 
   @Post(":attemptId/questions/:questionId/responses")

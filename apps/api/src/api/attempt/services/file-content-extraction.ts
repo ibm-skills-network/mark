@@ -12,6 +12,7 @@ import * as unzipper from "unzipper";
 import * as XLSX from "xlsx";
 import { parseStringPromise } from "xml2js";
 import { OversizedSubmissionError } from "../../llm/features/grading/errors/oversized-submission.error";
+import { describeFileSignature } from "../common/utils/file-issue-classification";
 import {
   CODE_WHOLE_FILE_BLOCK_MAX_CHARS,
   isCodeLikeFilename,
@@ -62,6 +63,14 @@ import {
 } from "./compiled-artifact.util";
 
 import { PdfStructureExtractorService } from "./pdf-structure-extractor.service";
+import {
+  DocumentLink,
+  DocumentLinkCollector,
+  PositionedPdfText,
+  collectPdfAnnotationLinks,
+  MAX_LINK_LABEL_LENGTH,
+  formatLinksBlock,
+} from "./document-links.util";
 
 /**
  * Caps on the OOXML parts a single workbook may force this service to
@@ -104,6 +113,12 @@ interface WorkbookPackage {
   relationships: Map<string, PackageRelationship[]>;
   inflatedParts: number;
 }
+
+/** Anchors inspected in a .docx's HTML rendering when collecting links. */
+const MAX_WORD_ANCHORS_SCANNED = 2000;
+
+/** Parsed-XML nodes visited while matching hyperlinks to their labels. */
+const MAX_HYPERLINK_LABEL_NODES = 200_000;
 
 /** Series references reported per chart, enough to show what it plots. */
 const MAX_CHART_SERIES_RANGES = 8;
@@ -152,6 +167,10 @@ export interface ExtractedFileContent {
     mimeType?: string;
     hash?: string;
     structureQuality?: "high" | "medium" | "low";
+    /** Format the leading bytes identify, independent of the extension. */
+    sniffedType?: string;
+    /** Password-protected PDF/Office container. */
+    encrypted?: boolean;
   };
 }
 
@@ -161,6 +180,16 @@ interface PDFData {
   version: string;
   info: Record<string, unknown>;
   metadata: Record<string, unknown>;
+}
+
+/** The parts of pdf-parse's per-page proxy (bundled pdfjs) this service uses. */
+interface PdfParsePage {
+  pageNumber?: number;
+  getTextContent(options: {
+    normalizeWhitespace: boolean;
+    disableCombineTextItems: boolean;
+  }): Promise<{ items: PositionedPdfText[] }>;
+  getAnnotations?(): Promise<unknown>;
 }
 
 interface XMLNode {
@@ -824,6 +853,7 @@ export class FileContentExtractionService {
           structuredContent: submission,
           metadata: {
             size: fileContent.length,
+            ...describeFileSignature(fileContent),
             mimeType: file.fileType,
             pageCount: submission.metadata.pageCount,
             hash: submission.metadata.checksum,
@@ -957,6 +987,7 @@ export class FileContentExtractionService {
         language: extractedContent.detectedLanguage,
         mimeType: file.fileType,
         hash: hash,
+        ...describeFileSignature(fileContent),
         ...extractedContent.additionalMetadata,
       },
     };
@@ -3333,10 +3364,28 @@ export class FileContentExtractionService {
     };
   }> {
     try {
+      const linkCollector = new DocumentLinkCollector();
+      let renderedPages = 0;
       const data = (await pdfParse(buffer, {
         max: 0,
         version: "v2.0.550",
+        pagerender: (pageData: PdfParsePage) => {
+          renderedPages++;
+          return this.renderPdfParsePage(
+            pageData,
+            pageData.pageNumber ?? renderedPages,
+            linkCollector,
+          );
+        },
       })) as PDFData;
+      if (linkCollector.droppedCount > 0) {
+        this.logger.warn(
+          `pdf.links.capped ${JSON.stringify({
+            reported: linkCollector.count,
+            dropped: linkCollector.droppedCount,
+          })}`,
+        );
+      }
 
       let extractedText = `=== PDF DOCUMENT ===\n`;
       extractedText += `Pages: ${data.numpages}\n`;
@@ -3452,6 +3501,55 @@ export class FileContentExtractionService {
     }
   }
 
+  /**
+   * pdf-parse's default page renderer, plus the page's external link targets.
+   * Link annotations keep their URL outside the drawn text, so without this a
+   * document that reads "GitHub Repository" never shows the grader the URL.
+   */
+  private async renderPdfParsePage(
+    pageData: PdfParsePage,
+    pageNumber: number,
+    linkCollector: DocumentLinkCollector,
+  ): Promise<string> {
+    const textContent = await pageData.getTextContent({
+      normalizeWhitespace: false,
+      disableCombineTextItems: false,
+    });
+    let lastY: number | undefined;
+    let text = "";
+    for (const item of textContent.items) {
+      const y = item.transform[5];
+      text += lastY === y || !lastY ? item.str : "\n" + item.str;
+      lastY = y;
+    }
+
+    if (!linkCollector.hasCapacity || !pageData.getAnnotations) return text;
+    let annotations: unknown;
+    try {
+      annotations = await pageData.getAnnotations();
+    } catch (error) {
+      // Links are supplementary: a page whose annotations cannot be read
+      // still contributes its text.
+      this.logger.warn(
+        `pdf.links.read_failed ${JSON.stringify({
+          pageNumber,
+          message: error instanceof Error ? error.message : String(error),
+        })}`,
+      );
+      return text;
+    }
+    const linksBlock = formatLinksBlock(
+      `page ${pageNumber}`,
+      collectPdfAnnotationLinks(
+        annotations,
+        textContent.items,
+        linkCollector,
+        `page ${pageNumber}`,
+      ),
+    );
+    return linksBlock ? `${text}\n\n${linksBlock}` : text;
+  }
+
   private async extractWordText(buffer: Buffer): Promise<{
     text: string;
     extractedText: string;
@@ -3461,6 +3559,14 @@ export class FileContentExtractionService {
 
       let extractedText = "=== WORD DOCUMENT ===\n\n";
       extractedText += result.value;
+
+      const linksBlock = formatLinksBlock(
+        "document",
+        await this.extractWordLinks(buffer),
+      );
+      if (linksBlock) {
+        extractedText += `\n\n${linksBlock}\n`;
+      }
 
       if (result.messages && result.messages.length > 0) {
         this.logger.debug(
@@ -3479,6 +3585,54 @@ export class FileContentExtractionService {
           : String(error);
       throw new Error(`Word extraction failed: ${errorMessage}`);
     }
+  }
+
+  /**
+   * External hyperlinks in a .docx, labelled with their visible text.
+   * extractRawText drops link targets, so the document is converted once more
+   * to HTML (images skipped, never decoded) purely to read each <a href>;
+   * mammoth resolves both w:hyperlink relationships and HYPERLINK field codes.
+   * Links are supplementary: a failure here never fails the extraction.
+   */
+  private async extractWordLinks(buffer: Buffer): Promise<DocumentLink[]> {
+    let html: string;
+    try {
+      const converted = await mammoth.convertToHtml(
+        { buffer },
+        {
+          convertImage: mammoth.images.imgElement(async () => ({ src: "" })),
+        },
+      );
+      html = converted.value;
+    } catch (error) {
+      this.logger.warn(
+        `docx.links.read_failed ${JSON.stringify({
+          message: error instanceof Error ? error.message : String(error),
+        })}`,
+      );
+      return [];
+    }
+
+    const linkCollector = new DocumentLinkCollector();
+    const links: DocumentLink[] = [];
+    let scanned = 0;
+    // mammoth emits flat, escaped markup and never nests anchors, so each
+    // match ends at the next </a>.
+    for (const match of html.matchAll(/<a\b([^<>]*)>([\s\S]*?)<\/a>/g)) {
+      if (!linkCollector.hasCapacity || ++scanned > MAX_WORD_ANCHORS_SCANNED) {
+        break;
+      }
+      const href = /\bhref="([^"]*)"/.exec(match[1])?.[1];
+      if (href === undefined) continue;
+      const label = this.decodeXmlEntities(match[2].replace(/<[^<>]*>/g, ""));
+      const link = linkCollector.add(
+        "document",
+        this.decodeXmlEntities(href),
+        label,
+      );
+      if (link) links.push(link);
+    }
+    return links;
   }
 
   private async extractLegacyWordText(buffer: Buffer): Promise<{
@@ -4788,6 +4942,170 @@ export class FileContentExtractionService {
     });
   }
 
+  /**
+   * External hyperlinks declared by one PresentationML part (a slide or notes
+   * page). The target lives in the part's .rels file, referenced by
+   * r:id from the run that carries the visible label, so text extraction alone
+   * never sees it. Labels come from the parsed part; targets without a
+   * labelled run are still reported. A missing, oversized or malformed .rels
+   * part yields no links.
+   */
+  private async extractOoxmlPartLinks(
+    entries: Map<string, unzipper.File>,
+    partPath: string,
+    parsedPart: unknown,
+    linkCollector: DocumentLinkCollector,
+    location: string,
+  ): Promise<DocumentLink[]> {
+    if (!linkCollector.hasCapacity) return [];
+    const relsPath = this.relationshipPartFor(partPath);
+    const relsEntry = entries.get(relsPath);
+    if (!relsEntry) return [];
+    if (relsEntry.uncompressedSize > MAX_WORKBOOK_PART_BYTES) {
+      this.logger.warn(
+        `ooxml.rels.oversized ${JSON.stringify({
+          part: relsPath,
+          declaredSize: relsEntry.uncompressedSize,
+          cap: MAX_WORKBOOK_PART_BYTES,
+        })}`,
+      );
+      return [];
+    }
+    const relsXml = await this.inflatePartWithinBudget(relsEntry, relsPath);
+    if (relsXml === undefined) return [];
+
+    const targets = new Map<string, string>();
+    for (const relationship of this.parseRelationships(relsXml, relsPath)) {
+      if (relationship.type.endsWith("/hyperlink")) {
+        targets.set(
+          relationship.id,
+          this.decodeXmlEntities(relationship.target),
+        );
+      }
+    }
+    if (targets.size === 0) return [];
+
+    const labels = this.collectHyperlinkLabels(parsedPart);
+    const links: DocumentLink[] = [];
+    const add = (relationshipId: string, label?: string): void => {
+      const target = targets.get(relationshipId);
+      if (target === undefined) return;
+      targets.delete(relationshipId);
+      const link = linkCollector.add(location, target, label);
+      if (link) links.push(link);
+    };
+    // Document order first, then any hyperlink only reachable from a shape
+    // or picture (no text run to label it).
+    for (const [relationshipId, label] of labels) add(relationshipId, label);
+    for (const relationshipId of [...targets.keys()]) add(relationshipId);
+    return links;
+  }
+
+  /**
+   * Visible text of each hyperlink in a parsed OOXML part, keyed by its r:id,
+   * in document order: DrawingML runs and fields whose a:rPr carries an
+   * a:hlinkClick. The walk is bounded so a crafted part cannot turn label
+   * lookup into unbounded work.
+   */
+  private collectHyperlinkLabels(parsedPart: unknown): Map<string, string> {
+    const labels = new Map<string, string>();
+    let budget = MAX_HYPERLINK_LABEL_NODES;
+
+    const attribute = (node: unknown, name: string): string | undefined => {
+      if (!node || typeof node !== "object") return undefined;
+      const attributes = (node as XMLNode)["$"];
+      if (!attributes || typeof attributes !== "object") return undefined;
+      const value = (attributes as Record<string, unknown>)[name];
+      return typeof value === "string" ? value : undefined;
+    };
+    const first = (node: unknown, key: string): unknown => {
+      if (!node || typeof node !== "object") return undefined;
+      const value = (node as XMLNode)[key];
+      return Array.isArray(value) ? value[0] : value;
+    };
+    const textOf = (node: unknown, textKey: string): string => {
+      let text = "";
+      const walk = (current: unknown): void => {
+        if (budget-- <= 0 || text.length > MAX_LINK_LABEL_LENGTH) return;
+        if (Array.isArray(current)) {
+          for (const item of current) walk(item);
+          return;
+        }
+        if (!current || typeof current !== "object") return;
+        for (const [key, value] of Object.entries(current as XMLNode)) {
+          if (key === "$") continue;
+          if (key === textKey) {
+            for (const item of Array.isArray(value) ? value : [value]) {
+              if (typeof item === "string") text += item;
+              else if (item && typeof item === "object") {
+                const inner = (item as XMLNode)["_"];
+                if (typeof inner === "string") text += inner;
+              }
+            }
+          } else {
+            walk(value);
+          }
+        }
+      };
+      walk(node);
+      return text;
+    };
+    const record = (relationshipId: string | undefined, text: string) => {
+      if (!relationshipId) return;
+      labels.set(relationshipId, (labels.get(relationshipId) ?? "") + text);
+    };
+
+    const visit = (current: unknown): void => {
+      if (budget-- <= 0) return;
+      if (Array.isArray(current)) {
+        for (const item of current) visit(item);
+        return;
+      }
+      if (!current || typeof current !== "object") return;
+      for (const [key, value] of Object.entries(current as XMLNode)) {
+        if (key === "$") continue;
+        if (key === "a:r" || key === "a:fld") {
+          for (const run of Array.isArray(value) ? value : [value]) {
+            const click = first(first(run, "a:rPr"), "a:hlinkClick");
+            const relationshipId = attribute(click, "r:id");
+            if (relationshipId) record(relationshipId, textOf(run, "a:t"));
+          }
+        }
+        visit(value);
+      }
+    };
+    visit(parsedPart);
+    return labels;
+  }
+
+  private decodeXmlEntities(value: string): string {
+    return value.replace(
+      /&(amp|lt|gt|quot|apos|#\d{1,7}|#x[0-9a-fA-F]{1,6});/g,
+      (entity, name: string) => {
+        switch (name) {
+          case "amp":
+            return "&";
+          case "lt":
+            return "<";
+          case "gt":
+            return ">";
+          case "quot":
+            return '"';
+          case "apos":
+            return "'";
+          default: {
+            const codePoint = name.startsWith("#x")
+              ? Number.parseInt(name.slice(2), 16)
+              : Number.parseInt(name.slice(1), 10);
+            return codePoint <= 0x10_ffff
+              ? String.fromCodePoint(codePoint)
+              : entity;
+          }
+        }
+      },
+    );
+  }
+
   private async extractPowerPointText(buffer: Buffer): Promise<{
     text: string;
     extractedText: string;
@@ -4808,6 +5126,31 @@ export class FileContentExtractionService {
         }
       }
 
+      const entriesByPath = new Map(
+        zip.files.map((entry) => [entry.path, entry]),
+      );
+      const linkCollector = new DocumentLinkCollector();
+      const slideLinks = new Map<number, DocumentLink[]>();
+      const addSlideLinks = async (
+        slideNum: number,
+        partPath: string,
+        parsed: unknown,
+      ): Promise<void> => {
+        const links = await this.extractOoxmlPartLinks(
+          entriesByPath,
+          partPath,
+          parsed,
+          linkCollector,
+          `slide ${slideNum}`,
+        );
+        if (links.length > 0) {
+          slideLinks.set(slideNum, [
+            ...(slideLinks.get(slideNum) ?? []),
+            ...links,
+          ]);
+        }
+      };
+
       for (const entry of zip.files) {
         if (/ppt\/slides\/slide(\d+)\.xml$/.test(entry.path)) {
           const match = entry.path.match(/slide(\d+)\.xml$/);
@@ -4821,6 +5164,7 @@ export class FileContentExtractionService {
           if (slideText) {
             slides.set(slideNum, slideText);
           }
+          await addSlideLinks(slideNum, entry.path, parsed);
         }
 
         if (/ppt\/notesSlides\/notesSlide(\d+)\.xml$/.test(entry.path)) {
@@ -4835,7 +5179,16 @@ export class FileContentExtractionService {
           if (notesText) {
             notes.set(slideNum, notesText);
           }
+          await addSlideLinks(slideNum, entry.path, parsed);
         }
+      }
+      if (linkCollector.droppedCount > 0) {
+        this.logger.warn(
+          `pptx.links.capped ${JSON.stringify({
+            reported: linkCollector.count,
+            dropped: linkCollector.droppedCount,
+          })}`,
+        );
       }
 
       let allText = "=== POWERPOINT PRESENTATION ===\n";
@@ -4857,6 +5210,14 @@ export class FileContentExtractionService {
         if (slides.has(i)) {
           allText += `\n=== SLIDE ${i} ===\n`;
           allText += slides.get(i) + "\n";
+
+          const linksBlock = formatLinksBlock(
+            `slide ${i}`,
+            slideLinks.get(i) ?? [],
+          );
+          if (linksBlock) {
+            allText += `\n${linksBlock}\n`;
+          }
 
           if (notes.has(i)) {
             allText += `\n--- NOTES ---\n`;

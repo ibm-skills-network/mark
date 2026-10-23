@@ -109,6 +109,8 @@ function looksLikeHost(candidate: string): boolean {
   const withoutPort = hostOnly.replace(/:\d+$/, "");
   if (withoutPort === "localhost") return true;
   if (!withoutPort.includes(".")) return false;
+  // ".github/ISSUE_TEMPLATE" is a path inside a repository, not a host.
+  if (withoutPort.split(".").includes("")) return false;
   const lastLabel = (withoutPort.split(".").pop() ?? "").toLowerCase();
   const hasPath = /[#/?]/.test(candidate);
   if (!hasPath && FILE_EXTENSION_LAST_LABELS.has(lastLabel)) return false;

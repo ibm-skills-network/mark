@@ -1,3 +1,4 @@
+import { gradingFailureFromError } from "../../api/llm/features/grading/errors/grading-failure.mapper";
 import {
   SourceProcessingError,
   RetryableProcessingError,
@@ -145,7 +146,10 @@ export class AllExceptionsFilter implements ExceptionFilter {
             reason: exception.reason,
             retryable: exception.retryable,
             ...(exception instanceof SourceProcessingError
-              ? { sourceReference: exception.sourceReference }
+              ? {
+                  sourceReference: exception.sourceReference,
+                  failure: gradingFailureFromError(exception),
+                }
               : {}),
           }
         : exception instanceof HttpException

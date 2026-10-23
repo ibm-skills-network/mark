@@ -2,16 +2,14 @@
  * @jest-environment node
  */
 
-// In a Node environment `@ffmpeg/ffmpeg` resolves to a stub class whose
-// constructor throws "ffmpeg.wasm does not support nodejs" (see the package's
-// dist/esm/empty.mjs). The mock below mirrors that behavior so these tests
-// can pin the SSR contract without Jest having to transform the package's
-// untranspiled ESM: evaluating ffmpeg-client must construct nothing, and the
-// instance must be created lazily, exactly once.
+// The mock stands in for the vendored FFmpeg class so these tests can pin the
+// SSR contract without Jest having to transform its untranspiled ESM:
+// evaluating ffmpeg-client must construct nothing, and the instance must be
+// created lazily, exactly once.
 
 const constructorSpy = jest.fn();
 
-jest.mock("@ffmpeg/ffmpeg", () => ({
+jest.mock("../vendor/ffmpeg/classes.js", () => ({
   FFmpeg: class {
     constructor() {
       constructorSpy();
