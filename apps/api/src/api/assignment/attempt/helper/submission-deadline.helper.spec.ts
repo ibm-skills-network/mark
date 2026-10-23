@@ -4,6 +4,7 @@ import {
   ATTEMPT_SUBMISSION_GRACE_MS,
   AttemptClosedException,
   EXPIRED_ATTEMPT_COMMENT,
+  isFinalSubmitBeforeDeadline,
   isPastSubmissionGrace,
   wasClosedAtTimeLimit,
 } from "./submission-deadline.helper";
@@ -77,5 +78,20 @@ describe("submission deadline", () => {
       code: ATTEMPT_ALREADY_SUBMITTED_CODE,
       message: "This attempt has already been submitted.",
     });
+  });
+
+  it("treats a submit inside the last minute, or past the deadline, as final", () => {
+    const expiresAt = new Date("2026-10-23T15:00:00.000Z");
+    const at = (iso: string) => new Date(iso);
+    expect(
+      isFinalSubmitBeforeDeadline(expiresAt, at("2026-10-23T14:58:59.000Z")),
+    ).toBe(false);
+    expect(
+      isFinalSubmitBeforeDeadline(expiresAt, at("2026-10-23T14:59:00.000Z")),
+    ).toBe(true);
+    expect(
+      isFinalSubmitBeforeDeadline(expiresAt, at("2026-10-23T15:00:12.000Z")),
+    ).toBe(true);
+    expect(isFinalSubmitBeforeDeadline(null)).toBe(false);
   });
 });

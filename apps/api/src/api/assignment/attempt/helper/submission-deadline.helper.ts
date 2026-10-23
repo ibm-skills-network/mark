@@ -28,6 +28,25 @@ export const isPastSubmissionGrace = (
   return receivedAt.getTime() - ATTEMPT_SUBMISSION_GRACE_MS > expiresAtMs;
 };
 
+/**
+ * How close to the deadline a submit leaves no time to fix a dead link or an
+ * unreadable file and submit again. Grading such a submit scores those
+ * questions 0 rather than handing the attempt back, which would only be
+ * closed at zero once the grace window passed.
+ */
+export const FINAL_SUBMIT_WINDOW_MS = 60_000;
+
+/** True when a submit received at `receivedAt` is within that window of the deadline, or past it. */
+export const isFinalSubmitBeforeDeadline = (
+  expiresAt: Date | string | null | undefined,
+  receivedAt: Date = new Date(),
+): boolean => {
+  if (!expiresAt) return false;
+  const expiresAtMs = toMs(expiresAt);
+  if (Number.isNaN(expiresAtMs)) return false;
+  return receivedAt.getTime() >= expiresAtMs - FINAL_SUBMIT_WINDOW_MS;
+};
+
 /** What the v2 expiry handler writes on an attempt it closes at zero. */
 export const EXPIRED_ATTEMPT_COMMENT =
   "You submitted the assignment after the deadline. Your submission will not be graded. If you don't have any more attempts, please contact your instructor.";

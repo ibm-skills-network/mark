@@ -41,6 +41,7 @@ import { readServerClock } from "src/api/assignment/attempt/helper/server-clock.
 import {
   AttemptClosedException,
   EXPIRED_ATTEMPT_COMMENT,
+  isFinalSubmitBeforeDeadline,
   wasClosedAtTimeLimit,
 } from "src/api/assignment/attempt/helper/submission-deadline.helper";
 import {
@@ -1340,6 +1341,13 @@ export class AttemptSubmissionService {
           updateDto.preTranslatedQuestions,
           effectiveCache,
           assignmentAttempt.userId,
+          {
+            // Judged from the server's receive time and deadline only.
+            scoreBlockedAsZero: isFinalSubmitBeforeDeadline(
+              assignmentAttempt.expiresAt,
+              submissionReceivedAt,
+            ),
+          },
         );
 
       const successfulQuestionResponses = gradedItems.map((g) => g.responseDto);

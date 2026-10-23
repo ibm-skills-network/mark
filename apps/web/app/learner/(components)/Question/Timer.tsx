@@ -16,6 +16,7 @@ import {
   isAttemptAlreadySubmittedError,
   isGradingStreamLostError,
 } from "@/lib/learner";
+import { isGradingUnableError } from "@/lib/grading-failure";
 import { cn } from "@/lib/strings";
 import { getUser, submitAssignment } from "@/lib/talkToBackend";
 import {
@@ -213,6 +214,18 @@ function Timer(props: Props) {
           attemptStartedAt: undefined,
         });
         router.push(learnerSuccessPath(assignmentId, error.attemptId));
+        return;
+      }
+      if (isGradingUnableError(error)) {
+        // At the deadline a question the learner would have to fix is scored
+        // 0 and the rest graded, so this only happens when a link stayed
+        // temporarily unreachable. Say what failed, not "check your connection".
+        console.warn("[learner] auto-submit could not be graded", {
+          assignmentId,
+          activeAttemptId,
+          issueCodes: error.failure.issues.map((issue) => issue.code),
+        });
+        toast.error(error.message);
         return;
       }
       if (isGradingStreamLostError(error)) {

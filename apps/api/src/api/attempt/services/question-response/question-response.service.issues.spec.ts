@@ -299,4 +299,73 @@ describe("QuestionResponseService — every blocked question is reported", () =>
       expect.objectContaining({ attemptId: 1877436 }),
     );
   });
+
+  describe("when there is no time left to fix and resubmit", () => {
+    function gradeFinal() {
+      return service.gradeQuestionsForLearner(
+        [
+          { id: 7921, learnerUrlResponse: " https://github.com/o/private " },
+          { id: 7922, learnerUrlResponse: "https://github.com/o/ok" },
+          { id: 7924, learnerFileResponse: [] },
+          { id: 7925, learnerTextResponse: "answer" },
+        ] as never,
+        1877436,
+        2561,
+        "en",
+        undefined,
+        undefined,
+        undefined,
+        { scoreBlockedAsZero: true },
+      );
+    }
+
+    function graded(id: number) {
+      return Promise.resolve({
+        learnerResponse: `answer ${id}`,
+        responseDto: { questionId: id, totalPoints: 3, feedback: [] },
+      });
+    }
+
+    it("scores a blocked question 0 with the fix as feedback and grades the rest in full", async () => {
+      gradeNoSave.mockImplementation((async (question: { id: number }) => {
+        if (question.id === 7921) {
+          throw blockedUrl(7921, "https://github.com/o/private");
+        }
+        return graded(question.id);
+      }) as never);
+
+      const items = await gradeFinal();
+
+      expect(items.map((item) => item.questionId).sort()).toEqual([
+        7921, 7922, 7924, 7925,
+      ]);
+      const blocked = items.find((item) => item.questionId === 7921);
+      expect(blocked?.learnerResponse).toBe("https://github.com/o/private");
+      expect(blocked?.responseDto.totalPoints).toBe(0);
+      expect(blocked?.responseDto.feedback).toEqual([
+        expect.objectContaining({ feedback: expect.any(String) }),
+      ]);
+      expect(blocked?.responseDto.metadata).toMatchObject({
+        unableToGrade: { questionId: 7921, code: "url_unreachable" },
+      });
+      // Nothing was switched to a source check: every question was graded.
+      expect(Object.values(sourceCheckFlags())).not.toContain(true);
+      expect(childLogger.warn).toHaveBeenCalledWith(
+        "grading.unable_to_grade.scored_zero",
+        expect.objectContaining({ questionId: 7921, code: "url_unreachable" }),
+      );
+    });
+
+    it("still fails the attempt on an unexpected error", async () => {
+      gradeNoSave.mockImplementation((async (question: { id: number }) => {
+        if (question.id === 7921) {
+          throw blockedUrl(7921, "https://github.com/o/private");
+        }
+        if (question.id === 7925) throw new TypeError("boom");
+        return graded(question.id);
+      }) as never);
+
+      await expect(gradeFinal()).rejects.toBeInstanceOf(TypeError);
+    });
+  });
 });

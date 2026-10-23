@@ -5,6 +5,7 @@
 import { render, act } from "@testing-library/react";
 import { toast } from "sonner";
 import type { QuestionStore } from "@/config/types";
+import { GradingUnableError } from "@/lib/grading-failure";
 import {
   AttemptAlreadySubmittedError,
   GradingStreamLostError,
@@ -203,6 +204,31 @@ describe("Timer auto-submit on a closed attempt", () => {
       "/learner/771/successPage/1873208",
     );
     expect(useLearnerStore.getState().activeAttemptId).toBeNull();
+  });
+
+  it("says what could not be graded instead of blaming the connection", async () => {
+    const message =
+      "We couldn't open https://slow.example/page right now. Try again in a few minutes.";
+    mockSubmitAssignment.mockRejectedValue(
+      new GradingUnableError(message, {
+        kind: "unable_to_grade",
+        issues: [
+          {
+            questionId: 41868,
+            code: "url_temporarily_unavailable",
+            retryable: true,
+            message,
+          },
+        ],
+      }),
+    );
+
+    await fireAutoSubmit();
+
+    expect(toast.error).toHaveBeenCalledWith(message);
+    expect(toast.error).not.toHaveBeenCalledWith(
+      expect.stringContaining("Check your connection"),
+    );
   });
 
   it("goes to the results quietly when another submit already landed", async () => {

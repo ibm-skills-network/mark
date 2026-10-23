@@ -185,6 +185,8 @@ export class QuestionResponseService {
     inMemoryContext: Map<number, string>;
     reportProgress: boolean;
     assignmentId?: number;
+    /** Score a question the learner must fix as 0 instead of blocking the attempt. */
+    scoreBlockedAsZero?: boolean;
     gradeOne: (
       question: QuestionDto,
       request: CreateQuestionResponseAttemptRequestDto,
@@ -202,6 +204,7 @@ export class QuestionResponseService {
       inMemoryContext,
       reportProgress,
       assignmentId,
+      scoreBlockedAsZero = false,
       gradeOne,
     } = options;
 
@@ -214,6 +217,7 @@ export class QuestionResponseService {
     // Once any question fails nothing will be saved, so the rest of the
     // attempt only checks its links/files (to report every fixable problem in
     // one go) and starts no new model work. Questions already in flight finish.
+    // When blocked questions score 0 instead, the rest is still graded in full.
     const failures: Array<{ questionId: number; error: unknown }> = [];
 
     for (const [waveIndex, wave] of levels.entries()) {
@@ -241,7 +245,7 @@ export class QuestionResponseService {
               `grade:q=${questionId}:a=${attemptId}`,
               () => {
                 // Decided when the work actually starts, not when it queued.
-                sourceCheckOnly = failures.length > 0;
+                sourceCheckOnly = !scoreBlockedAsZero && failures.length > 0;
                 return gradeOne(question, request, { sourceCheckOnly });
               },
             );
@@ -305,11 +309,77 @@ export class QuestionResponseService {
       );
     }
 
+    if (failures.length > 0 && scoreBlockedAsZero) {
+      const remaining: typeof failures = [];
+      for (const failure of failures) {
+        const issue = issueFromQuestionError(failure.error, failure.questionId);
+        const question = questionMap.get(failure.questionId);
+        const request = requestMap.get(failure.questionId);
+        if (!issue || issue.retryable || !question || !request) {
+          remaining.push(failure);
+          continue;
+        }
+        this.logger.warn("grading.unable_to_grade.scored_zero", {
+          attemptId,
+          assignmentId,
+          questionId: issue.questionId,
+          code: issue.code,
+          host: issueHost(issue),
+          httpStatus: issue.source?.httpStatus,
+        });
+        gradedItems.push(
+          this.blockedQuestionScoredZero(question, request, issue),
+        );
+      }
+      if (remaining.length > 0) {
+        throw this.resolveWaveFailures(
+          remaining,
+          sorted,
+          attemptId,
+          assignmentId,
+        );
+      }
+      return gradedItems;
+    }
+
     if (failures.length > 0) {
       throw this.resolveWaveFailures(failures, sorted, attemptId, assignmentId);
     }
 
     return gradedItems;
+  }
+
+  /**
+   * A question the learner would have to fix (dead link, unreadable file),
+   * scored 0 with the reason as its feedback. Used when there is no time left
+   * to fix and resubmit, so the rest of the attempt still counts.
+   */
+  private blockedQuestionScoredZero(
+    question: QuestionDto,
+    request: CreateQuestionResponseAttemptRequestDto,
+    issue: GradingIssue,
+  ): GradedItem {
+    const responseDto = new CreateQuestionResponseAttemptResponseDto();
+    responseDto.questionId = question.id;
+    responseDto.question = question.question;
+    responseDto.totalPoints = 0;
+    const feedback = new GeneralFeedbackDto();
+    feedback.feedback = issue.message;
+    responseDto.feedback = [feedback];
+    responseDto.metadata = { unableToGrade: issue };
+
+    let learnerResponse: unknown = request.learnerTextResponse ?? "";
+    if (typeof request.learnerUrlResponse === "string") {
+      const raw = request.learnerUrlResponse.trim();
+      learnerResponse = normalizeLearnerUrl(raw) || raw;
+    } else if (Array.isArray(request.learnerFileResponse)) {
+      // The file couldn't be read, so keep where it is, not what it parsed to.
+      learnerResponse = request.learnerFileResponse.map((file) => {
+        const { content, ...rest } = file;
+        return typeof content === "string" ? file : rest;
+      });
+    }
+    return { questionId: question.id, learnerResponse, responseDto };
   }
 
   /**
@@ -413,6 +483,7 @@ export class QuestionResponseService {
     preTranslatedQuestions?: Map<number, QuestionDto>,
     cache?: JobScopedCache,
     userId?: string,
+    options: { scoreBlockedAsZero?: boolean } = {},
   ): Promise<GradedItem[]> {
     // Defense-in-depth: allocate a cache if the caller did not supply one.
     // The submission entrypoint (updateLearnerAttempt) now hoists this same
@@ -524,6 +595,7 @@ export class QuestionResponseService {
       inMemoryContext: inMemoryContextResponses,
       reportProgress: true,
       assignmentId,
+      scoreBlockedAsZero: options.scoreBlockedAsZero,
       gradeOne: async (question, request, { sourceCheckOnly }) => {
         const assignmentContext = await this.getAssignmentContext(
           assignmentId,
