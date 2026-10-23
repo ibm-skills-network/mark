@@ -1,3 +1,5 @@
+import type { GradingFailure } from "../api/llm/features/grading/errors/grading-failure";
+
 export interface JobStateRecord {
   id: string;
   queueName: string;
@@ -12,6 +14,8 @@ export interface JobStateRecord {
   currentQuestion?: number;
   totalQuestions?: number;
   result?: unknown;
+  /** Why a grading job failed; only on a terminal "Failed" grading status. */
+  failure?: GradingFailure;
   createdAt: string;
   updatedAt: string;
 }
@@ -39,4 +43,5 @@ export interface JobStatusUpdate {
   currentQuestion?: number;
   totalQuestions?: number;
   result?: unknown;
+  failure?: GradingFailure;
 }

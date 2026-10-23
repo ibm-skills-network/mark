@@ -3,6 +3,7 @@ import { HttpService } from "@nestjs/axios";
 import {
   BadRequestException,
   InternalServerErrorException,
+  NotFoundException,
   ServiceUnavailableException,
 } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
@@ -16,6 +17,11 @@ import { GithubRateLimitedError } from "../../llm/features/grading/errors/github
 import { OversizedSubmissionError } from "../../llm/features/grading/errors/oversized-submission.error";
 import { UnsupportedImageFormatError } from "../../llm/features/grading/errors/unsupported-image-format.error";
 import { CreateQuestionResponseAttemptResponseDto } from "../../assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
+import {
+  AttemptClosedException,
+  EXPIRED_ATTEMPT_COMMENT,
+  isPastSubmissionGrace,
+} from "../../assignment/attempt/helper/submission-deadline.helper";
 import { AttemptQuestionsMapper } from "../common/utils/attempt-questions-mapper.util";
 import { AttemptGradingService } from "./attempt-grading.service";
 import { AttemptAccessCacheService } from "./attempt-access-cache.service";
@@ -35,6 +41,7 @@ describe("AttemptSubmissionService - Grading Validation", () => {
       findUnique: jest.fn(),
       findFirst: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn(),
       findMany: jest.fn(),
     },
     assignment: {
@@ -2412,7 +2419,7 @@ describe("AttemptSubmissionService - Grading Validation", () => {
         questionVariants: [],
       });
       mockValidationService.isAttemptExpired.mockReturnValue(true);
-      mockPrisma.assignmentAttempt.update.mockResolvedValue({});
+      mockPrisma.assignmentAttempt.updateMany.mockResolvedValue({ count: 1 });
       const warnSpy = spyOnWarn();
 
       const updateDto = {
@@ -2444,9 +2451,9 @@ describe("AttemptSubmissionService - Grading Validation", () => {
 
       // Submission semantics are untouched: the expired attempt is still
       // closed out exactly as before.
-      expect(mockPrisma.assignmentAttempt.update).toHaveBeenCalledWith(
+      expect(mockPrisma.assignmentAttempt.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: 777 },
+          where: { id: 777, submitted: false },
           data: expect.objectContaining({ submitted: true, grade: 0 }),
         }),
       );
@@ -2461,7 +2468,7 @@ describe("AttemptSubmissionService - Grading Validation", () => {
         questionVariants: [],
       });
       mockValidationService.isAttemptExpired.mockReturnValue(true);
-      mockPrisma.assignmentAttempt.update.mockResolvedValue({});
+      mockPrisma.assignmentAttempt.updateMany.mockResolvedValue({ count: 1 });
       const warnSpy = spyOnWarn();
 
       const updateDto = {
@@ -2486,6 +2493,358 @@ describe("AttemptSubmissionService - Grading Validation", () => {
         .map((call) => String(call[0]))
         .join(" ");
       expect(warning).not.toContain("without any answers");
+    });
+  });
+  describe("late submits and closed attempts", () => {
+    type LateSubmitter = {
+      updateLearnerAttempt: (
+        attemptId: number,
+        assignmentId: number,
+        updateDto: unknown,
+        authCookie: string,
+        gradingCallbackRequired: boolean,
+        request: unknown,
+        progressCallback?: unknown,
+        cache?: unknown,
+        submissionReceivedAt?: Date,
+      ) => Promise<unknown>;
+    };
+    const submitter = () => service as unknown as LateSubmitter;
+    const learnerRequest = {
+      userSession: { userId: "learner@example.com", role: "Learner" },
+    } as never;
+    const answeredDto = {
+      responsesForQuestions: [
+        {
+          id: 1,
+          learnerTextResponse: "my answer",
+          learnerFileResponse: [],
+        },
+      ],
+      language: "en",
+    } as never;
+
+    beforeEach(() => {
+      mockValidationService.isAttemptExpired.mockImplementation(
+        (expiresAt: Date | null, receivedAt?: Date) =>
+          isPastSubmissionGrace(expiresAt, receivedAt),
+      );
+      mockPrisma.assignmentAttempt.updateMany.mockResolvedValue({ count: 1 });
+    });
+
+    it("rejects a submit on an attempt closed at its time limit with an honest conflict", async () => {
+      mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+        id: 1873208,
+        submitted: true,
+        grade: 0,
+        comments: EXPIRED_ATTEMPT_COMMENT,
+        expiresAt: new Date(Date.now() - 60_000),
+        questionVariants: [],
+      });
+
+      const error: unknown = await submitter()
+        .updateLearnerAttempt(
+          1873208,
+          771,
+          answeredDto,
+          "cookie",
+          false,
+          learnerRequest,
+        )
+        .catch((caught: unknown) => caught);
+
+      expect(error).toBeInstanceOf(AttemptClosedException);
+      expect((error as AttemptClosedException).reason).toBe("time_limit");
+      expect((error as AttemptClosedException).getStatus()).toBe(409);
+      expect(
+        mockQuestionResponseService.gradeQuestionsForLearner,
+      ).not.toHaveBeenCalled();
+    });
+
+    it("rejects a duplicate submit on a graded attempt as already submitted", async () => {
+      mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+        id: 42,
+        submitted: true,
+        grade: 0.8,
+        comments: null,
+        expiresAt: null,
+        questionVariants: [],
+      });
+
+      const error: unknown = await submitter()
+        .updateLearnerAttempt(
+          42,
+          771,
+          answeredDto,
+          "cookie",
+          false,
+          learnerRequest,
+        )
+        .catch((caught: unknown) => caught);
+
+      expect(error).toBeInstanceOf(AttemptClosedException);
+      expect((error as AttemptClosedException).reason).toBe(
+        "already_submitted",
+      );
+    });
+
+    it("checks the deadline against when the submit was received, not when the job runs", async () => {
+      const expiresAt = new Date(Date.now() - 10 * 60_000);
+      const receivedAt = new Date(expiresAt.getTime() + 11_661);
+      mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+        id: 1873208,
+        submitted: false,
+        expiresAt,
+        questionVariants: [],
+      });
+      // Stop right after the deadline check: an assignment that is not found
+      // proves the attempt went on towards grading instead of being zeroed.
+      mockPrisma.assignment.findUnique.mockResolvedValue(null);
+
+      await expect(
+        submitter().updateLearnerAttempt(
+          1873208,
+          771,
+          answeredDto,
+          "cookie",
+          false,
+          learnerRequest,
+          undefined,
+          undefined,
+          receivedAt,
+        ),
+      ).rejects.toThrow("Assignment with Id 771 not found.");
+
+      expect(mockValidationService.isAttemptExpired).toHaveBeenCalledWith(
+        expiresAt,
+        receivedAt,
+      );
+      expect(mockPrisma.assignmentAttempt.updateMany).not.toHaveBeenCalled();
+      expect(mockPrisma.assignmentAttempt.update).not.toHaveBeenCalled();
+    });
+
+    it("closes a submit received past the grace window only if it is still open", async () => {
+      mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+        id: 900,
+        submitted: false,
+        expiresAt: new Date(Date.now() - 5 * 60_000),
+        questionVariants: [],
+      });
+
+      const result = await submitter().updateLearnerAttempt(
+        900,
+        771,
+        answeredDto,
+        "cookie",
+        false,
+        learnerRequest,
+      );
+
+      expect(mockPrisma.assignmentAttempt.updateMany).toHaveBeenCalledWith({
+        where: { id: 900, submitted: false },
+        data: expect.objectContaining({
+          submitted: true,
+          grade: 0,
+          comments: EXPIRED_ATTEMPT_COMMENT,
+        }),
+      });
+      expect(result).toMatchObject({ id: 900, submitted: true, grade: 0 });
+    });
+
+    it("does not overwrite a grade a concurrent submit already committed", async () => {
+      mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+        id: 901,
+        submitted: false,
+        expiresAt: new Date(Date.now() - 5 * 60_000),
+        questionVariants: [],
+      });
+      mockPrisma.assignmentAttempt.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        submitter().updateLearnerAttempt(
+          901,
+          771,
+          answeredDto,
+          "cookie",
+          false,
+          learnerRequest,
+        ),
+      ).rejects.toBeInstanceOf(AttemptClosedException);
+    });
+
+    describe("assertLearnerAttemptOpenForSubmit", () => {
+      it("lets an open attempt through without writing", async () => {
+        mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+          id: 5,
+          submitted: false,
+          comments: null,
+          expiresAt: new Date(Date.now() + 60_000),
+        });
+
+        await expect(
+          service.assertLearnerAttemptOpenForSubmit(5, new Date()),
+        ).resolves.toBeUndefined();
+        expect(mockPrisma.assignmentAttempt.updateMany).not.toHaveBeenCalled();
+      });
+
+      it("lets a submit inside the grace window through", async () => {
+        const expiresAt = new Date("2026-10-21T01:16:03.499Z");
+        mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+          id: 1873208,
+          submitted: false,
+          comments: null,
+          expiresAt,
+        });
+
+        await expect(
+          service.assertLearnerAttemptOpenForSubmit(
+            1873208,
+            new Date("2026-10-21T01:16:15.160Z"),
+          ),
+        ).resolves.toBeUndefined();
+      });
+
+      it("rejects a resubmit of an attempt closed at its time limit", async () => {
+        mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+          id: 1873208,
+          submitted: true,
+          comments: EXPIRED_ATTEMPT_COMMENT,
+          expiresAt: new Date(Date.now() - 60_000),
+        });
+
+        const error: unknown = await service
+          .assertLearnerAttemptOpenForSubmit(1873208, new Date())
+          .catch((caught: unknown) => caught);
+
+        expect(error).toBeInstanceOf(AttemptClosedException);
+        expect((error as AttemptClosedException).getResponse()).toMatchObject({
+          code: "ATTEMPT_CLOSED_AT_TIME_LIMIT",
+          message: "This attempt was already closed at its time limit.",
+        });
+        expect(mockPrisma.assignmentAttempt.updateMany).not.toHaveBeenCalled();
+      });
+
+      it("rejects a resubmit of a graded attempt as already submitted", async () => {
+        mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+          id: 6,
+          submitted: true,
+          comments: null,
+          expiresAt: null,
+        });
+
+        const error: unknown = await service
+          .assertLearnerAttemptOpenForSubmit(6, new Date())
+          .catch((caught: unknown) => caught);
+
+        expect((error as AttemptClosedException).getResponse()).toMatchObject({
+          code: "ATTEMPT_ALREADY_SUBMITTED",
+        });
+      });
+
+      it("lets a late duplicate through while the accepted submit is still grading", async () => {
+        mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+          id: 7,
+          submitted: false,
+          comments: null,
+          expiresAt: new Date(Date.now() - 2 * 60_000),
+        });
+
+        await expect(
+          service.assertLearnerAttemptOpenForSubmit(
+            7,
+            new Date(),
+            "job-in-flight",
+          ),
+        ).resolves.toBeUndefined();
+        expect(mockPrisma.assignmentAttempt.updateMany).not.toHaveBeenCalled();
+      });
+
+      it("closes an open attempt whose submit arrived past the grace window, then rejects it", async () => {
+        const expiresAt = new Date(Date.now() - 2 * 60_000);
+        mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+          id: 7,
+          submitted: false,
+          comments: null,
+          expiresAt,
+        });
+
+        const error: unknown = await service
+          .assertLearnerAttemptOpenForSubmit(7, new Date())
+          .catch((caught: unknown) => caught);
+
+        expect((error as AttemptClosedException).reason).toBe("time_limit");
+        expect(mockPrisma.assignmentAttempt.updateMany).toHaveBeenCalledWith({
+          where: { id: 7, submitted: false },
+          data: expect.objectContaining({ submitted: true, grade: 0 }),
+        });
+      });
+
+      it("404s an attempt that does not exist", async () => {
+        mockPrisma.assignmentAttempt.findUnique.mockResolvedValue(null);
+        await expect(
+          service.assertLearnerAttemptOpenForSubmit(8, new Date()),
+        ).rejects.toBeInstanceOf(NotFoundException);
+      });
+    });
+
+    describe("getAttemptSubmissionStatus", () => {
+      it("reports a fresh server clock and whether submits are still accepted", async () => {
+        const expiresAt = new Date(Date.now() + 5 * 60_000);
+        mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+          id: 9,
+          submitted: false,
+          comments: null,
+          expiresAt,
+        });
+
+        const before = Date.now();
+        const status = await service.getAttemptSubmissionStatus(9);
+        const after = Date.now();
+
+        expect(status).toMatchObject({
+          id: 9,
+          submitted: false,
+          closedAtTimeLimit: false,
+          acceptingSubmissions: true,
+          expiresAt: expiresAt.toISOString(),
+        });
+        const serverNow = Date.parse(status.serverNow);
+        expect(serverNow).toBeGreaterThanOrEqual(before);
+        expect(serverNow).toBeLessThanOrEqual(after);
+      });
+
+      it("reports an attempt closed at its time limit as not accepting submits", async () => {
+        mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+          id: 1873208,
+          submitted: true,
+          comments: EXPIRED_ATTEMPT_COMMENT,
+          expiresAt: new Date(Date.now() - 60_000),
+        });
+
+        await expect(
+          service.getAttemptSubmissionStatus(1873208),
+        ).resolves.toMatchObject({
+          submitted: true,
+          closedAtTimeLimit: true,
+          acceptingSubmissions: false,
+        });
+      });
+
+      it("reports an unsubmitted attempt past its grace window as not accepting submits", async () => {
+        mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+          id: 10,
+          submitted: false,
+          comments: null,
+          expiresAt: new Date(Date.now() - 31_000),
+        });
+
+        await expect(
+          service.getAttemptSubmissionStatus(10),
+        ).resolves.toMatchObject({
+          submitted: false,
+          acceptingSubmissions: false,
+        });
+      });
     });
   });
 });

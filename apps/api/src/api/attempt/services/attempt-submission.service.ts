@@ -6,7 +6,6 @@ import {
 /* eslint-disable unicorn/no-null */
 import {
   BadRequestException,
-  ConflictException,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -39,6 +38,12 @@ import {
   hasTextContent,
 } from "src/api/assignment/attempt/helper/blank-submission.helper";
 import { readServerClock } from "src/api/assignment/attempt/helper/server-clock.helper";
+import {
+  AttemptClosedException,
+  EXPIRED_ATTEMPT_COMMENT,
+  isFinalSubmitBeforeDeadline,
+  wasClosedAtTimeLimit,
+} from "src/api/assignment/attempt/helper/submission-deadline.helper";
 import {
   GetAssignmentResponseDto,
   LearnerGetAssignmentResponseDto,
@@ -606,6 +611,7 @@ export class AttemptSubmissionService {
       details?: GradingProgressDetails,
     ) => Promise<void>,
     cache?: JobScopedCache,
+    submissionReceivedAt?: Date,
   ): Promise<UpdateAssignmentAttemptResponseDto> {
     const { role } = request.userSession;
     if (role === UserRole.LEARNER) {
@@ -618,6 +624,7 @@ export class AttemptSubmissionService {
         request,
         progressCallback,
         cache,
+        submissionReceivedAt,
       );
     } else if (role === UserRole.AUTHOR) {
       return this.updateAuthorAttempt(
@@ -1136,6 +1143,7 @@ export class AttemptSubmissionService {
       details?: GradingProgressDetails,
     ) => Promise<void>,
     cache?: JobScopedCache,
+    submissionReceivedAt?: Date,
   ): Promise<UpdateAssignmentAttemptResponseDto> {
     // Allocate the per-invocation cache once and share it across both
     // pre-translate and grading phases. Without this hoist, callers that
@@ -1179,13 +1187,22 @@ export class AttemptSubmissionService {
         this.logger.warn(
           `updateLearnerAttempt: attempt ${attemptId} already submitted; skipping re-grade`,
         );
-        throw new ConflictException(
-          `Attempt ${attemptId} has already been submitted.`,
+        throw new AttemptClosedException(
+          attemptId,
+          wasClosedAtTimeLimit(assignmentAttempt.comments)
+            ? "time_limit"
+            : "already_submitted",
         );
       }
 
+      // Judged at the moment the API received the submit, not when this
+      // (possibly queued) grading run started: queue wait is not the
+      // learner's lateness.
       if (
-        this.validationService.isAttemptExpired(assignmentAttempt.expiresAt)
+        this.validationService.isAttemptExpired(
+          assignmentAttempt.expiresAt,
+          submissionReceivedAt,
+        )
       ) {
         // A submission that arrives past the deadline carrying nothing the
         // learner typed is the signature of a client-side timer firing on a
@@ -1324,6 +1341,13 @@ export class AttemptSubmissionService {
           updateDto.preTranslatedQuestions,
           effectiveCache,
           assignmentAttempt.userId,
+          {
+            // Judged from the server's receive time and deadline only.
+            scoreBlockedAsZero: isFinalSubmitBeforeDeadline(
+              assignmentAttempt.expiresAt,
+              submissionReceivedAt,
+            ),
+          },
         );
 
       const successfulQuestionResponses = gradedItems.map((g) => g.responseDto);
@@ -1599,20 +1623,142 @@ export class AttemptSubmissionService {
   }
 
   /**
+   * Gate a learner submit before anything is queued or graded.
+   *
+   * The deadline is judged at `receivedAt`, the moment the API received the
+   * PATCH. A submit on an attempt that is already closed, or one that arrived
+   * after the grace window, gets a synchronous 409 that says which of the two
+   * it was. The late case also closes the attempt at zero first: there is no
+   * server-side record of what the learner had answered before the deadline
+   * (answers live in the browser until submit), so nothing in this request can
+   * be shown to predate `expiresAt`, and grading it would grade work written
+   * after time was up.
+   *
+   * The exception is a submit that was already accepted: while its grading
+   * job is in flight the attempt still reads `submitted: false`. A retry or a
+   * second tab arriving after the window must not close it at zero, which
+   * would discard the on-time work when the job tries to commit. With
+   * `inFlightGradingJobId` set, a late submit is let through so the caller
+   * can hand back that job instead.
+   */
+  async assertLearnerAttemptOpenForSubmit(
+    attemptId: number,
+    receivedAt: Date,
+    inFlightGradingJobId?: string,
+  ): Promise<void> {
+    const attempt = await this.prisma.assignmentAttempt.findUnique({
+      where: { id: attemptId },
+      select: { id: true, submitted: true, comments: true, expiresAt: true },
+    });
+
+    if (!attempt) {
+      throw new NotFoundException(
+        `AssignmentAttempt with Id ${attemptId} not found.`,
+      );
+    }
+
+    if (attempt.submitted) {
+      const reason = wasClosedAtTimeLimit(attempt.comments)
+        ? "time_limit"
+        : "already_submitted";
+      this.logger.warn(
+        `submit.rejected.closed attempt=${attemptId} reason=${reason}`,
+      );
+      throw new AttemptClosedException(attemptId, reason);
+    }
+
+    if (
+      this.validationService.isAttemptExpired(attempt.expiresAt, receivedAt)
+    ) {
+      const lateByMs =
+        receivedAt.getTime() - new Date(attempt.expiresAt).getTime();
+      if (inFlightGradingJobId) {
+        this.logger.warn(
+          `submit.past_deadline.in_flight attempt=${attemptId} lateByMs=${lateByMs} gradingJobId=${inFlightGradingJobId}`,
+        );
+        return;
+      }
+      this.logger.warn(
+        `submit.rejected.past_deadline attempt=${attemptId} lateByMs=${lateByMs}`,
+      );
+      await this.closeExpiredAttempt(attemptId);
+      throw new AttemptClosedException(attemptId, "time_limit");
+    }
+  }
+
+  /**
+   * What the learner UI needs to decide whether an attempt is still editable,
+   * with a server clock reading taken now — not one replayed from a cached
+   * attempt payload.
+   */
+  async getAttemptSubmissionStatus(attemptId: number): Promise<{
+    id: number;
+    submitted: boolean;
+    closedAtTimeLimit: boolean;
+    acceptingSubmissions: boolean;
+    expiresAt: string | null;
+    serverNow: string;
+  }> {
+    const attempt = await this.prisma.assignmentAttempt.findUnique({
+      where: { id: attemptId },
+      select: { id: true, submitted: true, comments: true, expiresAt: true },
+    });
+
+    if (!attempt) {
+      throw new NotFoundException(
+        `AssignmentAttempt with Id ${attemptId} not found.`,
+      );
+    }
+
+    const serverNow = readServerClock();
+    const pastDeadline = this.validationService.isAttemptExpired(
+      attempt.expiresAt,
+      new Date(serverNow),
+    );
+
+    return {
+      id: attempt.id,
+      submitted: attempt.submitted,
+      closedAtTimeLimit:
+        attempt.submitted && wasClosedAtTimeLimit(attempt.comments),
+      acceptingSubmissions: !attempt.submitted && !pastDeadline,
+      expiresAt: attempt.expiresAt
+        ? new Date(attempt.expiresAt).toISOString()
+        : null,
+      serverNow,
+    };
+  }
+
+  /**
+   * Close an attempt at zero because its submit came in past the deadline.
+   * Conditional on the attempt still being open, so it can never overwrite a
+   * grade a concurrent on-time submit has just committed.
+   */
+  private async closeExpiredAttempt(attemptId: number): Promise<void> {
+    const { count } = await this.prisma.assignmentAttempt.updateMany({
+      where: { id: attemptId, submitted: false },
+      data: {
+        submitted: true,
+        grade: 0,
+        comments: EXPIRED_ATTEMPT_COMMENT,
+      },
+    });
+
+    if (count === 0) {
+      this.logger.warn(
+        `closeExpiredAttempt: attempt ${attemptId} was already submitted; leaving it as is`,
+      );
+      throw new AttemptClosedException(attemptId, "already_submitted");
+    }
+  }
+
+  /**
    * Handle an expired attempt
    */
   private async handleExpiredAttempt(
     attemptId: number,
   ): Promise<UpdateAssignmentAttemptResponseDto> {
-    await this.prisma.assignmentAttempt.update({
-      where: { id: attemptId },
-      data: {
-        submitted: true,
-        grade: 0,
-        comments:
-          "You submitted the assignment after the deadline. Your submission will not be graded. If you don't have any more attempts, please contact your instructor.",
-      },
-    });
+    await this.closeExpiredAttempt(attemptId);
 
     return {
       id: attemptId,

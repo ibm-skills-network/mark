@@ -64,4 +64,12 @@ export interface GradingContext {
    * path costs no extra reads.
    */
   loadChoiceRenderings?: () => Promise<ChoiceRendering[]>;
+
+  /**
+   * Set once another question in the same attempt is blocked: nothing will be
+   * saved, so source-bearing strategies only check that the submitted link or
+   * file is readable (to report every blocked question at once) and return
+   * before any model call.
+   */
+  sourceCheckOnly?: boolean;
 }

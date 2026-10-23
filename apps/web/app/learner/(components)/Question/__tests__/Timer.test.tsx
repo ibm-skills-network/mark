@@ -5,18 +5,24 @@
 import { render, act } from "@testing-library/react";
 import { toast } from "sonner";
 import type { QuestionStore } from "@/config/types";
-import { GradingStreamLostError } from "@/lib/learner";
+import { GradingUnableError } from "@/lib/grading-failure";
+import {
+  AttemptAlreadySubmittedError,
+  GradingStreamLostError,
+} from "@/lib/learner";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import Timer from "../Timer";
 
 const mockUseParams = jest.fn();
+const mockRouterPush = jest.fn();
 jest.mock("next/navigation", () => ({
   useParams: () => mockUseParams(),
   useRouter: () => ({
-    push: jest.fn(),
+    push: mockRouterPush,
     replace: jest.fn(),
     prefetch: jest.fn(),
   }),
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 // Countdown state the tests drive directly; defaults to "already expired" so
@@ -142,6 +148,100 @@ describe("Timer auto-submit", () => {
 
     expect(mockSubmitAssignment).toHaveBeenCalled();
     expect(toast.error).toHaveBeenCalledWith(lostStreamMessage);
+  });
+});
+
+describe("Timer auto-submit on a closed attempt", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.useFakeTimers();
+    localStorage.clear();
+    mockCountdownState.countdown = 0;
+    mockCountdownState.timerExpired = true;
+    mockUseParams.mockReturnValue({ assignmentId: "771" });
+    useLearnerStore.setState({
+      questions: [answeredQuestion],
+      activeAttemptId: 1873208,
+      userPreferedLanguage: null,
+      attemptStartedAt: anEstablishedAttempt(),
+      serverTimeOffsetMs: 0,
+    });
+    useAssignmentDetails.setState({ assignmentDetails: null });
+    jest.spyOn(console, "warn").mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    act(() => {
+      jest.runOnlyPendingTimers();
+    });
+    jest.useRealTimers();
+  });
+
+  const fireAutoSubmit = async () => {
+    render(<Timer />);
+    await act(async () => {
+      jest.advanceTimersByTime(2100);
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+  };
+
+  it("says the attempt was closed at its time limit and shows its results", async () => {
+    mockSubmitAssignment.mockRejectedValue(
+      new AttemptAlreadySubmittedError(1873208, true),
+    );
+
+    await fireAutoSubmit();
+
+    expect(toast.error).toHaveBeenCalledWith(
+      "This attempt was already closed at its time limit.",
+    );
+    expect(toast.error).not.toHaveBeenCalledWith(
+      expect.stringContaining("use the Submit button"),
+    );
+    expect(mockRouterPush).toHaveBeenCalledWith(
+      "/learner/771/successPage/1873208",
+    );
+    expect(useLearnerStore.getState().activeAttemptId).toBeNull();
+  });
+
+  it("says what could not be graded instead of blaming the connection", async () => {
+    const message =
+      "We couldn't open https://slow.example/page right now. Try again in a few minutes.";
+    mockSubmitAssignment.mockRejectedValue(
+      new GradingUnableError(message, {
+        kind: "unable_to_grade",
+        issues: [
+          {
+            questionId: 41868,
+            code: "url_temporarily_unavailable",
+            retryable: true,
+            message,
+          },
+        ],
+      }),
+    );
+
+    await fireAutoSubmit();
+
+    expect(toast.error).toHaveBeenCalledWith(message);
+    expect(toast.error).not.toHaveBeenCalledWith(
+      expect.stringContaining("Check your connection"),
+    );
+  });
+
+  it("goes to the results quietly when another submit already landed", async () => {
+    mockSubmitAssignment.mockRejectedValue(
+      new AttemptAlreadySubmittedError(1873208, false),
+    );
+
+    await fireAutoSubmit();
+
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(mockRouterPush).toHaveBeenCalledWith(
+      "/learner/771/successPage/1873208",
+    );
   });
 });
 

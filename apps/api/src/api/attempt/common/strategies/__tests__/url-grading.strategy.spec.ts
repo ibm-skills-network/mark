@@ -218,15 +218,14 @@ describe("UrlGradingStrategy - Type Safety Tests", () => {
       assignmentInstructions: "",
     } as any;
 
-    it("grades an unparseable URL as 0 with feedback instead of throwing or fetching", async () => {
-      const result = await strategy.gradeResponse(
-        mockQuestion,
-        "script.js",
-        context,
-      );
-
-      expect(result.totalPoints).toBe(0);
-      expect(JSON.stringify(result)).toMatch(/invalid url/i);
+    it("reports an unparseable URL as fixable instead of scoring it or fetching", async () => {
+      await expect(
+        strategy.gradeResponse(mockQuestion, "script.js", context),
+      ).rejects.toMatchObject({
+        name: "SourceProcessingError",
+        code: "url_invalid",
+        source: { kind: "url", url: "script.js" },
+      });
       // Must short-circuit before any LLM grading call.
       expect(llmFacadeService.gradeUrlBasedQuestion).not.toHaveBeenCalled();
     });
@@ -348,7 +347,7 @@ describe("UrlGradingStrategy - Type Safety Tests", () => {
       await expect(
         strategy.gradeResponse(
           mockQuestion,
-          "https://example.com/work",
+          "https://learner-portfolio.dev/work",
           context,
         ),
       ).rejects.toBeInstanceOf(SourceProcessingError);
@@ -380,7 +379,7 @@ describe("UrlGradingStrategy - Type Safety Tests", () => {
       await expect(
         strategy.gradeResponse(
           mockQuestion,
-          "https://example.com/work",
+          "https://learner-portfolio.dev/work",
           context,
         ),
       ).rejects.toBeInstanceOf(RetryableProcessingError);
@@ -432,15 +431,10 @@ describe("UrlGradingStrategy - Type Safety Tests", () => {
       );
     });
 
-    it("still grades an unusable value zero without calling the fetch", async () => {
-      const result = await strategy.gradeResponse(
-        mockQuestion,
-        "dgtj",
-        context,
-      );
-
-      expect(result.totalPoints).toBe(0);
-      expect(JSON.stringify(result)).toMatch(/invalid url/i);
+    it("reports an unusable value as an invalid address without calling the fetch", async () => {
+      await expect(
+        strategy.gradeResponse(mockQuestion, "dgtj", context),
+      ).rejects.toMatchObject({ code: "url_invalid" });
       expect(mockedFetch).not.toHaveBeenCalled();
     });
 
@@ -509,11 +503,198 @@ describe("UrlGradingStrategy - Type Safety Tests", () => {
       await expect(
         strategy.gradeResponse(
           mockQuestion,
-          "https://example.com/work",
+          "https://learner-portfolio.dev/work",
           context,
         ),
       ).rejects.toBeInstanceOf(RetryableProcessingError);
       expect(gradingAuditService.recordGrading).not.toHaveBeenCalled();
+    });
+
+    describe("issue codes for links that can't be graded as submitted", () => {
+      const question = {
+        id: 7924,
+        question: "Submit the link to your README",
+        type: "URL" as any,
+        totalPoints: 10,
+      } as QuestionDto;
+      const context = {
+        language: "en",
+        assignmentId: 2561,
+        attemptId: 1877610,
+        questionAnswerContext: [],
+        assignmentInstructions: "",
+      } as any;
+
+      beforeEach(() => {
+        mockedFetch.mockReset();
+      });
+
+      it.each([
+        "https://github.com/<your-username>/<your-repo-name>/blob/main/README.md",
+        "https://github.com/YOUR-USERNAME/simple-interest-calculator/blob/main/README.md",
+        "https://github.com/YOUR-GITHUB-USERNAME/expressBookReviews/blob/main/final_project/router/general.js",
+        "https://github.com/VOTRE_USER/expressBookReview/blob/main/router/general.js",
+        "https://github.com/johndoe/simple-interest-calculator",
+        "https://github.com/your-username/your-repository/blob/main/CODE_OF_CONDUCT.md",
+      ])("flags the placeholder in %s without fetching", async (url) => {
+        await expect(
+          strategy.gradeResponse(question, url, context),
+        ).rejects.toMatchObject({
+          name: "SourceProcessingError",
+          code: "url_placeholder",
+        });
+        expect(mockedFetch).not.toHaveBeenCalled();
+      });
+
+      it.each([
+        "https://github.com/users/dustinjbabcock/projects/1/views/1",
+        "https://github.com/guranisusmitha-stack/simple-interest-calculator/new/main",
+        "https://github.com/o/r/issues",
+        "https://github.com/o/r/pulls",
+        "https://github.com/o/r/compare/main...dev",
+        "https://github.com/orgs/acme/projects/3",
+      ])("flags %s as a page we can't grade", async (url) => {
+        await expect(
+          strategy.gradeResponse(question, url, context),
+        ).rejects.toMatchObject({ code: "url_unsupported" });
+        expect(mockedFetch).not.toHaveBeenCalled();
+      });
+
+      it("still fetches a single issue", async () => {
+        mockedFetch.mockResolvedValue({
+          body: "Issue body",
+          isFunctional: true,
+        });
+        llmFacadeService.gradeUrlBasedQuestion.mockResolvedValue({
+          points: 1,
+          feedback: "ok",
+          gradingRationale: "ok",
+        } as any);
+        await strategy.gradeResponse(
+          question,
+          "https://github.com/o/r/issues/12",
+          context,
+        );
+        expect(mockedFetch).toHaveBeenCalled();
+      });
+
+      it("tells the learner a 404 may be a private repository and names the link", async () => {
+        mockedFetch.mockResolvedValue({
+          body: "",
+          isFunctional: false,
+          failure: { code: "url_unreachable", httpStatus: 404 },
+        });
+        const url =
+          "https://github.com/Blaziton456/e-plantScience/blob/main/README.md";
+        const error = await strategy
+          .gradeResponse(question, url, context)
+          .catch((caught: unknown) => caught);
+
+        expect(error).toBeInstanceOf(SourceProcessingError);
+        const issue = (error as SourceProcessingError).toIssue(question.id);
+        expect(issue).toMatchObject({
+          questionId: 7924,
+          code: "url_unreachable",
+          retryable: false,
+          source: { kind: "url", url, httpStatus: 404 },
+        });
+        expect(issue.message).toContain(url);
+        expect(issue.message).toMatch(/private/i);
+        expect(issue.message).toMatch(/public/i);
+        expect(mockLogger.warn).toHaveBeenCalledWith(
+          "grading.source_processing.blocked",
+          expect.objectContaining({
+            attemptId: 1877610,
+            assignmentId: 2561,
+            questionId: 7924,
+            code: "url_unreachable",
+            host: "github.com",
+            httpStatus: 404,
+          }),
+        );
+      });
+
+      it("passes the fetcher's blocked/empty classification through", async () => {
+        mockedFetch.mockResolvedValue({
+          body: "",
+          isFunctional: false,
+          failure: { code: "url_blocked", httpStatus: 403 },
+        });
+        await expect(
+          strategy.gradeResponse(
+            question,
+            "https://www.indeed.com/q-Cyber-Security-Specialist-jobs.html",
+            context,
+          ),
+        ).rejects.toMatchObject({
+          code: "url_blocked",
+          source: { httpStatus: 403 },
+        });
+      });
+
+      it("says a missing course starter repository should be the learner's own copy", async () => {
+        mockedFetch.mockResolvedValue({
+          body: "",
+          isFunctional: false,
+          failure: { code: "url_unreachable", httpStatus: 404 },
+        });
+        const error = await strategy
+          .gradeResponse(
+            question,
+            "https://github.com/ibm-developer-skills-network/github-final-project/blob/main/README.md",
+            context,
+          )
+          .catch((caught: unknown) => caught as SourceProcessingError);
+        expect(error.code).toBe("url_template_repo");
+        expect(error.toIssue(question.id).message).toMatch(
+          /starter repository.*your own copy/i,
+        );
+      });
+
+      it("grades a readable starter-repository link as before", async () => {
+        mockedFetch.mockResolvedValue({
+          body: "# Starter",
+          isFunctional: true,
+        });
+        llmFacadeService.gradeUrlBasedQuestion.mockResolvedValue({
+          points: 0,
+          feedback: "This is the template",
+          gradingRationale: "template",
+        } as any);
+        await expect(
+          strategy.gradeResponse(
+            question,
+            "https://github.com/ibm-developer-skills-network/github-final-project/blob/main/README.md",
+            context,
+          ),
+        ).resolves.toBeDefined();
+      });
+
+      it("annotates a transient fetch failure with the question and the learner's link", async () => {
+        const transient = new GithubRateLimitedError({
+          owner: "o",
+          repo: "r",
+          requestUrl: "https://api.github.com/repos/o/r",
+        });
+        mockedFetch.mockRejectedValue(transient);
+        await expect(
+          strategy.gradeResponse(question, "https://github.com/o/r", context),
+        ).rejects.toBe(transient);
+        expect(transient.questionId).toBe(7924);
+        expect(transient.learnerUrl).toBe("https://github.com/o/r");
+      });
+
+      it("only checks the source, without a model call, once the attempt is already blocked", async () => {
+        mockedFetch.mockResolvedValue({ body: "code", isFunctional: true });
+        const result = await strategy.gradeResponse(
+          question,
+          "https://github.com/o/r/blob/main/a.py",
+          { ...context, sourceCheckOnly: true },
+        );
+        expect(result).toBeDefined();
+        expect(llmFacadeService.gradeUrlBasedQuestion).not.toHaveBeenCalled();
+        expect(gradingAuditService.recordGrading).not.toHaveBeenCalled();
+      });
     });
   });
 });

@@ -50,6 +50,8 @@ import { AbstractGradingStrategy } from "./abstract-grading.strategy";
 export class FileGradingStrategy extends AbstractGradingStrategy<
   LearnerFileUpload[]
 > {
+  readonly supportsSourceCheck = true;
+
   constructor(
     private readonly llmFacadeService: LlmFacadeService,
     @Inject(FILE_CONTENT_EXTRACTION_SERVICE)
@@ -321,12 +323,25 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
           attemptId: context.attemptId,
           questionId: question.id,
           reason: error.reason,
+          ...(error instanceof SourceProcessingError
+            ? {
+                code: error.code,
+                detectedType: error.source?.detectedType,
+                expectedType: error.source?.expectedType,
+              }
+            : {}),
           sourceReference: error.sourceReference,
           retryable: error.retryable,
           scoringBlocked: true,
         });
       }
       throw error;
+    }
+
+    if (context.sourceCheckOnly) {
+      // Another question in this attempt is already blocked, so nothing will
+      // be saved: the files were readable, which is all this pass needed.
+      return this.createResponseDto(0, []);
     }
 
     const processedFiles = await this.processExtractedFiles(

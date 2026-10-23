@@ -14,6 +14,7 @@ import { QuestionDto } from "src/api/assignment/dto/update.questions.request.dto
 import { ScoringType } from "src/api/assignment/question/dto/create.update.question.request.dto";
 import { hashSafetyIdentifier } from "src/api/llm/core/utils/safety-identifier.util";
 import { ImageGradingService } from "src/api/llm/features/grading/services/image-grading.service";
+import { SourceProcessingError } from "src/api/llm/features/grading/errors/source-processing.error";
 import { UnsupportedImageFormatError } from "src/api/llm/features/grading/errors/unsupported-image-format.error";
 import {
   ImageAnalysisResult,
@@ -369,10 +370,16 @@ export class ImageGradingStrategy extends AbstractGradingStrategy<
       );
     }
 
+    // A wrong file type or an oversized image is the learner's to fix, so
+    // both throw typed learner-facing errors (see the sniff below for why a
+    // BadRequestException is wrong here): the attempt shows "Unable to grade"
+    // with the fix instead of "Grading failed".
     if (!this.isValidImageFormat(image.filename)) {
-      throw new BadRequestException(
-        `Unsupported image format for ${image.filename}`,
-      );
+      throw new UnsupportedImageFormatError({
+        filename: image.filename,
+        detectedFormat: image.filename.split(".").pop()?.toLowerCase(),
+        reason: "file extension is not a gradable image",
+      });
     }
 
     if (
@@ -380,9 +387,10 @@ export class ImageGradingStrategy extends AbstractGradingStrategy<
       imageData !== "InCos" &&
       this.isBase64TooLarge(imageData)
     ) {
-      throw new BadRequestException(
-        `Image ${image.filename} exceeds maximum size limit`,
-      );
+      throw new SourceProcessingError("extraction_failed", "file", {
+        code: "file_too_large",
+        source: { kind: "file", fileName: image.filename },
+      });
     }
 
     // For inline base64 (Path-A) images, sniff the real magic bytes so an

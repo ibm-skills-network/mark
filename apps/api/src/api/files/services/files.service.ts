@@ -27,6 +27,7 @@ import {
   UploadType,
 } from "../dto/upload.dto";
 import { FileProcessingBudgetService } from "./file-processing-budget.service";
+import { fileExtension, learnerUploadExtensions } from "./learner-upload-types";
 import { sanitizeUploadPath } from "./path-sanitizer";
 import { S3Service } from "./s3.service";
 import { generateStorageKeyId } from "./storage-key";
@@ -436,6 +437,68 @@ export class FilesService {
   }
 
   // eslint-disable-next-line @typescript-eslint/require-await
+  /**
+   * A learner's file must belong to a question in the assignment it names and
+   * be a type that question accepts. The browser's picker filters the same
+   * types, but nothing stops a client posting here directly, and a wrong file
+   * only surfaces later as an attempt that can't be graded. Authors are not
+   * checked: previews upload against questions that may not be saved yet.
+   */
+  async assertLearnerFileFitsQuestion(
+    uploadRequest: UploadRequestDto,
+    userId: string,
+    role: UserRole,
+  ): Promise<void> {
+    const { uploadType, fileName, context } = uploadRequest;
+    if (
+      role !== UserRole.LEARNER ||
+      (uploadType !== UploadType.LEARNER &&
+        uploadType !== UploadType.LEARNER_PROD)
+    ) {
+      return;
+    }
+    const assignmentId: unknown = context?.assignmentId;
+    const questionId: unknown = context?.questionId;
+    // resolveUploadTarget rejects these first; checked again so this method
+    // never trusts its caller's order.
+    if (typeof assignmentId !== "number" || typeof questionId !== "number") {
+      throw new BadRequestException("Invalid upload context");
+    }
+
+    const question = await this.prisma.question.findFirst({
+      where: { id: questionId, assignmentId, isDeleted: false },
+      select: { type: true, responseType: true },
+    });
+    if (!question) {
+      this.logger.warn("upload_rejected: question not in assignment", {
+        denial_reason: "question_not_in_assignment",
+        user_id: userId,
+        assignment_id: assignmentId,
+        question_id: questionId,
+      });
+      throw new BadRequestException("Invalid upload context");
+    }
+
+    const allowed = learnerUploadExtensions(
+      question.type,
+      question.responseType,
+    );
+    const extension = fileExtension(fileName);
+    if (allowed && !allowed.includes(extension)) {
+      this.logger.warn("upload_rejected: file type not accepted by question", {
+        denial_reason: "file_type_not_accepted",
+        user_id: userId,
+        assignment_id: assignmentId,
+        question_id: questionId,
+        response_type: question.responseType ?? question.type,
+        extension,
+      });
+      throw new BadRequestException(
+        `This question doesn't accept ${extension || "that"} files. Allowed types: ${allowed.join(", ")}.`,
+      );
+    }
+  }
+
   async generateUploadUrl(
     uploadRequest: UploadRequestDto,
     userId: string,
@@ -450,6 +513,7 @@ export class FilesService {
       uploadType,
       maxAllowedBytes,
     } = this.resolveUploadTarget(uploadRequest, userId, role);
+    await this.assertLearnerFileFitsQuestion(uploadRequest, userId, role);
     const expiresInSeconds = this.getPresignedUploadTtlSeconds();
 
     const presignedUrl = await this.s3Service.getSignedUrl("putObject", {
@@ -498,6 +562,7 @@ export class FilesService {
       uploadType,
       maxAllowedBytes,
     } = this.resolveUploadTarget(uploadRequest, userId, role);
+    await this.assertLearnerFileFitsQuestion(uploadRequest, userId, role);
     const expiresInSeconds = this.getPresignedUploadTtlSeconds();
     const partSizeBytes = this.getMultipartPartSizeBytes();
     // Number of parts = file size divided by part size, rounded up

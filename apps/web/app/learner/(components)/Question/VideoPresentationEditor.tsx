@@ -5,7 +5,7 @@ import {
   TranscriptSegment,
 } from "@/config/types";
 import { useLearnerStore } from "@/stores/learner";
-import type { FFmpeg } from "@ffmpeg/ffmpeg";
+import type { FFmpeg } from "@/lib/ffmpeg-client";
 import { fetchFile, toBlobURL } from "@ffmpeg/util";
 import { getFfmpeg } from "@/lib/ffmpeg-client";
 import JSZip from "jszip";

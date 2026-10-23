@@ -9,8 +9,14 @@ import type {
 } from "@/config/types";
 import { useAssignmentId } from "@/hooks/use-assignment-id";
 import useCountdown from "@/hooks/use-countdown";
+import { useUiTranslation } from "@/hooks/use-ui-translation";
 import { learnerSuccessPath } from "@/lib/author-session";
-import { isGradingStreamLostError } from "@/lib/learner";
+import {
+  ATTEMPT_CLOSED_AT_TIME_LIMIT_MESSAGE,
+  isAttemptAlreadySubmittedError,
+  isGradingStreamLostError,
+} from "@/lib/learner";
+import { isGradingUnableError } from "@/lib/grading-failure";
 import { cn } from "@/lib/strings";
 import { getUser, submitAssignment } from "@/lib/talkToBackend";
 import {
@@ -42,6 +48,7 @@ const AUTO_SUBMIT_DELAY_MS = 2000;
 
 function Timer(props: Props) {
   const router = useRouter();
+  const { t } = useUiTranslation();
   const userPreferedLanguage = useLearnerStore(
     (state) => state.userPreferedLanguage,
   );
@@ -190,6 +197,37 @@ function Timer(props: Props) {
       // Auto-submit runs from a fire-and-forget setTimeout; without this catch a
       // 401/network rejection is an unhandled promise and the learner is told
       // their work "will be graded automatically" while it was silently lost.
+      if (isAttemptAlreadySubmittedError(error)) {
+        // Already closed, by another tab's submit or by its deadline. Asking
+        // the learner to press Submit again could only fail the same way.
+        console.warn("[learner] auto-submit found the attempt already closed", {
+          assignmentId,
+          activeAttemptId,
+          closedAtTimeLimit: error.closedAtTimeLimit,
+        });
+        if (error.closedAtTimeLimit) {
+          toast.error(t(ATTEMPT_CLOSED_AT_TIME_LIMIT_MESSAGE));
+        }
+        setLearnerStore({
+          activeAttemptId: null,
+          expiresAt: undefined,
+          attemptStartedAt: undefined,
+        });
+        router.push(learnerSuccessPath(assignmentId, error.attemptId));
+        return;
+      }
+      if (isGradingUnableError(error)) {
+        // At the deadline a question the learner would have to fix is scored
+        // 0 and the rest graded, so this only happens when a link stayed
+        // temporarily unreachable. Say what failed, not "check your connection".
+        console.warn("[learner] auto-submit could not be graded", {
+          assignmentId,
+          activeAttemptId,
+          issueCodes: error.failure.issues.map((issue) => issue.code),
+        });
+        toast.error(error.message);
+        return;
+      }
       if (isGradingStreamLostError(error)) {
         // The submission itself went through — only the grading status
         // stream gave up watching it. Telling the learner to resubmit here

@@ -19,6 +19,7 @@ describe("FilesController direct upload", () => {
 
   const mockFilesService = {
     resolveUploadTarget: jest.fn(),
+    assertLearnerFileFitsQuestion: jest.fn().mockResolvedValue(undefined),
     directUpload: jest.fn(),
   } as unknown as FilesService;
 
@@ -157,6 +158,39 @@ describe("FilesController direct upload", () => {
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
 
+    expect(mockFilesService.directUpload).not.toHaveBeenCalled();
+  });
+
+  it("rejects a file its question does not accept before storing it", async () => {
+    (
+      mockFilesService.assertLearnerFileFitsQuestion as jest.Mock
+    ).mockRejectedValueOnce(
+      new BadRequestException("This question doesn't accept .ipynb files."),
+    );
+
+    await expect(
+      controller.directUpload(
+        file,
+        {
+          uploadType: UploadType.LEARNER,
+          context: '{"assignmentId":2688,"questionId":8645}',
+        },
+        request,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(mockFilesService.assertLearnerFileFitsQuestion).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fileName: file.originalname,
+        uploadType: UploadType.LEARNER,
+        context: expect.objectContaining({
+          assignmentId: 2688,
+          questionId: 8645,
+        }),
+      }),
+      expect.any(String),
+      expect.anything(),
+    );
     expect(mockFilesService.directUpload).not.toHaveBeenCalled();
   });
 
