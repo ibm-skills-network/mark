@@ -90,6 +90,14 @@ describe("TextQuestion", () => {
     );
   });
 
+  it("keeps pasted code literal in learner answers", () => {
+    render(<TextQuestion question={question} />);
+
+    expect(mockRichTextEditor).toHaveBeenCalledWith(
+      expect.objectContaining({ disablePasteRules: true }),
+    );
+  });
+
   it("blocks images in learner text answers", () => {
     render(<TextQuestion question={question} />);
 

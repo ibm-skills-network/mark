@@ -33,6 +33,7 @@ function TextQuestion(props: Props) {
         placeholder="Type your answer here"
         toolbarMode="learner"
         disableListAutofill
+        disablePasteRules
         blockImages
         onImageBlocked={() => setImageBlocked(true)}
         maxWords={maxWords}
