@@ -1625,10 +1625,18 @@ export class AttemptSubmissionService {
    * (answers live in the browser until submit), so nothing in this request can
    * be shown to predate `expiresAt`, and grading it would grade work written
    * after time was up.
+   *
+   * The exception is a submit that was already accepted: while its grading
+   * job is in flight the attempt still reads `submitted: false`. A retry or a
+   * second tab arriving after the window must not close it at zero, which
+   * would discard the on-time work when the job tries to commit. With
+   * `inFlightGradingJobId` set, a late submit is let through so the caller
+   * can hand back that job instead.
    */
   async assertLearnerAttemptOpenForSubmit(
     attemptId: number,
     receivedAt: Date,
+    inFlightGradingJobId?: string,
   ): Promise<void> {
     const attempt = await this.prisma.assignmentAttempt.findUnique({
       where: { id: attemptId },
@@ -1656,6 +1664,12 @@ export class AttemptSubmissionService {
     ) {
       const lateByMs =
         receivedAt.getTime() - new Date(attempt.expiresAt).getTime();
+      if (inFlightGradingJobId) {
+        this.logger.warn(
+          `submit.past_deadline.in_flight attempt=${attemptId} lateByMs=${lateByMs} gradingJobId=${inFlightGradingJobId}`,
+        );
+        return;
+      }
       this.logger.warn(
         `submit.rejected.past_deadline attempt=${attemptId} lateByMs=${lateByMs}`,
       );

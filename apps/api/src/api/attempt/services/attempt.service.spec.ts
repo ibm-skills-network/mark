@@ -54,6 +54,7 @@ describe("AttemptServiceV2", () => {
       createJob: jest.fn(),
       updateJobStatus: jest.fn(),
       getJob: jest.fn(),
+      findActiveJob: jest.fn(),
     };
 
     mockJobQueueService = {
@@ -62,6 +63,7 @@ describe("AttemptServiceV2", () => {
 
     mockSubmissionService = {
       updateAssignmentAttempt: jest.fn(),
+      assertLearnerAttemptOpenForSubmit: jest.fn(),
     };
 
     mockGradingProgressService = {
@@ -85,6 +87,47 @@ describe("AttemptServiceV2", () => {
   });
 
   // ─── Change 1: createGradingJob — atomic lock ─────────────────────────────
+
+  describe("assertLearnerAttemptOpenForSubmit", () => {
+    const receivedAt = new Date("2026-10-23T14:00:00.000Z");
+
+    it("passes the in-flight grading job to the deadline check and returns it", async () => {
+      mockJobStateService.findActiveJob!.mockResolvedValue({
+        id: "job-in-flight",
+      } as never);
+
+      await expect(
+        service.assertLearnerAttemptOpenForSubmit(
+          42,
+          7,
+          "learner@example.com",
+          receivedAt,
+        ),
+      ).resolves.toEqual({ inFlightGradingJobId: "job-in-flight" });
+      expect(mockJobStateService.findActiveJob).toHaveBeenCalledWith(
+        "grading:learner@example.com:7:42",
+      );
+      expect(
+        mockSubmissionService.assertLearnerAttemptOpenForSubmit,
+      ).toHaveBeenCalledWith(42, receivedAt, "job-in-flight");
+    });
+
+    it("returns no job when nothing is grading", async () => {
+      mockJobStateService.findActiveJob!.mockResolvedValue(null);
+
+      await expect(
+        service.assertLearnerAttemptOpenForSubmit(
+          42,
+          7,
+          "learner@example.com",
+          receivedAt,
+        ),
+      ).resolves.toEqual({ inFlightGradingJobId: null });
+      expect(
+        mockSubmissionService.assertLearnerAttemptOpenForSubmit,
+      ).toHaveBeenCalledWith(42, receivedAt, undefined);
+    });
+  });
 
   describe("createGradingJob", () => {
     it("creates a new job when no active lock exists", async () => {

@@ -798,16 +798,25 @@ export class AttemptServiceV2 {
 
   /**
    * Reject a learner submit on a closed or past-deadline attempt before
-   * anything is queued.
+   * anything is queued. Returns the grading job already running for this
+   * attempt, if any, so a duplicate submit reuses it rather than queueing its
+   * own payload.
    */
   async assertLearnerAttemptOpenForSubmit(
     attemptId: number,
+    assignmentId: number,
+    userId: string,
     receivedAt: Date,
-  ): Promise<void> {
-    return this.submissionService.assertLearnerAttemptOpenForSubmit(
+  ): Promise<{ inFlightGradingJobId: string | null }> {
+    const inFlight = await this.jobStateService.findActiveJob(
+      this.buildGradingActiveKey(userId, assignmentId, attemptId),
+    );
+    await this.submissionService.assertLearnerAttemptOpenForSubmit(
       attemptId,
       receivedAt,
+      inFlight?.id,
     );
+    return { inFlightGradingJobId: inFlight?.id ?? null };
   }
 
   /** Submission state of an attempt with a fresh server clock reading. */

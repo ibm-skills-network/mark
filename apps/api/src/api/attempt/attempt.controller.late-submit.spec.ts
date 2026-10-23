@@ -12,7 +12,9 @@ const logger = {
 
 const buildController = () => {
   const attemptService = {
-    assertLearnerAttemptOpenForSubmit: jest.fn().mockResolvedValue(undefined),
+    assertLearnerAttemptOpenForSubmit: jest
+      .fn()
+      .mockResolvedValue({ inFlightGradingJobId: null }),
     classifyLearnerAttemptTier: jest.fn().mockResolvedValue("standard"),
     createGradingJob: jest.fn().mockResolvedValue({
       gradingJobId: "job-1",
@@ -84,9 +86,11 @@ describe("AttemptControllerV2 submit on a closed attempt", () => {
       learnerRequest(),
     );
 
-    const [attemptId, receivedAt] =
+    const [attemptId, assignmentId, userId, receivedAt] =
       attemptService.assertLearnerAttemptOpenForSubmit.mock.calls[0];
     expect(attemptId).toBe(1873208);
+    expect(assignmentId).toBe(771);
+    expect(userId).toBe("learner@example.com");
     expect(receivedAt).toBeInstanceOf(Date);
     expect((receivedAt as Date).getTime()).toBeGreaterThanOrEqual(before);
     const enqueueArgs = attemptService.enqueueGradingJob.mock.calls[0];
@@ -104,10 +108,30 @@ describe("AttemptControllerV2 submit on a closed attempt", () => {
       learnerRequest(),
     );
 
-    const [, receivedAt] =
+    const [, , , receivedAt] =
       attemptService.assertLearnerAttemptOpenForSubmit.mock.calls[0];
     const inlineArgs = attemptService.updateAssignmentAttempt.mock.calls[0];
     expect(inlineArgs[6]).toBe(receivedAt);
+  });
+
+  it("hands a duplicate submit the in-flight grading job without queueing its payload", async () => {
+    const { controller, attemptService, killSwitch } = buildController();
+    attemptService.assertLearnerAttemptOpenForSubmit.mockResolvedValue({
+      inFlightGradingJobId: "job-in-flight",
+    });
+
+    const result = await controller.updateAssignmentAttempt(
+      1873208,
+      771,
+      body,
+      learnerRequest(),
+    );
+
+    expect(result).toMatchObject({ gradingJobId: "job-in-flight" });
+    expect(attemptService.createGradingJob).not.toHaveBeenCalled();
+    expect(attemptService.enqueueGradingJob).not.toHaveBeenCalled();
+    expect(attemptService.updateAssignmentAttempt).not.toHaveBeenCalled();
+    expect(killSwitch.assertGradingAllowed).not.toHaveBeenCalled();
   });
 
   it("does not run the learner deadline check on an author preview", async () => {

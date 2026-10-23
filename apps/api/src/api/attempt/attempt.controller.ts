@@ -274,11 +274,15 @@ export class AttemptControllerV2 {
     // before the kill-switch (a closed attempt is closed whether or not AI
     // grading is paused) and before a grading job could be queued for it.
     if (!isAuthorMode) {
+      let inFlightGradingJobId: string | null;
       try {
-        await this.attemptService.assertLearnerAttemptOpenForSubmit(
-          parsedAttemptId,
-          receivedAt,
-        );
+        ({ inFlightGradingJobId } =
+          await this.attemptService.assertLearnerAttemptOpenForSubmit(
+            parsedAttemptId,
+            parsedAssignmentId,
+            request.userSession.userId,
+            receivedAt,
+          ));
       } catch (error) {
         this.logger.warn("Submit rejected before grading", {
           attemptId: parsedAttemptId,
@@ -287,6 +291,21 @@ export class AttemptControllerV2 {
           reason: error instanceof Error ? error.message : String(error),
         });
         throw error;
+      }
+      // A duplicate submit (retry, second tab) while the accepted one is still
+      // grading gets that job back; its own payload is never queued.
+      if (inFlightGradingJobId) {
+        this.logger.info("Submit reused in-flight grading job", {
+          attemptId: parsedAttemptId,
+          assignmentId: parsedAssignmentId,
+          userId: request.userSession.userId,
+          gradingJobId: inFlightGradingJobId,
+        });
+        return {
+          gradingJobId: inFlightGradingJobId,
+          message:
+            "A grading job is already running for this attempt. Reusing existing job.",
+        };
       }
     }
 

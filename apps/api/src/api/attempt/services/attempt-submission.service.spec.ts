@@ -2621,6 +2621,24 @@ describe("AttemptSubmissionService - Grading Validation", () => {
         });
       });
 
+      it("lets a late duplicate through while the accepted submit is still grading", async () => {
+        mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+          id: 7,
+          submitted: false,
+          comments: null,
+          expiresAt: new Date(Date.now() - 2 * 60_000),
+        });
+
+        await expect(
+          service.assertLearnerAttemptOpenForSubmit(
+            7,
+            new Date(),
+            "job-in-flight",
+          ),
+        ).resolves.toBeUndefined();
+        expect(mockPrisma.assignmentAttempt.updateMany).not.toHaveBeenCalled();
+      });
+
       it("closes an open attempt whose submit arrived past the grace window, then rejects it", async () => {
         const expiresAt = new Date(Date.now() - 2 * 60_000);
         mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
