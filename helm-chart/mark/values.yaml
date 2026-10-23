@@ -136,6 +136,8 @@ jobs:
 rustApi:
   enabled: false
   replicaCount: 1
+  # Defaults to api.markDBName; DATABASE_URL is built from the postgres values unless secrets.DATABASE_URL is set.
+  markDBName: ''
   image:
     repository: ghcr.io/ibm-skills-network/mark/mark-rust-api
     tag: ""
@@ -191,6 +193,8 @@ rustApi:
 rustWorker:
   enabled: false
   replicaCount: 1
+  # Defaults to api.markDBName; DATABASE_URL is built from the postgres values unless secrets.DATABASE_URL is set.
+  markDBName: ''
   image:
     repository: ghcr.io/ibm-skills-network/mark/mark-rust-worker
     tag: ""
