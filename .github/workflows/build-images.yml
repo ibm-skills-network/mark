@@ -547,6 +547,9 @@ jobs:
         if: steps.changes.outputs.targets != ''
         uses: docker/setup-buildx-action@v3
         with:
+          # The runner is thrown away after the job; `docker buildx rm` in the
+          # post step waited 7+ min for buildkitd to drain after a failed bake.
+          cleanup: false
           # Four full installs at once would exhaust the runner's RAM; two at a
           # time keeps the shared stages deduped without thrashing.
           buildkitd-config-inline: |
