@@ -2,6 +2,42 @@ import { Injectable, Logger } from "@nestjs/common";
 import { GradingStatus } from "@prisma/client";
 import { PrismaService } from "../../../database/prisma.service";
 import { AdminEmailService } from "../../../auth/services/admin-email.service";
+import {
+  GradingFailure,
+  isGradingFailure,
+} from "../../llm/features/grading/errors/grading-failure";
+
+// GradingProgress.error is the only column for failure detail, so a
+// structured failure is stored as a tagged JSON envelope around the English
+// reason and unwrapped on read. Plain-text rows are returned unchanged.
+const STORED_FAILURE_TAG = "grading-failure/v1";
+
+function encodeStoredFailure(message: string, failure: GradingFailure): string {
+  return JSON.stringify({ tag: STORED_FAILURE_TAG, message, failure });
+}
+
+function decodeStoredFailure(
+  stored: string | null,
+): { message: string; failure: GradingFailure } | undefined {
+  if (!stored || !stored.startsWith("{")) return undefined;
+  try {
+    const parsed = JSON.parse(stored) as {
+      tag?: unknown;
+      message?: unknown;
+      failure?: unknown;
+    };
+    if (
+      parsed.tag === STORED_FAILURE_TAG &&
+      typeof parsed.message === "string" &&
+      isGradingFailure(parsed.failure)
+    ) {
+      return { message: parsed.message, failure: parsed.failure };
+    }
+  } catch {
+    // A plain-text reason that happens to start with "{" is returned as-is.
+  }
+  return undefined;
+}
 
 export type QuestionGradingStatus =
   | "pending"
@@ -324,9 +360,15 @@ export class GradingProgressService {
   }
 
   /**
-   * Mark grading as failed
+   * Mark grading as failed. `failure` (when known) is kept with the English
+   * reason so the polling endpoint can return the same structured payload as
+   * the status stream; see `getProgress`.
    */
-  async markFailed(attemptId: number, error: string): Promise<void> {
+  async markFailed(
+    attemptId: number,
+    error: string,
+    failure?: GradingFailure,
+  ): Promise<void> {
     try {
       if (attemptId > 0) {
         // Never downgrade a finished grade: a duplicate submit (409) reaches
@@ -336,7 +378,7 @@ export class GradingProgressService {
           where: { attemptId, status: { not: GradingStatus.COMPLETED } },
           data: {
             status: GradingStatus.FAILED,
-            error,
+            error: failure ? encodeStoredFailure(error, failure) : error,
             completedAt: new Date(),
           },
         });
@@ -355,12 +397,18 @@ export class GradingProgressService {
   }
 
   /**
-   * Get grading progress for an attempt
+   * Get grading progress for an attempt. `error` is always the English
+   * reason; `failure` is added when the failure was recorded with one.
    */
   async getProgress(attemptId: number) {
-    return this.prisma.gradingProgress.findUnique({
+    const row = await this.prisma.gradingProgress.findUnique({
       where: { attemptId },
     });
+    if (!row) return row;
+    const decoded = decodeStoredFailure(row.error);
+    return decoded
+      ? { ...row, error: decoded.message, failure: decoded.failure }
+      : row;
   }
 
   /**

@@ -70,12 +70,27 @@ jest.mock("@/app/chatbot/store/useMarkChatStore", () => ({
 // that the modal itself renders them correctly in isolation.
 jest.mock("../GradingProgressModal", () => ({
   __esModule: true,
-  default: (props: { isOpen?: boolean; progressData?: { status?: string } }) =>
+  default: (props: {
+    isOpen?: boolean;
+    progressData?: { status?: string; failure?: unknown };
+    questionOrder?: readonly number[];
+    onGoToQuestion?: (questionNumber: number | null) => void;
+  }) =>
     props.isOpen
-      ? createElement("div", {
-          "data-testid": "grading-modal",
-          "data-status": props.progressData?.status,
-        })
+      ? createElement(
+          "div",
+          {
+            "data-testid": "grading-modal",
+            "data-status": props.progressData?.status,
+            "data-has-failure": String(Boolean(props.progressData?.failure)),
+            "data-question-order": (props.questionOrder ?? []).join(","),
+          },
+          createElement(
+            "button",
+            { onClick: () => props.onGoToQuestion?.(1) },
+            "go-to-question-1",
+          ),
+        )
       : null,
 }));
 jest.mock("@/components/Button", () => ({
@@ -396,6 +411,35 @@ describe("LearnerHeader duplicate-submit conflict", () => {
   });
 });
 
+describe("LearnerHeader submit on an attempt closed at its time limit", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    localStorage.clear();
+    mockSearchParams.mockImplementation(() => new URLSearchParams());
+  });
+
+  it("says the attempt was closed at its time limit, then shows its results", async () => {
+    const { AttemptAlreadySubmittedError } =
+      jest.requireActual("@/lib/learner");
+    mockUseParams.mockReturnValue({ assignmentId: "771" });
+    seedLearnerState(null);
+    mockSubmitAssignment.mockRejectedValue(
+      new AttemptAlreadySubmittedError(999, true),
+    );
+
+    render(<LearnerHeader />);
+    await triggerSubmit();
+
+    expect(toast.error).toHaveBeenCalledWith(
+      "This attempt was already closed at its time limit.",
+    );
+    expect(toast.error).not.toHaveBeenCalledWith(
+      expect.stringContaining("Grading failed"),
+    );
+    expect(mockPush).toHaveBeenCalledWith("/learner/771/successPage/999");
+  });
+});
+
 // The attempt response now carries only the language it was requested in, so
 // the page has to notice when the server sent a language the learner did not
 // ask for — otherwise a learner reaching /questions without a `lang` parameter
@@ -651,5 +695,113 @@ describe("Regression: stale automatic language fetch", () => {
     });
     expect(useLearnerStore.getState().activeAttemptId).toBe(1000);
     expect(useLearnerStore.getState().questions.map((q) => q.id)).toEqual([2]);
+  });
+});
+
+describe("LearnerHeader learner-fixable grading failure", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    localStorage.clear();
+    mockSearchParams.mockImplementation(() => new URLSearchParams());
+  });
+
+  class GradingUnableError extends Error {
+    constructor(readonly failure: unknown) {
+      super("Question 1: we couldn't open your link");
+      this.name = "GradingUnableError";
+    }
+  }
+
+  const failure = {
+    kind: "unable_to_grade",
+    issues: [
+      {
+        questionId: 1,
+        code: "url_unreachable",
+        retryable: false,
+        message: "We couldn't open your link.",
+      },
+    ],
+  };
+
+  it("keeps the fix list open without a toast, then takes the learner to the question", async () => {
+    mockUseParams.mockReturnValue({ assignmentId: "3428" });
+    seedLearnerState(null);
+    useLearnerStore.setState({ activeQuestionNumber: 5 });
+
+    mockSubmitAssignment.mockImplementation((...args: unknown[]) => {
+      const onProgress = args[7] as (
+        status: string,
+        progress: number,
+        message: string,
+        metadata?: unknown,
+      ) => void;
+      onProgress(
+        "unable_to_grade",
+        0,
+        "Question 1: we couldn't open your link",
+        {
+          failure,
+        },
+      );
+      return Promise.reject(new GradingUnableError(failure));
+    });
+
+    jest.useFakeTimers();
+    try {
+      render(<LearnerHeader />);
+      await act(async () => {
+        window.dispatchEvent(new Event("triggerAssignmentSubmission"));
+      });
+      await act(async () => {
+        jest.advanceTimersByTime(5000);
+      });
+
+      const modal = screen.getByTestId("grading-modal");
+      expect(modal).toHaveAttribute("data-status", "unable_to_grade");
+      expect(modal).toHaveAttribute("data-has-failure", "true");
+      expect(modal).toHaveAttribute("data-question-order", "1");
+      expect(toast.error).not.toHaveBeenCalled();
+
+      await act(async () => {
+        screen.getByText("go-to-question-1").click();
+      });
+      expect(screen.queryByTestId("grading-modal")).not.toBeInTheDocument();
+      expect(useLearnerStore.getState().activeQuestionNumber).toBe(1);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("still closes the modal after a real grading failure", async () => {
+    mockUseParams.mockReturnValue({ assignmentId: "3428" });
+    seedLearnerState(null);
+    mockSubmitAssignment.mockImplementation((...args: unknown[]) => {
+      const onProgress = args[7] as (
+        status: string,
+        progress: number,
+        message: string,
+      ) => void;
+      onProgress("failed", 0, "Grading failed");
+      return Promise.reject(new Error("Grading failed"));
+    });
+
+    jest.useFakeTimers();
+    try {
+      render(<LearnerHeader />);
+      await act(async () => {
+        window.dispatchEvent(new Event("triggerAssignmentSubmission"));
+      });
+      expect(screen.getByTestId("grading-modal")).toHaveAttribute(
+        "data-status",
+        "failed",
+      );
+      await act(async () => {
+        jest.advanceTimersByTime(2500);
+      });
+      expect(screen.queryByTestId("grading-modal")).not.toBeInTheDocument();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

@@ -31,6 +31,13 @@ export class RetryableUrlFetchError extends Error {
   public readonly requestUrl: string;
   public readonly reason: string;
   public readonly status?: number;
+  /**
+   * Set by the grading strategy that hit the failure, so a terminal failure
+   * after the retry budget can name the question and the learner's own link
+   * (requestUrl may be a derived raw/API URL).
+   */
+  public questionId?: number;
+  public learnerUrl?: string;
 
   constructor(fields: RetryableUrlFetchErrorFields, message?: string) {
     super(

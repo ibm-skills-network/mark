@@ -13,6 +13,11 @@ import type {
   QuestionStore,
 } from "@/config/types";
 import { QuestionDisplayType } from "@/config/types";
+import {
+  closedAttemptReason,
+  getAttemptSubmissionStatus,
+  type ClosedAttemptReason,
+} from "@/lib/attempt-submission-status";
 import { cn } from "@/lib/strings";
 import { getAssignment } from "@/lib/talkToBackend";
 import { parseLearnerResponse, useDebugLog } from "@/lib/utils";
@@ -29,6 +34,7 @@ import {
   useState,
   type ComponentPropsWithoutRef,
 } from "react";
+import ClosedAttemptNotice from "./ClosedAttemptNotice";
 import Overview from "./Overview";
 import QuestionContainer from "./QuestionContainer";
 import TipsView from "./TipsView";
@@ -324,8 +330,11 @@ function QuestionPage(props: Props) {
     (state) => [state.assignmentDetails, state.setAssignmentDetails],
   );
   const [pageState, setPageState] = useState<
-    "loading" | "success" | "no-questions"
+    "loading" | "success" | "no-questions" | "closed"
   >("loading");
+  const [closedReason, setClosedReason] = useState<ClosedAttemptReason | null>(
+    null,
+  );
   const tips = useAppConfig((state) => state.tips);
   const setTipsVersion = useAppConfig((state) => state.setTipsVersion);
   // The attempt whose server-clock offset has already been recorded.
@@ -359,8 +368,11 @@ function QuestionPage(props: Props) {
         offset: deriveServerTimeOffsetMs(attemptServerNow),
       };
     }
-    const serverTimeOffsetMs = clockSampleRef.current.offset;
+    const payloadServerTimeOffsetMs = clockSampleRef.current.offset;
     const attemptStartedAt = getAttemptStartedAtMs(attemptCreatedAt);
+    // Asked now, in parallel with the assignment request: the payload this
+    // page was handed may be a cached copy from long before this mount.
+    const freshStatusPromise = getAttemptSubmissionStatus(assignmentId, id);
 
     const hydratePage = async () => {
       let nextAssignmentDetails = buildAssignmentDetailsFromAttempt(attempt);
@@ -383,6 +395,43 @@ function QuestionPage(props: Props) {
       if (cancelled) {
         return;
       }
+
+      const freshStatus = await freshStatusPromise;
+      if (cancelled) {
+        return;
+      }
+
+      const reasonClosed = freshStatus.ok
+        ? closedAttemptReason(freshStatus.status)
+        : null;
+      if (reasonClosed) {
+        console.warn("[learner] attempt is no longer open; not rendering it", {
+          assignmentId,
+          attemptId: id,
+          reason: reasonClosed,
+        });
+        // No deadline in the store means no countdown and no auto-submit.
+        // The attempt id stays so a stray Submit gets the server's honest 409.
+        setLearnerStore({
+          activeAttemptId: id,
+          expiresAt: undefined,
+          attemptStartedAt: undefined,
+        });
+        clockCaptureRef.current = null;
+        setClosedReason(reasonClosed);
+        setPageState("closed");
+        return;
+      }
+      if (!freshStatus.ok) {
+        console.warn(
+          "[learner] using the attempt payload's clock; fresh reading unavailable",
+          { assignmentId, attemptId: id },
+        );
+      }
+      // The fresh reading, when there is one, is the only clock to trust.
+      const serverTimeOffsetMs = freshStatus.ok
+        ? freshStatus.serverTimeOffsetMs
+        : payloadServerTimeOffsetMs;
 
       // Read the stored details at the moment of the comparison rather than
       // closing over them: when `assignmentDetails` was a dependency of this
@@ -462,13 +511,15 @@ function QuestionPage(props: Props) {
       const hasOtherChanges =
         clockCaptureRef.current !== id ||
         id !== storeState.activeAttemptId ||
-        normalizedExpiresAt !== storeState.expiresAt;
+        normalizedExpiresAt !== storeState.expiresAt ||
+        serverTimeOffsetMs !== storeState.serverTimeOffsetMs;
       if (hasOtherChanges) {
         // One reading per attempt: re-measuring on every render would let a
         // later, noisier sample overwrite the one taken closest to the fetch.
         clockCaptureRef.current = id;
         setLearnerStore(currentStoreUpdate);
       }
+      setClosedReason(null);
       if (questions.length) {
         setPageState("success");
       } else {
@@ -478,8 +529,47 @@ function QuestionPage(props: Props) {
 
     void hydratePage();
 
+    // A page restored from the back/forward cache, or a tab coming back from
+    // sleep, keeps running against whatever it last knew. Ask again.
+    const recheck = async () => {
+      const recheckStatus = await getAttemptSubmissionStatus(assignmentId, id);
+      if (cancelled || !recheckStatus.ok) return;
+      const reason = closedAttemptReason(recheckStatus.status);
+      if (reason) {
+        console.warn("[learner] attempt closed while the page was away", {
+          assignmentId,
+          attemptId: id,
+          reason,
+        });
+        setLearnerStore({
+          activeAttemptId: id,
+          expiresAt: undefined,
+          attemptStartedAt: undefined,
+        });
+        clockCaptureRef.current = null;
+        setClosedReason(reason);
+        setPageState("closed");
+        return;
+      }
+      if (useLearnerStore.getState().activeAttemptId === id) {
+        setLearnerStore({
+          serverTimeOffsetMs: recheckStatus.serverTimeOffsetMs,
+        });
+      }
+    };
+    const handlePageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) void recheck();
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") void recheck();
+    };
+    window.addEventListener("pageshow", handlePageShow);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
     return () => {
       cancelled = true;
+      window.removeEventListener("pageshow", handlePageShow);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [
     attempt,
@@ -504,6 +594,15 @@ function QuestionPage(props: Props) {
 
   if (pageState === "loading") {
     return <Loading animationData={animationData} />;
+  }
+  if (pageState === "closed" && closedReason) {
+    return (
+      <ClosedAttemptNotice
+        assignmentId={assignmentId}
+        attemptId={id}
+        reason={closedReason}
+      />
+    );
   }
   if (pageState === "no-questions") {
     return (

@@ -107,3 +107,40 @@ describe("AttemptValidationService - validateNewAttempt error codes", () => {
     );
   });
 });
+
+describe("AttemptValidationService - submission deadline", () => {
+  const service = new AttemptValidationService({} as never, {} as never);
+  const expiresAt = new Date("2026-10-21T01:16:03.499Z");
+
+  it("does not expire an attempt whose submit arrived 11.7s after the deadline", () => {
+    const receivedAt = new Date("2026-10-21T01:16:15.160Z");
+    expect(service.isAttemptExpired(expiresAt, receivedAt)).toBe(false);
+  });
+
+  it("expires an attempt whose submit arrived after the grace window", () => {
+    const receivedAt = new Date(expiresAt.getTime() + 30_001);
+    expect(service.isAttemptExpired(expiresAt, receivedAt)).toBe(true);
+  });
+
+  it("judges against the time the submit was received, not the time it is checked", () => {
+    // A grading job that sat in the queue must not turn an on-time submit
+    // into a late one.
+    const receivedAt = new Date(expiresAt.getTime() + 5000);
+    jest.useFakeTimers().setSystemTime(expiresAt.getTime() + 10 * 60_000);
+    try {
+      expect(service.isAttemptExpired(expiresAt, receivedAt)).toBe(false);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("uses the same window for checkSubmissionDeadline", () => {
+    jest.useFakeTimers().setSystemTime(expiresAt.getTime() + 20_000);
+    try {
+      expect(() => service.checkSubmissionDeadline(expiresAt)).not.toThrow();
+      expect(service.isAttemptExpired(expiresAt)).toBe(false);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+});

@@ -24,6 +24,7 @@ describe("LtiGradeSyncService - Integration Tests", () => {
       findFirst: jest.fn(),
       findMany: jest.fn(),
       update: jest.fn(),
+      updateMany: jest.fn(),
       count: jest.fn(),
     },
     ltiSyncErrorLog: {
@@ -61,6 +62,8 @@ describe("LtiGradeSyncService - Integration Tests", () => {
     httpService = module.get<HttpService>(HttpService);
 
     jest.clearAllMocks();
+    mockPrismaService.ltiGradeSync.updateMany.mockResolvedValue({ count: 1 });
+    mockPrismaService.ltiGradeSync.findMany.mockResolvedValue([]);
   });
 
   describe("Complete Success Flow", () => {
@@ -113,11 +116,11 @@ describe("LtiGradeSyncService - Integration Tests", () => {
 
       const updateCalls = mockPrismaService.ltiGradeSync.update.mock.calls;
 
-      expect(
-        updateCalls.some(
-          (call) => call[0].data.status === LtiSyncStatus.IN_PROGRESS,
-        ),
-      ).toBe(true);
+      expect(mockPrismaService.ltiGradeSync.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ status: LtiSyncStatus.IN_PROGRESS }),
+        }),
+      );
 
       expect(
         updateCalls.some(
@@ -243,7 +246,10 @@ describe("LtiGradeSyncService - Integration Tests", () => {
         attempt: {},
       };
 
-      mockPrismaService.ltiGradeSync.create.mockResolvedValue(sync);
+      mockPrismaService.ltiGradeSync.create.mockResolvedValue({
+        ...sync,
+        retryCount: 0,
+      });
       mockPrismaService.ltiSyncErrorLog.create.mockResolvedValue({});
       mockPrismaService.userNotification.create.mockResolvedValue({});
 
@@ -325,7 +331,9 @@ describe("LtiGradeSyncService - Integration Tests", () => {
         },
       ];
 
-      mockPrismaService.ltiGradeSync.findMany.mockResolvedValue(scheduledSyncs);
+      mockPrismaService.ltiGradeSync.findMany.mockResolvedValueOnce(
+        scheduledSyncs,
+      );
 
       let callIndex = 0;
       mockPrismaService.ltiGradeSync.findUnique.mockImplementation(() => {
@@ -338,15 +346,25 @@ describe("LtiGradeSyncService - Integration Tests", () => {
       const processed = await service.processScheduledRetries();
 
       expect(processed).toBe(2);
-      expect(mockPrismaService.ltiGradeSync.findMany).toHaveBeenCalledWith({
-        where: {
-          status: LtiSyncStatus.SCHEDULED,
-          nextRetryAt: {
-            lte: expect.any(Date),
+      expect(mockPrismaService.ltiGradeSync.findMany).toHaveBeenNthCalledWith(
+        1,
+        {
+          where: {
+            OR: expect.arrayContaining([
+              {
+                status: LtiSyncStatus.SCHEDULED,
+                nextRetryAt: { lte: expect.any(Date) },
+              },
+              {
+                status: LtiSyncStatus.PENDING,
+                createdAt: { lt: expect.any(Date) },
+              },
+            ]),
           },
+          orderBy: { id: "asc" },
+          take: 50,
         },
-        take: 50,
-      });
+      );
 
       expect(mockHttpService.put).toHaveBeenCalledTimes(2);
     });

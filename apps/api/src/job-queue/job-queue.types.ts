@@ -64,6 +64,8 @@ export interface AttemptGradeJobPayload {
   updateDto: LearnerUpdateAssignmentAttemptRequestDto;
   authCookie?: string;
   userSession: AttemptWorkerUserSession;
+  /** ISO time the API received the submit; the deadline is judged on it. */
+  submissionReceivedAt?: string;
 }
 
 export interface TranslateQuestionJobPayload {

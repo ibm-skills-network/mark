@@ -2,8 +2,11 @@ import { AttemptServiceV2 } from "./attempt.service";
 import { JobStateService } from "../../../job-queue/job-state.service";
 import { JobQueueService } from "../../../job-queue/job-queue.service";
 import { OversizedSubmissionError } from "../../llm/features/grading/errors/oversized-submission.error";
+import { SourceProcessingError } from "../../llm/features/grading/errors/source-processing.error";
+import { buildGradingIssue } from "../../llm/features/grading/errors/grading-failure";
 import { UnsupportedImageFormatError } from "../../llm/features/grading/errors/unsupported-image-format.error";
 import { AttemptSubmissionService } from "./attempt-submission.service";
+import { AttemptClosedException } from "../../assignment/attempt/helper/submission-deadline.helper";
 import { GradingProgressService } from "./grading-progress.service";
 import {
   JobStateRecord,
@@ -51,6 +54,7 @@ describe("AttemptServiceV2", () => {
       createJob: jest.fn(),
       updateJobStatus: jest.fn(),
       getJob: jest.fn(),
+      findActiveJob: jest.fn(),
     };
 
     mockJobQueueService = {
@@ -59,6 +63,7 @@ describe("AttemptServiceV2", () => {
 
     mockSubmissionService = {
       updateAssignmentAttempt: jest.fn(),
+      assertLearnerAttemptOpenForSubmit: jest.fn(),
     };
 
     mockGradingProgressService = {
@@ -82,6 +87,47 @@ describe("AttemptServiceV2", () => {
   });
 
   // ─── Change 1: createGradingJob — atomic lock ─────────────────────────────
+
+  describe("assertLearnerAttemptOpenForSubmit", () => {
+    const receivedAt = new Date("2026-10-23T14:00:00.000Z");
+
+    it("passes the in-flight grading job to the deadline check and returns it", async () => {
+      mockJobStateService.findActiveJob!.mockResolvedValue({
+        id: "job-in-flight",
+      } as never);
+
+      await expect(
+        service.assertLearnerAttemptOpenForSubmit(
+          42,
+          7,
+          "learner@example.com",
+          receivedAt,
+        ),
+      ).resolves.toEqual({ inFlightGradingJobId: "job-in-flight" });
+      expect(mockJobStateService.findActiveJob).toHaveBeenCalledWith(
+        "grading:learner@example.com:7:42",
+      );
+      expect(
+        mockSubmissionService.assertLearnerAttemptOpenForSubmit,
+      ).toHaveBeenCalledWith(42, receivedAt, "job-in-flight");
+    });
+
+    it("returns no job when nothing is grading", async () => {
+      mockJobStateService.findActiveJob!.mockResolvedValue(null);
+
+      await expect(
+        service.assertLearnerAttemptOpenForSubmit(
+          42,
+          7,
+          "learner@example.com",
+          receivedAt,
+        ),
+      ).resolves.toEqual({ inFlightGradingJobId: null });
+      expect(
+        mockSubmissionService.assertLearnerAttemptOpenForSubmit,
+      ).toHaveBeenCalledWith(42, receivedAt, undefined);
+    });
+  });
 
   describe("createGradingJob", () => {
     it("creates a new job when no active lock exists", async () => {
@@ -492,6 +538,7 @@ describe("AttemptServiceV2", () => {
       expect(mockGradingProgressService.markFailed).toHaveBeenCalledWith(
         42,
         "LLM timeout",
+        { kind: "grading_failed", issues: [] },
       );
     });
 
@@ -616,14 +663,26 @@ describe("AttemptServiceV2", () => {
         ),
       ).rejects.toBe(oversized);
 
+      const oversizedFailure = {
+        kind: "unable_to_grade",
+        issues: [
+          expect.objectContaining({
+            code: "file_too_large",
+            retryable: false,
+            source: { kind: "file", fileName: "huge.xlsx" },
+          }),
+        ],
+      };
       expect(updateStatusSpy).toHaveBeenCalledWith("job-oversized", {
         status: "Failed",
         progress: oversized.learnerMessage,
         percentage: 0,
+        failure: oversizedFailure,
       });
       expect(mockGradingProgressService.markFailed).toHaveBeenCalledWith(
         42,
         oversized.learnerMessage,
+        oversizedFailure,
       );
     });
 
@@ -659,14 +718,29 @@ describe("AttemptServiceV2", () => {
         ),
       ).rejects.toBe(unsupported);
 
+      const unsupportedFailure = {
+        kind: "unable_to_grade",
+        issues: [
+          expect.objectContaining({
+            code: "file_unsupported_type",
+            source: {
+              kind: "file",
+              fileName: "photo.heic",
+              detectedType: "heic",
+            },
+          }),
+        ],
+      };
       expect(updateStatusSpy).toHaveBeenCalledWith("job-unsupported", {
         status: "Failed",
         progress: unsupported.learnerMessage,
         percentage: 0,
+        failure: unsupportedFailure,
       });
       expect(mockGradingProgressService.markFailed).toHaveBeenCalledWith(
         42,
         unsupported.learnerMessage,
+        unsupportedFailure,
       );
     });
 
@@ -700,11 +774,160 @@ describe("AttemptServiceV2", () => {
         status: "Failed",
         progress: "Grading failed: boom",
         percentage: 0,
+        failure: { kind: "grading_failed", issues: [] },
       });
       expect(mockGradingProgressService.markFailed).toHaveBeenCalledWith(
         42,
         "boom",
+        { kind: "grading_failed", issues: [] },
       );
+    });
+
+    it("publishes every blocked question as unable_to_grade next to the English summary", async () => {
+      const blocked = SourceProcessingError.aggregate([
+        buildGradingIssue(7921, {
+          code: "url_unreachable",
+          source: {
+            kind: "url",
+            url: "https://github.com/Blaziton456/e-plantScience/blob/main/README.md",
+            httpStatus: 404,
+          },
+        }),
+        buildGradingIssue(7924, {
+          code: "file_wrong_format",
+          source: {
+            kind: "file",
+            fileName: "Budget.xlsx",
+            detectedType: "html",
+            expectedType: "xlsx",
+          },
+        }),
+      ]);
+      mockSubmissionService.updateAssignmentAttempt!.mockRejectedValue(blocked);
+      mockGradingProgressService.setProgressCallback!.mockImplementation(
+        () => undefined,
+      );
+      mockGradingProgressService.removeProgressCallback!.mockImplementation(
+        () => undefined,
+      );
+      mockGradingProgressService.markFailed!.mockResolvedValue(undefined);
+      const updateStatusSpy = jest
+        .spyOn(service, "updateGradingJobStatus")
+        .mockResolvedValue(undefined);
+
+      await expect(
+        service.processGradingJob(
+          "job-blocked",
+          1877774,
+          5,
+          {} as any,
+          "cookie",
+          makeRequest(),
+        ),
+      ).rejects.toBe(blocked);
+
+      const failedCall = updateStatusSpy.mock.calls.find(
+        ([, update]) => update.status === "Failed",
+      );
+      expect(failedCall?.[1].progress).toMatch(
+        /^We couldn't grade 2 of your answers as submitted\./,
+      );
+      expect(failedCall?.[1].failure).toEqual({
+        kind: "unable_to_grade",
+        issues: [
+          expect.objectContaining({
+            questionId: 7921,
+            code: "url_unreachable",
+          }),
+          expect.objectContaining({
+            questionId: 7924,
+            code: "file_wrong_format",
+          }),
+        ],
+      });
+    });
+  });
+  describe("late submits", () => {
+    it("tells the learner an attempt closed at its time limit was closed, not that grading failed", async () => {
+      const closed = new AttemptClosedException(1873208, "time_limit");
+      mockSubmissionService.updateAssignmentAttempt!.mockRejectedValue(closed);
+      mockGradingProgressService.markFailed!.mockResolvedValue(undefined);
+      const updateStatusSpy = jest
+        .spyOn(service, "updateGradingJobStatus")
+        .mockResolvedValue(undefined);
+
+      await expect(
+        service.processGradingJob(
+          "job-closed",
+          1873208,
+          771,
+          {} as never,
+          "cookie",
+          makeRequest(),
+        ),
+      ).rejects.toBe(closed);
+
+      expect(updateStatusSpy).toHaveBeenCalledWith("job-closed", {
+        status: "Failed",
+        progress: "This attempt was already closed at its time limit.",
+        percentage: 0,
+      });
+      const progressWrites = updateStatusSpy.mock.calls.map(
+        ([, update]) => update.progress,
+      );
+      expect(progressWrites.join(" ")).not.toContain("Grading failed");
+      expect(mockGradingProgressService.markFailed).toHaveBeenCalledWith(
+        1873208,
+        "This attempt was already closed at its time limit.",
+      );
+    });
+
+    it("stamps the server receive time into the grading job", async () => {
+      mockJobQueueService.enqueue!.mockResolvedValue(undefined as never);
+      const receivedAt = new Date("2026-10-21T01:16:15.160Z");
+
+      await service.enqueueGradingJob(
+        "job-stamp",
+        1873208,
+        771,
+        { submitted: true, responsesForQuestions: [] } as never,
+        "",
+        makeRequest(),
+        "mark.attempt" as never,
+        receivedAt,
+      );
+
+      expect(mockJobQueueService.enqueue).toHaveBeenCalledWith(
+        "mark.attempt",
+        expect.any(String),
+        expect.objectContaining({
+          submissionReceivedAt: "2026-10-21T01:16:15.160Z",
+        }),
+        expect.anything(),
+      );
+    });
+
+    it("grades against the receive time carried by the job", async () => {
+      mockSubmissionService.updateAssignmentAttempt!.mockResolvedValue({
+        id: 1873208,
+      } as never);
+      jest
+        .spyOn(service, "updateGradingJobStatus")
+        .mockResolvedValue(undefined);
+      const receivedAt = new Date("2026-10-21T01:16:15.160Z");
+
+      await service.processGradingJob(
+        "job-received",
+        1873208,
+        771,
+        {} as never,
+        "cookie",
+        makeRequest(),
+        receivedAt,
+      );
+
+      const call = mockSubmissionService.updateAssignmentAttempt!.mock.calls[0];
+      expect(call[8]).toEqual(receivedAt);
     });
   });
 });

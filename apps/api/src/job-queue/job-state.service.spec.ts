@@ -44,6 +44,14 @@ class FakeRedis {
         });
         return transaction;
       },
+      hdel: (key: string, field: string) => {
+        commands.push(async () => {
+          const existing = { ...(this.hashes.get(key) ?? {}) };
+          delete existing[field];
+          this.hashes.set(key, existing);
+        });
+        return transaction;
+      },
       expire: (key: string, ttlSeconds: number) => {
         commands.push(async () => {
           this.ttls.set(key, ttlSeconds);
@@ -471,6 +479,111 @@ describe("JobStateService", () => {
     expect(fakeRedis.strings.get(`mark:jobs:active:${activeKeyHash}`)).toBe(
       job.id,
     );
+  });
+
+  describe("grading failure payload", () => {
+    const failure = {
+      kind: "unable_to_grade" as const,
+      issues: [
+        {
+          questionId: 7921,
+          code: "url_unreachable" as const,
+          source: {
+            kind: "url" as const,
+            url: "https://github.com/a/b",
+            httpStatus: 404,
+          },
+          retryable: false,
+          message:
+            "We couldn't open https://github.com/a/b. If it's private, make it public so it can be graded, and double-check the address, then submit again.",
+        },
+      ],
+    };
+
+    async function gradingJob() {
+      return service.createJob({
+        queueName: "mark.attempt",
+        jobName: "attempt.grade",
+        kind: "attempt-grade",
+        userId: "learner-1",
+        attemptId: 1877436,
+        status: "Pending",
+        progress: "Queued",
+      });
+    }
+
+    it("stores the failure next to status and progress and returns it from getJob", async () => {
+      const job = await gradingJob();
+      await service.updateJobStatus(job.id, {
+        status: "Failed",
+        progress: "We couldn't open https://github.com/a/b.",
+        failure,
+      });
+
+      await expect(service.getJob(job.id)).resolves.toMatchObject({
+        status: "Failed",
+        progress: "We couldn't open https://github.com/a/b.",
+        failure,
+      });
+    });
+
+    it("sends the failure on the SSE error event", async () => {
+      jest.useFakeTimers();
+      const job = await gradingJob();
+      const events: MessageEvent[] = [];
+      const subscription = service
+        .getJobStatusStream(job.id)
+        .subscribe({ next: (event) => events.push(event) });
+      await flushMicrotasks();
+
+      await service.updateJobStatus(job.id, {
+        status: "Failed",
+        progress: "We couldn't grade 1 answer",
+        failure,
+      });
+      await flushMicrotasks();
+
+      const errorEvent = events.find((event) => event.type === "error");
+      expect(errorEvent).toBeDefined();
+      expect(JSON.parse(errorEvent?.data as string)).toMatchObject({
+        status: "Failed",
+        progress: "We couldn't grade 1 answer",
+        done: true,
+        failure,
+      });
+      subscription.unsubscribe();
+    });
+
+    it("drops a previous run's failure when a retry resumes processing", async () => {
+      const job = await gradingJob();
+      await service.updateJobStatus(job.id, {
+        status: "Failed",
+        progress: "x",
+        failure,
+      });
+      await service.updateJobStatus(job.id, {
+        status: "Processing",
+        progress: "Retrying",
+      });
+
+      const current = await service.getJob(job.id);
+      expect(current).not.toHaveProperty("failure");
+      expect(
+        fakeRedis.hashes.get(`mark:jobs:state:${job.id}`),
+      ).not.toHaveProperty("failure");
+    });
+
+    it("ignores a stored failure that isn't the expected shape", async () => {
+      const job = await gradingJob();
+      fakeRedis.hashes.set(`mark:jobs:state:${job.id}`, {
+        ...fakeRedis.hashes.get(`mark:jobs:state:${job.id}`),
+        failure: JSON.stringify({ kind: "nope", issues: [] }),
+      });
+
+      await expect(service.getJob(job.id)).resolves.not.toHaveProperty(
+        "failure",
+      );
+    });
   });
 
   it("quits the shared Redis connection during module teardown", async () => {

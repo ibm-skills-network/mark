@@ -1,4 +1,7 @@
-import { RetryableProcessingError } from "../../../llm/features/grading/errors/source-processing.error";
+import {
+  RetryableProcessingError,
+  SourceProcessingError,
+} from "../../../llm/features/grading/errors/source-processing.error";
 /* eslint-disable @typescript-eslint/require-await */
 /* eslint-disable unicorn/no-null */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
@@ -39,6 +42,8 @@ import { stripImagesFromLearnerHtml } from "src/api/attempt/common/utils/learner
 import { QuestionAnswerContext } from "src/api/llm/model/base.question.evaluate.model";
 import { RetryableUrlFetchError } from "../../../llm/features/grading/errors/retryable-url-fetch.error";
 import { LearnerFacingGradingError } from "../../../llm/features/grading/errors/learner-facing-grading.error";
+import type { GradingIssue } from "../../../llm/features/grading/errors/grading-failure";
+import { issueFromQuestionError } from "../../../llm/features/grading/errors/grading-failure.mapper";
 import { Logger } from "winston";
 import { UserRole } from "../../../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../../../database/prisma.service";
@@ -65,6 +70,16 @@ import {
   type SlowGradingType,
 } from "../grading-progress.service";
 import { GradingRateLimiterService } from "../grading-rate-limiter.service";
+
+function issueHost(issue: GradingIssue): string | undefined {
+  if (!issue.source?.url) return undefined;
+  try {
+    return new URL(issue.source.url).hostname;
+  } catch {
+    // Log context only; an unparseable learner answer has no host.
+    return undefined;
+  }
+}
 
 type PrismaTransactionalClient = Omit<
   PrismaService,
@@ -169,9 +184,13 @@ export class QuestionResponseService {
     requestMap: Map<number, CreateQuestionResponseAttemptRequestDto>;
     inMemoryContext: Map<number, string>;
     reportProgress: boolean;
+    assignmentId?: number;
+    /** Score a question the learner must fix as 0 instead of blocking the attempt. */
+    scoreBlockedAsZero?: boolean;
     gradeOne: (
       question: QuestionDto,
       request: CreateQuestionResponseAttemptRequestDto,
+      options: { sourceCheckOnly: boolean },
     ) => Promise<{
       learnerResponse: unknown;
       responseDto: CreateQuestionResponseAttemptResponseDto;
@@ -184,6 +203,8 @@ export class QuestionResponseService {
       requestMap,
       inMemoryContext,
       reportProgress,
+      assignmentId,
+      scoreBlockedAsZero = false,
       gradeOne,
     } = options;
 
@@ -193,10 +214,15 @@ export class QuestionResponseService {
     const parallelEnabled = this.rateLimiter.parallelEnabled;
     const totalQuestions = sorted.length;
     let gradedCount = 0;
+    // Once any question fails nothing will be saved, so the rest of the
+    // attempt only checks its links/files (to report every fixable problem in
+    // one go) and starts no new model work. Questions already in flight finish.
+    // When blocked questions score 0 instead, the rest is still graded in full.
+    const failures: Array<{ questionId: number; error: unknown }> = [];
 
     for (const [waveIndex, wave] of levels.entries()) {
       this.logger.info(
-        `grading.wave.start attempt=${attemptId} wave=${waveIndex} size=${wave.length} parallel=${parallelEnabled}`,
+        `grading.wave.start attempt=${attemptId} wave=${waveIndex} size=${wave.length} parallel=${parallelEnabled} sourceCheckOnly=${failures.length > 0}`,
       );
 
       await Promise.all(
@@ -213,11 +239,17 @@ export class QuestionResponseService {
             );
           }
 
+          let sourceCheckOnly = false;
           try {
             const result = await this.rateLimiter.schedule(
               `grade:q=${questionId}:a=${attemptId}`,
-              () => gradeOne(question, request),
+              () => {
+                // Decided when the work actually starts, not when it queued.
+                sourceCheckOnly = !scoreBlockedAsZero && failures.length > 0;
+                return gradeOne(question, request, { sourceCheckOnly });
+              },
             );
+            if (sourceCheckOnly) return;
 
             result.responseDto.questionId = questionId;
             result.responseDto.question = question.question;
@@ -247,11 +279,23 @@ export class QuestionResponseService {
                   ));
             }
           } catch (error) {
-            this.logger.error(
-              `grading.wave.question.failed attempt=${attemptId} question=${questionId} error=${
-                error instanceof Error ? error.message : String(error)
-              }`,
-            );
+            const fixable = issueFromQuestionError(error, questionId);
+            const logMeta = {
+              attemptId,
+              assignmentId,
+              questionId,
+              sourceCheckOnly,
+              errorClass: error instanceof Error ? error.name : typeof error,
+              error: error instanceof Error ? error.message : String(error),
+            };
+            if (fixable) {
+              this.logger.warn("grading.wave.question.blocked", logMeta);
+            } else {
+              this.logger.error("grading.wave.question.failed", {
+                ...logMeta,
+                stack: error instanceof Error ? error.stack : undefined,
+              });
+            }
             if (reportProgress && this.progressService && parallelEnabled) {
               await this.progressService.setQuestionStatus(
                 attemptId,
@@ -259,13 +303,162 @@ export class QuestionResponseService {
                 "failed",
               );
             }
-            throw error;
+            failures.push({ questionId, error });
           }
         }),
       );
     }
 
+    if (failures.length > 0 && scoreBlockedAsZero) {
+      const remaining: typeof failures = [];
+      for (const failure of failures) {
+        const issue = issueFromQuestionError(failure.error, failure.questionId);
+        const question = questionMap.get(failure.questionId);
+        const request = requestMap.get(failure.questionId);
+        if (!issue || issue.retryable || !question || !request) {
+          remaining.push(failure);
+          continue;
+        }
+        this.logger.warn("grading.unable_to_grade.scored_zero", {
+          attemptId,
+          assignmentId,
+          questionId: issue.questionId,
+          code: issue.code,
+          host: issueHost(issue),
+          httpStatus: issue.source?.httpStatus,
+        });
+        gradedItems.push(
+          this.blockedQuestionScoredZero(question, request, issue),
+        );
+      }
+      if (remaining.length > 0) {
+        throw this.resolveWaveFailures(
+          remaining,
+          sorted,
+          attemptId,
+          assignmentId,
+        );
+      }
+      return gradedItems;
+    }
+
+    if (failures.length > 0) {
+      throw this.resolveWaveFailures(failures, sorted, attemptId, assignmentId);
+    }
+
     return gradedItems;
+  }
+
+  /**
+   * A question the learner would have to fix (dead link, unreadable file),
+   * scored 0 with the reason as its feedback. Used when there is no time left
+   * to fix and resubmit, so the rest of the attempt still counts.
+   */
+  private blockedQuestionScoredZero(
+    question: QuestionDto,
+    request: CreateQuestionResponseAttemptRequestDto,
+    issue: GradingIssue,
+  ): GradedItem {
+    const responseDto = new CreateQuestionResponseAttemptResponseDto();
+    responseDto.questionId = question.id;
+    responseDto.question = question.question;
+    responseDto.totalPoints = 0;
+    const feedback = new GeneralFeedbackDto();
+    feedback.feedback = issue.message;
+    responseDto.feedback = [feedback];
+    responseDto.metadata = { unableToGrade: issue };
+
+    let learnerResponse: unknown = request.learnerTextResponse ?? "";
+    if (typeof request.learnerUrlResponse === "string") {
+      const raw = request.learnerUrlResponse.trim();
+      learnerResponse = normalizeLearnerUrl(raw) || raw;
+    } else if (Array.isArray(request.learnerFileResponse)) {
+      // The file couldn't be read, so keep where it is, not what it parsed to.
+      learnerResponse = request.learnerFileResponse.map((file) => {
+        const { content, ...rest } = file;
+        return typeof content === "string" ? file : rest;
+      });
+    }
+    return { questionId: question.id, learnerResponse, responseDto };
+  }
+
+  /**
+   * Picks the one error an attempt with failed questions ends with.
+   *
+   * Problems the learner can fix win: every one of them is reported together
+   * (in question order) as a single SourceProcessingError, and a transient
+   * link failure in the same attempt is listed with them, since the learner
+   * is resubmitting anyway. Our own failures are logged at error either way;
+   * on their own they are rethrown so the job keeps its retry policy and the
+   * learner sees "grading failed". Transient-only failures are rethrown for
+   * the queue to retry.
+   */
+  private resolveWaveFailures(
+    failures: Array<{ questionId: number; error: unknown }>,
+    sorted: number[],
+    attemptId: number,
+    assignmentId?: number,
+  ): unknown {
+    const order = new Map(sorted.map((id, index) => [id, index]));
+    const byQuestionOrder = [...failures].sort(
+      (a, b) => (order.get(a.questionId) ?? 0) - (order.get(b.questionId) ?? 0),
+    );
+
+    const fixable: GradingIssue[] = [];
+    const transient: GradingIssue[] = [];
+    let firstTransientError: unknown;
+    let firstUnexpectedError: unknown;
+    for (const { questionId, error } of byQuestionOrder) {
+      const issue = issueFromQuestionError(error, questionId);
+      if (issue?.retryable) {
+        transient.push(issue);
+        firstTransientError ??= error;
+      } else if (issue) {
+        fixable.push(issue);
+      } else if (error instanceof RetryableProcessingError) {
+        firstTransientError ??= error;
+      } else {
+        firstUnexpectedError ??= error;
+      }
+    }
+
+    if (fixable.length > 0) {
+      const issues = byQuestionOrder
+        .map(({ questionId }) =>
+          [...fixable, ...transient].find(
+            (index) => index.questionId === questionId,
+          ),
+        )
+        .filter((issue): issue is GradingIssue => issue !== undefined);
+      for (const issue of issues) {
+        this.logger.warn("grading.unable_to_grade.issue", {
+          attemptId,
+          assignmentId,
+          questionId: issue.questionId,
+          code: issue.code,
+          host: issueHost(issue),
+          httpStatus: issue.source?.httpStatus,
+          retryable: issue.retryable,
+        });
+      }
+      if (firstUnexpectedError !== undefined) {
+        this.logger.error("grading.unable_to_grade.with_unexpected_failure", {
+          attemptId,
+          assignmentId,
+          error:
+            firstUnexpectedError instanceof Error
+              ? firstUnexpectedError.message
+              : String(firstUnexpectedError),
+          stack:
+            firstUnexpectedError instanceof Error
+              ? firstUnexpectedError.stack
+              : undefined,
+        });
+      }
+      return SourceProcessingError.aggregate(issues);
+    }
+
+    return firstUnexpectedError ?? firstTransientError;
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
@@ -290,6 +483,7 @@ export class QuestionResponseService {
     preTranslatedQuestions?: Map<number, QuestionDto>,
     cache?: JobScopedCache,
     userId?: string,
+    options: { scoreBlockedAsZero?: boolean } = {},
   ): Promise<GradedItem[]> {
     // Defense-in-depth: allocate a cache if the caller did not supply one.
     // The submission entrypoint (updateLearnerAttempt) now hoists this same
@@ -400,7 +594,9 @@ export class QuestionResponseService {
       requestMap,
       inMemoryContext: inMemoryContextResponses,
       reportProgress: true,
-      gradeOne: async (question, request) => {
+      assignmentId,
+      scoreBlockedAsZero: options.scoreBlockedAsZero,
+      gradeOne: async (question, request, { sourceCheckOnly }) => {
         const assignmentContext = await this.getAssignmentContext(
           assignmentId,
           question.id,
@@ -418,6 +614,7 @@ export class QuestionResponseService {
           UserRole.LEARNER,
           assignmentAttemptId,
           userId,
+          sourceCheckOnly,
         );
       },
     });
@@ -686,7 +883,8 @@ export class QuestionResponseService {
       requestMap,
       inMemoryContext: inMemoryContextResponses,
       reportProgress,
-      gradeOne: async (question, request) => {
+      assignmentId,
+      gradeOne: async (question, request, { sourceCheckOnly }) => {
         const assignmentContext: {
           assignmentInstructions: string;
           questionAnswerContext: QuestionAnswerContext[];
@@ -712,6 +910,7 @@ export class QuestionResponseService {
           role,
           assignmentAttemptId,
           userId,
+          sourceCheckOnly,
         );
       },
     });
@@ -888,11 +1087,24 @@ export class QuestionResponseService {
     role: UserRole,
     assignmentAttemptId: number,
     userId?: string,
+    sourceCheckOnly = false,
   ): Promise<{
     learnerResponse: unknown;
     responseDto: CreateQuestionResponseAttemptResponseDto;
   }> {
     const questionId = question.id;
+    const skippedForSourceCheck = () => ({
+      learnerResponse: undefined,
+      responseDto: new CreateQuestionResponseAttemptResponseDto(),
+    });
+    if (
+      sourceCheckOnly &&
+      question.type !== QuestionType.URL &&
+      question.type !== QuestionType.LINK_FILE &&
+      question.type !== QuestionType.UPLOAD
+    ) {
+      return skippedForSourceCheck();
+    }
 
     if (question.type === QuestionType.TEXT) {
       this.removeImagesFromTextResponse(
@@ -920,6 +1132,7 @@ export class QuestionResponseService {
       userRole: role,
       userId,
       attemptId: assignmentAttemptId,
+      sourceCheckOnly,
       metadata: {
         attemptId: assignmentAttemptId,
         questionType: question.type,
@@ -982,6 +1195,10 @@ export class QuestionResponseService {
           questionType: question.type,
           responseType: question.responseType,
         });
+
+        if (sourceCheckOnly && !gradingStrategy.supportsSourceCheck) {
+          return skippedForSourceCheck();
+        }
 
         this.logger.debug("Validating response", { questionId });
         const isValid = await gradingStrategy.validateResponse(
@@ -1191,6 +1408,15 @@ export class QuestionResponseService {
         responseType,
         requestDto.learnerFileResponse,
       );
+      if (
+        gradingContext.sourceCheckOnly &&
+        !fileGradingStrategy.supportsSourceCheck
+      ) {
+        return {
+          learnerResponse: undefined,
+          responseDto: new CreateQuestionResponseAttemptResponseDto(),
+        };
+      }
       const isValid = await fileGradingStrategy.validateResponse(
         question,
         requestDto,

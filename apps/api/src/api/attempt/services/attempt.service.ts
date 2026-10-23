@@ -41,6 +41,11 @@ import { JobQueueService } from "../../../job-queue/job-queue.service";
 import { JobStateService } from "../../../job-queue/job-state.service";
 import { JobStateRecord } from "../../../job-queue/job-state.types";
 import { LearnerFacingGradingError } from "../../llm/features/grading/errors/learner-facing-grading.error";
+import {
+  GradingFailure,
+  summarizeGradingFailure,
+} from "../../llm/features/grading/errors/grading-failure";
+import { gradingFailureFromError } from "../../llm/features/grading/errors/grading-failure.mapper";
 import { AttemptFeedbackService } from "./attempt-feedback.service";
 import { AttemptRegradingService } from "./attempt-regrading.service";
 import { AttemptReportingService } from "./attempt-reporting.service";
@@ -50,6 +55,7 @@ import {
   GradingProgressService,
   type GradingProgressDetails,
 } from "./grading-progress.service";
+import { AttemptClosedException } from "../../assignment/attempt/helper/submission-deadline.helper";
 
 @Injectable()
 export class AttemptServiceV2 {
@@ -265,6 +271,7 @@ export class AttemptServiceV2 {
     authCookie: string,
     request: UserSessionRequest,
     queueName: JobQueueName,
+    submissionReceivedAt?: Date,
   ): Promise<void> {
     try {
       await this.jobQueueService.enqueue(
@@ -275,6 +282,11 @@ export class AttemptServiceV2 {
           attemptId,
           gradingJobId,
           updateDto,
+          // Server-stamped, outside the client-supplied updateDto, so the
+          // deadline is judged on arrival rather than on queue drain.
+          ...(submissionReceivedAt
+            ? { submissionReceivedAt: submissionReceivedAt.toISOString() }
+            : {}),
           userSession: {
             gradingCallbackRequired:
               request.userSession.gradingCallbackRequired,
@@ -435,6 +447,7 @@ export class AttemptServiceV2 {
     updateDto: LearnerUpdateAssignmentAttemptRequestDto,
     authCookie: string,
     request: UserSessionRequest,
+    submissionReceivedAt?: Date,
   ): Promise<void> {
     try {
       const cache = newJobScopedCache();
@@ -490,6 +503,7 @@ export class AttemptServiceV2 {
             });
           },
           cache,
+          submissionReceivedAt,
         );
       } finally {
         // Must beat the terminal write: a late sibling reopens the job.
@@ -505,26 +519,61 @@ export class AttemptServiceV2 {
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : "Unknown error";
-      const learnerReason =
-        error instanceof LearnerFacingGradingError
+      // A closed attempt is not a grading failure; say what happened.
+      const learnerFacingMessage =
+        error instanceof LearnerFacingGradingError ||
+        error instanceof AttemptClosedException
           ? error.learnerMessage
-          : `Grading failed: ${errorMessage}`;
+          : undefined;
+      const failure = gradingFailureFromError(error);
+      const learnerReason =
+        learnerFacingMessage ??
+        (failure.kind === "unable_to_grade"
+          ? summarizeGradingFailure(failure)
+          : `Grading failed: ${errorMessage}`);
+      if (
+        failure.kind === "unable_to_grade" ||
+        error instanceof AttemptClosedException
+      ) {
+        this.logger.warn("attempt.grade.unable_to_grade", {
+          attemptId,
+          assignmentId,
+          gradingJobId,
+          issueCount: failure.issues.length,
+          codes: failure.issues.map((issue) => issue.code),
+          attemptClosed: error instanceof AttemptClosedException,
+        });
+      } else {
+        this.logger.error("attempt.grade.grading_failed", {
+          attemptId,
+          assignmentId,
+          gradingJobId,
+          error: errorMessage,
+          stack: error instanceof Error ? error.stack : undefined,
+        });
+      }
       // Idempotent; covers a throw before grading started.
       this.gradingProgressService?.removeProgressCallback(attemptId);
       await this.updateGradingJobStatus(gradingJobId, {
         status: "Failed",
         progress: learnerReason,
         percentage: 0,
+        // A closed attempt is neither kind; the client shows its message as is.
+        ...(error instanceof AttemptClosedException ? {} : { failure }),
       });
 
       // Guard against author preview jobs which use attemptId = -1
       if (this.gradingProgressService && attemptId > 0) {
-        await this.gradingProgressService.markFailed(
-          attemptId,
-          error instanceof LearnerFacingGradingError
-            ? error.learnerMessage
-            : errorMessage,
-        );
+        await (error instanceof AttemptClosedException
+          ? this.gradingProgressService.markFailed(
+              attemptId,
+              learnerFacingMessage ?? errorMessage,
+            )
+          : this.gradingProgressService.markFailed(
+              attemptId,
+              learnerFacingMessage ?? errorMessage,
+              failure,
+            ));
       }
       throw error;
     }
@@ -549,6 +598,7 @@ export class AttemptServiceV2 {
       currentQuestion?: number;
       totalQuestions?: number;
       result?: any;
+      failure?: GradingFailure;
     },
   ): Promise<void> {
     await this.jobStateService.updateJobStatus(gradingJobId, statusUpdate);
@@ -731,6 +781,7 @@ export class AttemptServiceV2 {
     authCookie: string,
     gradingCallbackRequired: boolean,
     request: UserSessionRequest,
+    submissionReceivedAt?: Date,
   ): Promise<UpdateAssignmentAttemptResponseDto> {
     return this.submissionService.updateAssignmentAttempt(
       attemptId,
@@ -739,7 +790,38 @@ export class AttemptServiceV2 {
       authCookie,
       gradingCallbackRequired,
       request,
+      undefined,
+      undefined,
+      submissionReceivedAt,
     );
+  }
+
+  /**
+   * Reject a learner submit on a closed or past-deadline attempt before
+   * anything is queued. Returns the grading job already running for this
+   * attempt, if any, so a duplicate submit reuses it rather than queueing its
+   * own payload.
+   */
+  async assertLearnerAttemptOpenForSubmit(
+    attemptId: number,
+    assignmentId: number,
+    userId: string,
+    receivedAt: Date,
+  ): Promise<{ inFlightGradingJobId: string | null }> {
+    const inFlight = await this.jobStateService.findActiveJob(
+      this.buildGradingActiveKey(userId, assignmentId, attemptId),
+    );
+    await this.submissionService.assertLearnerAttemptOpenForSubmit(
+      attemptId,
+      receivedAt,
+      inFlight?.id,
+    );
+    return { inFlightGradingJobId: inFlight?.id ?? null };
+  }
+
+  /** Submission state of an attempt with a fresh server clock reading. */
+  async getAttemptSubmissionStatus(attemptId: number) {
+    return this.submissionService.getAttemptSubmissionStatus(attemptId);
   }
 
   /**
