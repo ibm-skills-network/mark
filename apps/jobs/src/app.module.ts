@@ -13,6 +13,7 @@ import { AssignmentModuleV1 } from "../../api/src/api/assignment/v1/modules/assi
 import { AssignmentModuleV2 } from "../../api/src/api/assignment/v2/modules/assignment.module";
 import { AttemptModule } from "../../api/src/api/attempt/attempt.module";
 import { FileProcessingBudgetModule } from "../../api/src/api/files/file-processing-budget.module";
+import { SavedSessionsModule } from "../../api/src/api/saved-sessions/saved-sessions.module";
 
 // TranslationMaintenanceController acts as the TRANSLATION_MAINTENANCE_JOB_RUNNER implementation.
 // Registered via useClass so we do not need to import the admin module (which pulls cron + HTTP-only deps).
@@ -47,6 +48,8 @@ import { JobExecutorService } from "../../api/src/job-queue/job-executor.service
     // without this import the DI smoke test fails with "Nest can't resolve
     // dependencies of the FilesService".
     FileProcessingBudgetModule,
+    // Runs the saved-session prune cron; mark-api has schedulers off.
+    SavedSessionsModule,
   ],
   providers: [
     JobWorkerService,

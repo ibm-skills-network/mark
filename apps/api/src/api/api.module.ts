@@ -14,6 +14,7 @@ import { GithubModule } from "./github/github.module";
 import { JobModule } from "./Job/job.module";
 import { LlmModule } from "./llm/llm.module";
 import { ReportsModule } from "./report/report.module";
+import { SavedSessionsModule } from "./saved-sessions/saved-sessions.module";
 import { ChatModule } from "./user/modules/chat.module";
 
 @Module({
@@ -32,6 +33,7 @@ import { ChatModule } from "./user/modules/chat.module";
     ReportsModule,
     ChatModule,
     FilesModule,
+    SavedSessionsModule,
   ],
 })
 export class ApiModule {}

@@ -140,6 +140,7 @@ export class ApiService {
         const dedupedCookieHeader = dedupeAuthenticationCookieHeader(
           request.headers?.cookie,
           request.headers,
+          request.savedSession,
         );
         if (dedupedCookieHeader !== undefined) {
           extraHeaders.cookie = dedupedCookieHeader;
