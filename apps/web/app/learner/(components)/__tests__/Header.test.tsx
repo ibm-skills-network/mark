@@ -5,7 +5,7 @@
 import React, { createElement } from "react";
 import { render, screen, act } from "@testing-library/react";
 import { toast } from "sonner";
-import type { QuestionStore } from "@/config/types";
+import type { Assignment, QuestionStore } from "@/config/types";
 import {
   useAssignmentDetails,
   useLearnerOverviewStore,
@@ -837,5 +837,87 @@ describe("LearnerHeader supported-languages failure", () => {
     expect(backend.getSupportedLanguages).toHaveBeenCalledWith(3428);
     expect(backend.getUser).toHaveBeenCalled();
     expect(toast.error).not.toHaveBeenCalledWith("Failed to fetch data.");
+  });
+});
+
+describe("LearnerHeader submit with an unsupported recording question", () => {
+  const recordingQuestion = {
+    id: 2,
+    status: "unedited",
+    type: "UPLOAD",
+    responseType: "LIVE_RECORDING",
+    presentationResponse: { transcript: "left over from an old draft" },
+  } as unknown as QuestionStore;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    localStorage.clear();
+    mockSearchParams.mockImplementation(() => new URLSearchParams());
+    mockUseParams.mockReturnValue({ assignmentId: "3428" });
+  });
+
+  it("submits without it and sends no response entry for it", async () => {
+    mockSubmitAssignment.mockResolvedValue(undefined);
+    seedLearnerState(3428);
+    useLearnerStore.setState({
+      questions: [answeredQuestion, recordingQuestion],
+    });
+    useAssignmentDetails.setState({
+      assignmentDetails: {
+        id: 3428,
+        name: "Quiz",
+        requireAllQuestions: true,
+      } as unknown as Assignment,
+    });
+
+    render(<LearnerHeader />);
+    await triggerSubmit();
+
+    expect(mockSubmitAssignment).toHaveBeenCalledTimes(1);
+    const responses = mockSubmitAssignment.mock.calls[0][2] as Array<
+      Record<string, unknown>
+    >;
+    expect(responses.map((response) => response.id)).toEqual([1]);
+    expect(responses[0]).not.toHaveProperty("learnerPresentationResponse");
+  });
+
+  it("keeps hidden scores and feedback from the result as null", async () => {
+    jest.useFakeTimers();
+    try {
+      mockSubmitAssignment.mockResolvedValue({
+        id: 999,
+        submitted: true,
+        grade: null,
+        totalPointsEarned: null,
+        totalPossiblePoints: null,
+        passed: null,
+        showAssignmentScore: false,
+        showSubmissionFeedback: false,
+        showQuestions: true,
+        showQuestionScore: false,
+        showPassFailIndicator: false,
+        correctAnswerVisibility: "NEVER",
+        feedbacksForQuestions: [
+          { id: 31, questionId: 1, totalPoints: null, feedback: null },
+        ],
+      });
+      seedLearnerState(3428);
+
+      render(<LearnerHeader />);
+      await triggerSubmit();
+
+      expect(useAssignmentDetails.getState().grade).toBeNull();
+      expect(useAssignmentDetails.getState().passed).toBeNull();
+      const stored = useLearnerStore
+        .getState()
+        .questions.find((question) => question.id === 1);
+      expect(stored?.questionResponses?.[0]).toMatchObject({
+        id: 31,
+        points: null,
+        feedback: null,
+      });
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

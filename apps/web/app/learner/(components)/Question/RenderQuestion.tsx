@@ -1,7 +1,11 @@
 import { QuestionStore, QuestionType } from "@/config/types";
+import { useUiTranslation } from "@/hooks/use-ui-translation";
+import {
+  isUnsupportedQuestion,
+  UNSUPPORTED_QUESTION_NOTICE,
+} from "@/lib/unsupported-questions";
 import { useLearnerStore } from "@/stores/learner";
 import { type FC } from "react";
-import FileCodeUploadSection from "./FileCodeUploadSection";
 import FileLinkUploadSection from "./FileLinkUploadSection";
 import FileUploadSection from "./FileUploadSection";
 import MultipleChoiceQuestion from "./MultipleChoiceQuestion";
@@ -17,10 +21,22 @@ interface Props {
 const RenderQuestion: FC<Props> = (props) => {
   const { questionType, question } = props;
   const onModeChange = useLearnerStore((state) => state.onModeChange);
-  const addFileUpload = useLearnerStore((state) => state.addFileUpload);
   const onUrlChange = useLearnerStore((state) => state.onUrlChange);
   const removeFileUpload = useLearnerStore((state) => state.removeFileUpload);
   const onFileChange = useLearnerStore((state) => state.onFileChange);
+  const { t } = useUiTranslation();
+
+  if (isUnsupportedQuestion(question)) {
+    return (
+      <p
+        role="note"
+        className="w-full rounded-md border border-gray-200 bg-gray-50 p-4 text-sm text-gray-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+      >
+        {t(UNSUPPORTED_QUESTION_NOTICE)}
+      </p>
+    );
+  }
+
   switch (questionType) {
     case "TEXT":
       return <TextQuestion question={question} />;
@@ -50,13 +66,10 @@ const RenderQuestion: FC<Props> = (props) => {
 
     case "CODE":
       return (
-        <FileCodeUploadSection
-          questionId={question.id}
-          questionType={questionType}
-          responseType={question.responseType}
+        <FileUploadSection
           question={question}
+          responseType={question.responseType}
           onFileChange={onFileChange}
-          addFileUpload={addFileUpload}
           removeFileUpload={removeFileUpload}
         />
       );

@@ -5,7 +5,10 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 
-import type { ExtendedFileContent, QuestionStore } from "@/config/types";
+import type {
+  CompletedAttemptQuestion,
+  ExtendedFileContent,
+} from "@/config/types";
 
 import Question from "../Question";
 
@@ -15,19 +18,12 @@ const previewProps: Array<{
   content?: ExtendedFileContent | null;
 }> = [];
 
-jest.mock("@/lib/talkToBackend", () => ({
-  AuthorizeGithubBackend: jest.fn(),
-  getStoredGithubToken: () => null,
-}));
-jest.mock("@octokit/rest", () => ({ Octokit: class {} }));
 jest.mock("sonner", () => ({
   toast: { error: jest.fn(), success: jest.fn(), warning: jest.fn() },
 }));
 jest.mock("@/stores/learner", () => ({
   useAssignmentDetails: (selector: (state: unknown) => unknown) =>
     selector({ assignmentDetails: { questionControls: {} } }),
-  useLearnerOverviewStore: (selector: (state: unknown) => unknown) =>
-    selector({ assignmentId: 2115 }),
 }));
 jest.mock("@/components/MarkdownViewer", () => ({
   __esModule: true,
@@ -76,28 +72,40 @@ jest.mock("@/lib/shared", () => ({
 }));
 
 // A graded upload whose notebook lives in storage, as on assignment 2115.
-const uploadQuestion = {
+const uploadQuestion: CompletedAttemptQuestion = {
   id: 5861,
   question: "Upload your notebook",
   totalPoints: 10,
   type: "UPLOAD",
-  questionResponses: [
-    {
-      id: 1,
-      points: 10,
-      feedback: [{ feedback: "Graded" }],
-      learnerResponse: JSON.stringify([
-        {
-          filename: "analysis.ipynb",
-          content: "InCos",
-          key: "learner/7/analysis.ipynb",
-          bucket: "learner-bucket",
-          mimeType: "application/x-ipynb+json",
-        },
-      ]),
-    },
-  ],
-} as unknown as QuestionStore;
+  responseType: "OTHER",
+  choices: null,
+  scoring: null,
+  response: {
+    points: 10,
+    feedback: [{ feedback: "Graded" }],
+    learnerResponse: JSON.stringify([
+      {
+        filename: "analysis.ipynb",
+        content: "InCos",
+        key: "learner/7/analysis.ipynb",
+        bucket: "learner-bucket",
+        mimeType: "application/x-ipynb+json",
+      },
+    ]),
+  },
+};
+
+const renderUpload = (question: CompletedAttemptQuestion) =>
+  render(
+    <Question
+      question={question}
+      number={1}
+      language="en"
+      showSubmissionFeedback
+      showQuestionScore
+      correctAnswerVisibility="NEVER"
+    />,
+  );
 
 describe("results page — previewing a stored upload", () => {
   beforeEach(() => {
@@ -113,14 +121,7 @@ describe("results page — previewing a stored upload", () => {
       }),
     );
 
-    render(
-      <Question
-        question={uploadQuestion}
-        number={1}
-        language="en"
-        showSubmissionFeedback
-      />,
-    );
+    renderUpload(uploadQuestion);
 
     fireEvent.click(screen.getByText("View Content"));
 
@@ -147,30 +148,21 @@ describe("results page — previewing a stored upload", () => {
       () =>
         new Promise<ExtendedFileContent>((resolve) => resolvers.push(resolve)),
     );
-    const question = {
+    const question: CompletedAttemptQuestion = {
       ...uploadQuestion,
-      questionResponses: [
-        {
-          ...uploadQuestion.questionResponses[0],
-          learnerResponse: JSON.stringify(
-            ["first", "second"].map((name) => ({
-              filename: `${name}.ipynb`,
-              content: "InCos",
-              key: `learner/7/${name}.ipynb`,
-              bucket: "learner-bucket",
-            })),
-          ),
-        },
-      ],
-    } as unknown as QuestionStore;
-    render(
-      <Question
-        question={question}
-        number={1}
-        language="en"
-        showSubmissionFeedback
-      />,
-    );
+      response: {
+        ...uploadQuestion.response,
+        learnerResponse: JSON.stringify(
+          ["first", "second"].map((name) => ({
+            filename: `${name}.ipynb`,
+            content: "InCos",
+            key: `learner/7/${name}.ipynb`,
+            bucket: "learner-bucket",
+          })),
+        ),
+      },
+    };
+    renderUpload(question);
     fireEvent.click(screen.getAllByText("View Content")[0]);
     fireEvent.click(screen.getByText("Next file"));
     fireEvent.click(screen.getByText("Previous file"));
@@ -196,14 +188,7 @@ describe("results page — previewing a stored upload", () => {
       () =>
         new Promise<ExtendedFileContent>((resolve) => resolvers.push(resolve)),
     );
-    render(
-      <Question
-        question={uploadQuestion}
-        number={1}
-        language="en"
-        showSubmissionFeedback
-      />,
-    );
+    renderUpload(uploadQuestion);
     fireEvent.click(screen.getByText("View Content"));
     fireEvent.click(screen.getByText("Close preview"));
     fireEvent.click(screen.getByText("View Content"));

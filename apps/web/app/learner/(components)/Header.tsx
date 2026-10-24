@@ -15,7 +15,7 @@ import WarningAlert from "@/components/WarningAlert";
 import type {
   QuestionAttemptRequestWithId,
   ReplaceAssignmentRequest,
-  SubmitAssignmentResponse,
+  SubmitResult,
 } from "@/config/types";
 import { learnerSuccessPath } from "@/lib/author-session";
 import {
@@ -36,11 +36,11 @@ import {
   DEFAULT_UI_LANGUAGE,
   setStoredUiLanguage,
 } from "@/lib/ui-language";
+import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import {
-  useAssignmentDetails,
-  useGitHubStore,
-  useLearnerStore,
-} from "@/stores/learner";
+  gradableQuestions,
+  questionResultsFromSubmit,
+} from "@/lib/submit-result";
 import { useAssignmentId } from "@/hooks/use-assignment-id";
 import SNIcon from "@components/SNIcon";
 import Title from "@components/Title";
@@ -107,7 +107,6 @@ function LearnerHeader() {
   useEffect(() => {
     setUserRole("learner");
   }, [setUserRole]);
-  const clearGithubStore = useGitHubStore((state) => state.clearGithubStore);
   const [storedAssignmentDetails, setGrade, setPassed] = useAssignmentDetails(
     (state) => [state.assignmentDetails, state.setGrade, state.setPassed],
   );
@@ -303,7 +302,7 @@ function LearnerHeader() {
     const optionalQuestionSet = new Set(
       assignmentDetails?.optionalQuestionIds ?? [],
     );
-    const requiredQuestions = questions.filter(
+    const requiredQuestions = gradableQuestions(questions).filter(
       (question) => !optionalQuestionSet.has(question.id),
     );
     const requiredResponses = requiredQuestions.filter(hasLearnerResponse);
@@ -354,7 +353,7 @@ function LearnerHeader() {
     submitInFlightRef.current = true;
     let responsesForQuestions: QuestionAttemptRequestWithId[] = [];
     try {
-      responsesForQuestions = questions.map((q) => ({
+      responsesForQuestions = gradableQuestions(questions).map((q) => ({
         id: q.id,
         learnerTextResponse: q.learnerTextResponse || "",
         learnerUrlResponse: q.learnerUrlResponse || "",
@@ -372,7 +371,6 @@ function LearnerHeader() {
         learnerFileResponse: (q.learnerFileResponse || []).map(
           withTextFileContent,
         ),
-        learnerPresentationResponse: q.presentationResponse ?? null,
       }));
     } catch (error: unknown) {
       const errorMessage =
@@ -417,7 +415,7 @@ function LearnerHeader() {
       return;
     }
 
-    let res: SubmitAssignmentResponse | undefined;
+    let res: SubmitResult | undefined;
     try {
       res = await submitAssignment(
         assignmentId,
@@ -458,17 +456,17 @@ function LearnerHeader() {
       );
 
       if (res && typeof res.id === "number") {
-        const { grade, feedbacksForQuestions } = res;
-        setTotalPointsEarned(res.totalPointsEarned);
-        setTotalPointsPossible(res.totalPossiblePoints);
-        if (grade !== undefined) {
+        const { grade } = res;
+        setTotalPointsEarned(res.totalPointsEarned ?? 0);
+        setTotalPointsPossible(res.totalPossiblePoints ?? 0);
+        if (typeof grade === "number") {
           setGrade(grade * 100);
         } else {
           // No grade on this submission (score hidden): clear any grade left
           // from a previous attempt so the success page doesn't show it.
           setGrade(null);
         }
-        setPassed(res.passed ?? null);
+        setPassed(res.passed);
         if (role === "learner") {
           setShowSubmissionFeedback(res.showSubmissionFeedback);
         }
@@ -482,25 +480,13 @@ function LearnerHeader() {
           setQuestion(updatedQuestion);
         }
 
-        for (const feedback of feedbacksForQuestions || []) {
-          setQuestion({
-            id: feedback.questionId,
-            questionResponses: [
-              {
-                id: feedback.id,
-                learnerAnswerChoice: responsesForQuestions.find(
-                  (q) => q.id === feedback.questionId,
-                )?.learnerAnswerChoice,
-                points: feedback.totalPoints ?? 0,
-                feedback: feedback.feedback || [],
-                learnerResponse: feedback.question,
-                questionId: feedback.questionId,
-                assignmentAttemptId: activeAttemptId,
-              },
-            ],
-          });
+        for (const update of questionResultsFromSubmit(
+          res,
+          responsesForQuestions,
+          activeAttemptId,
+        )) {
+          setQuestion(update);
         }
-        clearGithubStore();
         if (role === "learner") {
           clearLearnerAnswers();
         }
@@ -576,7 +562,6 @@ function LearnerHeader() {
     setPassed,
     setShowSubmissionFeedback,
     setQuestion,
-    clearGithubStore,
     clearLearnerAnswers,
     router,
     t,

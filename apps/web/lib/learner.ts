@@ -8,15 +8,16 @@ import type {
   AssignmentAttemptWithQuestions,
   AssignmentFeedback,
   BaseBackendResponse,
+  CompletedAttempt,
   LiveRecordingData,
-  QuestionAttemptRequest,
   QuestionAttemptRequestWithId,
-  QuestionAttemptResponse,
   QuestionStore,
+  QueuedSubmitResponse,
   RegradingRequest,
   ReplaceAssignmentRequest,
   REPORT_TYPE,
-  SubmitAssignmentResponse,
+  SubmitQuestionFeedback,
+  SubmitResult,
 } from "@config/types";
 import { toast } from "sonner";
 import {
@@ -54,6 +55,14 @@ const ASSIGNMENT_NOT_PUBLISHED_CODE = "ASSIGNMENT_NOT_PUBLISHED";
  * Keep in sync with apps/api/src/api/assignment/attempt/helper/submission-deadline.helper.ts.
  */
 const ATTEMPT_CLOSED_AT_TIME_LIMIT_CODE = "ATTEMPT_CLOSED_AT_TIME_LIMIT";
+
+/**
+ * Code on the 400 a submit gets when it carries an answer for a recording or
+ * presentation question, which the API no longer grades.
+ */
+const UNSUPPORTED_RESPONSE_TYPE_CODE = "UNSUPPORTED_RESPONSE_TYPE";
+const UNSUPPORTED_RESPONSE_TYPE_MESSAGE =
+  "One of the questions uses a type that is no longer supported. Reload the page and submit again.";
 
 export const ATTEMPT_CLOSED_AT_TIME_LIMIT_MESSAGE =
   "This attempt was already closed at its time limit.";
@@ -343,7 +352,7 @@ export async function getCompletedAttempt(
   attemptId: number,
   cookies?: string,
   options?: { throwOnAuthError?: boolean; throwOnError?: boolean },
-): Promise<AssignmentAttemptWithQuestions | undefined> {
+): Promise<CompletedAttempt | undefined> {
   // Author-preview attempts use the sentinel id -1 and are never persisted
   // server-side, so requesting one is a guaranteed 403 — which the api-client
   // surfaces as a "no permission / log into AWB" toast on every preview
@@ -355,25 +364,15 @@ export async function getCompletedAttempt(
   const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/attempts/${attemptId}/completed`;
 
   try {
-    const attempt = await apiClient.get<AssignmentAttemptWithQuestions>(
-      endpointURL,
-      {
-        headers: {
-          ...(cookies ? { Cookie: cookies } : {}),
-        },
+    // The completed-attempt read is plain JSON: the server applies every
+    // visibility rule and nothing on it is base64-encoded.
+    const attempt = await apiClient.get<CompletedAttempt>(endpointURL, {
+      headers: {
+        ...(cookies ? { Cookie: cookies } : {}),
       },
-    );
-    if (!attempt) {
-      return undefined;
-    }
-
-    const fallbackAllotedMinutes =
-      attempt.assignmentVersion?.allotedTimeMinutes ??
-      attempt.assignmentDetails?.allotedTimeMinutes ??
-      attempt.assignment?.allotedTimeMinutes ??
-      null;
-
-    return normalizeAttemptTimestamps(attempt, fallbackAllotedMinutes);
+      transformResponse: false,
+    });
+    return attempt ?? undefined;
   } catch (err) {
     // A request that never got a response is not a missing attempt: returning
     // undefined here is what made a dropped connection reach the learner as
@@ -399,129 +398,6 @@ export async function getCompletedAttempt(
       err,
     );
     return undefined;
-  }
-}
-
-/**
- * Gets unified success page data for an attempt (works for both authors and learners).
- * @param assignmentId The id of the assignment.
- * @param attemptId The id of the attempt.
- * @param authorData Optional author data from Zustand stores (for authors only).
- * @param cookies Optional cookies for authentication.
- * @returns Success page data or undefined if error.
- */
-export async function getSuccessPageData(
-  assignmentId: number,
-  attemptId: number,
-  authorData?: {
-    questions: any[];
-    grade: number;
-    totalPointsEarned: number;
-    totalPointsPossible: number;
-    responses: any[];
-  },
-  cookies?: string,
-): Promise<any | undefined> {
-  const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/attempts/${attemptId}/success-page-data`;
-
-  try {
-    const data = await apiClient.post(endpointURL, authorData || {}, {
-      headers: {
-        "Content-Type": "application/json",
-        ...(cookies ? { Cookie: cookies } : {}),
-      },
-    });
-    return data;
-  } catch (err) {
-    return undefined;
-  }
-}
-
-export type SubmitQuestionResult =
-  | { ok: true; data: QuestionAttemptResponse }
-  | { ok: false; status?: number; message?: string };
-
-/**
- * A message straight from a 4xx response body, safe to show a learner
- * verbatim — e.g. `OversizedSubmissionError.learnerMessage`, which the API
- * wraps in a `BadRequestException` specifically so this route can surface it.
- * Never read for 5xx: those bodies are not written with a learner audience in
- * mind and may contain internal detail.
- */
-function getSafeErrorMessage(err: unknown): string | undefined {
-  const status = getErrorStatus(err);
-  if (status === undefined || status >= 500) {
-    return undefined;
-  }
-  const message = (err as { body?: { message?: string } } | undefined)?.body
-    ?.message;
-  return typeof message === "string" && message.length > 0
-    ? message
-    : undefined;
-}
-
-/**
- * Submits an answer for a given assignment, attempt, and question.
- *
- * Returns a discriminated result instead of throwing or returning `undefined`
- * on failure: `ok: false` always carries whatever the server told us — the
- * HTTP status, and (for 4xx responses only) a learner-safe `message` — so the
- * caller can tell a real failure from a real success instead of treating
- * every outcome as saved.
- */
-export async function submitQuestion(
-  assignmentId: number,
-  attemptId: number,
-  questionId: number,
-  requestBody: QuestionAttemptRequest,
-  cookies?: string,
-): Promise<SubmitQuestionResult> {
-  const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/attempts/${attemptId}/questions/${questionId}/responses`;
-
-  try {
-    const processedBody = JSON.parse(
-      JSON.stringify(requestBody, (key, value) => {
-        if (value === "" || value === null || value === undefined) {
-          return undefined;
-        }
-        return value;
-      }),
-    );
-
-    const data = await apiClient.post<QuestionAttemptResponse>(
-      endpointURL,
-      processedBody,
-      {
-        headers: {
-          "Content-Type": "application/json",
-          ...(cookies ? { Cookie: cookies } : {}),
-        },
-        // The caller (the auto-save hook) is the sole owner of user-facing
-        // messaging for this endpoint — it needs to tell a real failure from
-        // a real success and show its own honest toast. Suppress apiClient's
-        // generic status-code toast so the learner doesn't see a vague
-        // "Client Error: 400 Bad Request" moments before that honest toast.
-        quiet: true,
-      },
-    );
-    return { ok: true, data };
-  } catch (err) {
-    console.error("submitQuestion failed", {
-      assignmentId,
-      attemptId,
-      questionId,
-      status: getErrorStatus(err),
-      // The underlying failure reason, not the request/response payload:
-      // a generic Error.message (e.g. "Failed to fetch", "Internal Server
-      // Error") is safe to log and is exactly what this catch block would
-      // otherwise discard on translation to a SubmitQuestionResult.
-      error: err instanceof Error ? err.message : String(err),
-    });
-    return {
-      ok: false,
-      status: getErrorStatus(err),
-      message: getSafeErrorMessage(err),
-    };
   }
 }
 
@@ -606,6 +482,77 @@ function parseGradingState(
   return undefined;
 }
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const numberOrNull = (value: unknown): number | null =>
+  typeof value === "number" && Number.isFinite(value) ? value : null;
+
+function parseSubmitQuestionFeedback(
+  value: unknown,
+): SubmitQuestionFeedback | undefined {
+  if (
+    !isRecord(value) ||
+    typeof value.id !== "number" ||
+    typeof value.questionId !== "number"
+  ) {
+    return undefined;
+  }
+  return {
+    id: value.id,
+    questionId: value.questionId,
+    totalPoints: numberOrNull(value.totalPoints),
+    feedback: Array.isArray(value.feedback)
+      ? (value.feedback as SubmitQuestionFeedback["feedback"])
+      : null,
+  };
+}
+
+/**
+ * Reads a graded attempt from the submit PATCH body or from the grading
+ * stream's `finalize` frame (where it arrives as a JSON string). Returns
+ * undefined when the payload is not a graded attempt; the attempt id is the
+ * discriminator because every score on it may be hidden (null).
+ */
+export function parseSubmitResult(raw: unknown): SubmitResult | undefined {
+  let value: unknown = raw;
+  if (typeof value === "string") {
+    try {
+      value = JSON.parse(value);
+    } catch (error) {
+      console.warn("[learner] submit result is not JSON", {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return undefined;
+    }
+  }
+  if (!isRecord(value) || typeof value.id !== "number") {
+    return undefined;
+  }
+  const feedbacks = Array.isArray(value.feedbacksForQuestions)
+    ? value.feedbacksForQuestions
+        .map(parseSubmitQuestionFeedback)
+        .filter((item): item is SubmitQuestionFeedback => item !== undefined)
+    : [];
+  const visibility = value.correctAnswerVisibility;
+  return {
+    id: value.id,
+    submitted: true,
+    grade: numberOrNull(value.grade),
+    totalPointsEarned: numberOrNull(value.totalPointsEarned),
+    totalPossiblePoints: numberOrNull(value.totalPossiblePoints),
+    passed: typeof value.passed === "boolean" ? value.passed : null,
+    showAssignmentScore: value.showAssignmentScore === true,
+    showSubmissionFeedback: value.showSubmissionFeedback === true,
+    showQuestions: value.showQuestions === true,
+    showQuestionScore: value.showQuestionScore === true,
+    showPassFailIndicator: value.showPassFailIndicator === true,
+    correctAnswerVisibility:
+      visibility === "ALWAYS" || visibility === "ON_PASS" ? visibility : "NEVER",
+    feedbacksForQuestions: feedbacks,
+  };
+}
+
 /**
  * Submits an assignment with progress tracking
  */
@@ -629,7 +576,7 @@ export async function submitAssignment(
     },
   ) => void,
   onGradingJobCreated?: (gradingJobId: string) => void,
-): Promise<SubmitAssignmentResponse | undefined> {
+): Promise<SubmitResult | undefined> {
   const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/attempts/${attemptId}`;
 
   try {
@@ -641,18 +588,17 @@ export async function submitAssignment(
       authorAssignmentDetails: authorAssignmentDetails || undefined,
     };
 
-    let responseData: SubmitAssignmentResponse;
+    let responseData: unknown;
     try {
-      responseData = await apiClient.patch<SubmitAssignmentResponse>(
-        endpointURL,
-        requestData,
-        {
-          headers: {
-            "Content-Type": "application/json",
-            ...(cookies ? { Cookie: cookies } : {}),
-          },
+      // The request body stays encoded (the API still decodes it); the
+      // response is plain JSON.
+      responseData = await apiClient.patch<unknown>(endpointURL, requestData, {
+        headers: {
+          "Content-Type": "application/json",
+          ...(cookies ? { Cookie: cookies } : {}),
         },
-      );
+        transformResponse: false,
+      });
     } catch (apiError) {
       let errorMessage = "Submission failed";
 
@@ -675,6 +621,17 @@ export async function submitAssignment(
         // no grading was performed, so the learner's progress is preserved.
         errorMessage =
           "Grading is temporarily out of service. Your answers have not been submitted — please try again later.";
+      } else if (getErrorCode(apiError) === UNSUPPORTED_RESPONSE_TYPE_CODE) {
+        const serverMessage = (apiError as { body?: { message?: unknown } })
+          .body?.message;
+        console.warn("[learner] submit refused an unsupported question type", {
+          assignmentId,
+          attemptId,
+        });
+        errorMessage =
+          typeof serverMessage === "string" && serverMessage.length > 0
+            ? serverMessage
+            : UNSUPPORTED_RESPONSE_TYPE_MESSAGE;
       } else if (apiError instanceof APIError) {
         errorMessage = `Submission failed with status: ${apiError.status}`;
 
@@ -693,17 +650,18 @@ export async function submitAssignment(
       throw new Error(errorMessage);
     }
 
-    const { gradingJobId, message } = responseData;
+    const queued = responseData as Partial<QueuedSubmitResponse> | null;
+    const gradingJobId =
+      typeof queued?.gradingJobId === "string" ? queued.gradingJobId : "";
 
     if (!gradingJobId) {
       // Deterministic-only attempts grade synchronously: the API returns the
-      // graded attempt itself (it carries the attempt id) instead of a job to
-      // stream. Resolve with it directly — callers already consume this exact
-      // shape from the SSE finalize path. `grade` may be null when scores are
-      // hidden, so the attempt id is the discriminator, not the grade.
-      if (typeof responseData.id === "number") {
-        onProgress?.("completed", 100, message ?? "Grading complete");
-        return responseData;
+      // graded attempt itself instead of a job to stream, in the same shape
+      // as the stream's finalize frame.
+      const inline = parseSubmitResult(responseData);
+      if (inline) {
+        onProgress?.("completed", 100, "Grading complete");
+        return inline;
       }
       throw new Error("No grading job ID returned");
     }
@@ -885,18 +843,7 @@ export async function submitAssignment(
               if (!settle()) return;
               onProgress?.("completed", 100, "Grading completed successfully!");
 
-              let result = data.result;
-              if (typeof result === "string") {
-                try {
-                  result = JSON.parse(result);
-                } catch (e) {
-                  console.warn(
-                    "SSE Completed: failed to JSON.parse result, returning raw string:",
-                    e,
-                  );
-                }
-              }
-              resolve(result);
+              resolve(parseSubmitResult(data.result));
             } else if (data.status === "Failed") {
               handleFailedFrame(data, data.progress || "Grading failed");
             }
@@ -956,18 +903,7 @@ export async function submitAssignment(
             if (!settle()) return;
             onProgress?.("completed", 100, "Grading completed successfully!");
 
-            let result = data.result;
-            if (typeof result === "string") {
-              try {
-                result = JSON.parse(result);
-              } catch (e) {
-                console.warn(
-                  "SSE finalize: failed to JSON.parse result, returning raw string:",
-                  e,
-                );
-              }
-            }
-            resolve(result);
+            resolve(parseSubmitResult(data.result));
           } catch (error) {
             if (!settle()) return;
             reject(error);

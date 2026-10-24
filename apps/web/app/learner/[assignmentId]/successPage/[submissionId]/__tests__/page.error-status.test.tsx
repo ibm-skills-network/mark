@@ -46,7 +46,14 @@ jest.mock("react-circular-progressbar", () => ({
   CircularProgressbarWithChildren: () => null,
 }));
 jest.mock("@tabler/icons-react", () => ({ IconRefresh: () => null }));
-jest.mock("../../Question", () => ({ __esModule: true, default: () => null }));
+const mockQuestionProps: Array<Record<string, unknown>> = [];
+jest.mock("../../Question", () => ({
+  __esModule: true,
+  default: (props: Record<string, unknown>) => {
+    mockQuestionProps.push(props);
+    return null;
+  },
+}));
 jest.mock("@/components/Loading", () => ({
   __esModule: true,
   default: () => <div>loading</div>,
@@ -279,5 +286,109 @@ describe("results page — reporting", () => {
     expect(
       screen.queryByRole("button", { name: /report an issue/i }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("results page — the completed attempt as the server shaped it", () => {
+  const completed = {
+    id: 2486,
+    assignmentId: 3532,
+    submitted: true,
+    createdAt: "2026-10-24T10:00:00.000Z",
+    expiresAt: null,
+    preferredLanguage: "en",
+    comments: null,
+    serverNow: "2026-10-24T10:30:00.000Z",
+    grade: 0.5,
+    totalPointsEarned: 1,
+    totalPossiblePoints: 2,
+    passed: null,
+    passingGrade: 50,
+    showAssignmentScore: true,
+    showSubmissionFeedback: true,
+    showQuestions: true,
+    showQuestionScore: false,
+    showPassFailIndicator: false,
+    correctAnswerVisibility: "NEVER",
+    questions: [
+      {
+        id: 11,
+        question: "Pick one",
+        type: "SINGLE_CORRECT",
+        responseType: null,
+        totalPoints: 2,
+        choices: [
+          { id: 1, choice: "A" },
+          { id: 2, choice: "B" },
+        ],
+        scoring: null,
+        response: {
+          learnerResponse: '["A"]',
+          points: null,
+          feedback: [{ feedback: "Close" }],
+        },
+      },
+    ],
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockQuestionProps.length = 0;
+    getAttemptsMock.mockResolvedValue([]);
+    getUserMock.mockResolvedValue(learner);
+  });
+
+  it("hands each question to the renderer as served, with the server's visibility", async () => {
+    getCompletedAttemptMock.mockResolvedValue(completed);
+
+    await renderAndSettle();
+
+    const props = mockQuestionProps.at(-1);
+    expect(props?.question).toEqual(completed.questions[0]);
+    expect(props?.correctAnswerVisibility).toBe("NEVER");
+    expect(props?.showQuestionScore).toBe(false);
+    expect(props?.showSubmissionFeedback).toBe(true);
+    expect(screen.getByText(/Final Score: 1 \/ 2 \(50%\)/)).toBeTruthy();
+  });
+
+  it("shows the hidden-score view when the server sends a null grade", async () => {
+    getCompletedAttemptMock.mockResolvedValue({
+      ...completed,
+      grade: null,
+      totalPointsEarned: null,
+      totalPossiblePoints: null,
+      showAssignmentScore: false,
+    });
+
+    await renderAndSettle();
+
+    expect(
+      screen.getByText(/the author has disabled viewing them/),
+    ).toBeTruthy();
+    expect(screen.queryByText(/Final Score/)).toBeNull();
+  });
+
+  it("does not default a missing visibility to showing correct answers", async () => {
+    getCompletedAttemptMock.mockResolvedValue({
+      ...completed,
+      correctAnswerVisibility: undefined,
+    });
+
+    await renderAndSettle();
+
+    expect(mockQuestionProps.at(-1)?.correctAnswerVisibility).toBe("NEVER");
+  });
+
+  it("says the questions are hidden when the server sends none", async () => {
+    getCompletedAttemptMock.mockResolvedValue({
+      ...completed,
+      showQuestions: false,
+      questions: [],
+    });
+
+    await renderAndSettle();
+
+    expect(screen.getByText("Questions are hidden")).toBeTruthy();
+    expect(mockQuestionProps).toHaveLength(0);
   });
 });

@@ -402,4 +402,69 @@ describe("submitAssignment connection watchdog", () => {
     await expect(pending).resolves.toMatchObject({ id: 2, grade: 0.9 });
     expect(source.closed).toBe(true);
   });
+
+  it("reads hidden values on the finalize result as null", async () => {
+    const pending = submitAssignment(1, 2, []);
+
+    await flush();
+    const source = FakeEventSource.instances[0];
+    source.open();
+    source.emit(
+      "finalize",
+      JSON.stringify({
+        jobId: "job-1",
+        status: "Completed",
+        result: JSON.stringify({
+          id: 2,
+          submitted: true,
+          grade: null,
+          totalPointsEarned: null,
+          totalPossiblePoints: null,
+          passed: null,
+          showAssignmentScore: false,
+          showSubmissionFeedback: false,
+          showQuestions: true,
+          showQuestionScore: false,
+          showPassFailIndicator: false,
+          correctAnswerVisibility: "NEVER",
+          feedbacksForQuestions: [
+            { id: 7, questionId: 70, totalPoints: null, feedback: null },
+          ],
+        }),
+        done: true,
+      }),
+    );
+
+    await expect(pending).resolves.toEqual({
+      id: 2,
+      submitted: true,
+      grade: null,
+      totalPointsEarned: null,
+      totalPossiblePoints: null,
+      passed: null,
+      showAssignmentScore: false,
+      showSubmissionFeedback: false,
+      showQuestions: true,
+      showQuestionScore: false,
+      showPassFailIndicator: false,
+      correctAnswerVisibility: "NEVER",
+      feedbacksForQuestions: [
+        { id: 7, questionId: 70, totalPoints: null, feedback: null },
+      ],
+    });
+  });
+
+  it("resolves undefined when the finalize result is not a graded attempt", async () => {
+    const pending = submitAssignment(1, 2, []);
+
+    await flush();
+    const source = FakeEventSource.instances[0];
+    source.open();
+    source.emit(
+      "finalize",
+      JSON.stringify({ jobId: "job-1", result: "not json", done: true }),
+    );
+
+    await expect(pending).resolves.toBeUndefined();
+  });
 });

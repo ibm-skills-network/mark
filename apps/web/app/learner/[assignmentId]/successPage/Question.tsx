@@ -1,5 +1,4 @@
 import { trueFalseTranslations } from "@/app/Helpers/Languages/TrueFalseInAllLang";
-import { openFileInNewTab } from "@/app/Helpers/openNewTabGithubFile";
 import CollapsibleFeedback, {
   StructuredFeedbackData,
 } from "@/components/CollapsibleFeedback";
@@ -11,31 +10,21 @@ const PdfFeedbackViewer = dynamic(
   { ssr: false },
 );
 import {
+  type CompletedAttemptQuestion,
+  type CorrectAnswerVisibility,
   type ExtendedFileContent,
-  type QuestionStore,
-  type Scoring,
+  type Feedback,
   type ResponseHighlighting,
   HighlightLevel,
 } from "@/config/types";
 import {
-  consumeGithubAuthorizationCode,
-  describeGithubAuthFailure,
-  exchangeGithubAuthorizationCode,
-  isGithubExchangeInFlight,
-  wasGithubAuthorizationConsumed,
-} from "@/lib/github-oauth";
-import {
-  AuthorizeGithubBackend,
-  getStoredGithubToken,
-} from "@/lib/talkToBackend";
+  isUnsupportedQuestion,
+  UNSUPPORTED_QUESTION_NOTICE,
+} from "@/lib/unsupported-questions";
 import { parseLearnerResponse } from "@/lib/utils";
-import {
-  useAssignmentDetails,
-  useLearnerOverviewStore,
-} from "@/stores/learner";
+import { useAssignmentDetails } from "@/stores/learner";
 import { CheckIcon, SparklesIcon, XMarkIcon } from "@heroicons/react/24/solid";
-import { Octokit } from "@octokit/rest";
-import { FC, useEffect, useMemo, useRef, useState } from "react";
+import { FC, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import ShowHideRubric from "../../(components)/Question/ShowHideRubric";
 import FilePreview from "@/components/FileExplorer/FilePreview";
@@ -47,22 +36,30 @@ import {
 import PdfAnnotationModal from "./PdfAnnotationModal";
 
 interface Props {
-  question: QuestionStore;
+  /**
+   * Served by the completed-attempt read with every visibility rule already
+   * applied: `points`/`feedback` are null when hidden and a choice carries
+   * `isCorrect`/`feedback` only when correct answers may be shown.
+   */
+  question: CompletedAttemptQuestion;
   number: number;
   language: string;
-  showSubmissionFeedback?: boolean;
-  showCorrectAnswer?: boolean;
-  correctAnswerVisibility?: "NEVER" | "ALWAYS" | "ON_PASS";
+  showSubmissionFeedback: boolean;
+  /** Decides whether an unanswered question shows a 0 or no score at all. */
+  showQuestionScore: boolean;
+  correctAnswerVisibility: CorrectAnswerVisibility;
 }
 
-interface HighestScoreResponseType {
-  points: number;
-  feedback: {
-    feedback: string;
-    structuredFeedback?: StructuredFeedbackData;
-    highlighting?: ResponseHighlighting;
-    annotatedPdfUrl?: string;
-  }[];
+const BLANK_ANSWER_FEEDBACK: Feedback[] = [
+  { feedback: "This answer was blank" },
+];
+
+/** A stored answer arrives as JSON text, or already parsed. */
+function toLearnerResponse(value: unknown): LearnerResponseType {
+  if (value === null || value === undefined) return undefined;
+  if (typeof value === "string") return parseLearnerResponse(value);
+  if (typeof value === "number") return String(value);
+  return value as LearnerResponseType;
 }
 
 export type LearnerResponseType =
@@ -96,7 +93,6 @@ export interface LearnerFileResponse {
   key?: string;
   bucket?: string;
   fileType?: string;
-  githubUrl?: string;
 }
 
 export interface EnhancedFileObject {
@@ -130,21 +126,18 @@ const Question: FC<Props> = ({
   number,
   language = "en",
   showSubmissionFeedback,
-  showCorrectAnswer,
+  showQuestionScore,
   correctAnswerVisibility,
 }) => {
   const {
     question: questionText,
     totalPoints,
-    questionResponses,
+    response,
     type,
-    learnerChoices,
-    learnerTextResponse,
-    learnerUrlResponse,
-    learnerAnswerChoice,
-    learnerFileResponse,
     choices,
+    scoring,
   } = question;
+  const unsupported = isUnsupportedQuestion(question);
 
   const filePreviewRequest = useRef(0);
   const [fileViewer, setFileViewer] = useState<FileViewerState>({
@@ -160,18 +153,7 @@ const Question: FC<Props> = ({
     (state) => state.assignmentDetails,
   );
   const questionControls = assignmentDetails?.questionControls;
-  const [octokit, setOctokit] = useState<Octokit | null>(null);
-  const assignmentId = useLearnerOverviewStore((state) => state.assignmentId);
-  const [token, setToken] = useState<string | null>(null);
   const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
-  // Latched for the life of the mount, not reset on re-render: the GitHub
-  // bootstrap below must run at most once per question.
-  const githubBootstrapStarted = useRef(false);
-
-  const scoring: Scoring | undefined =
-    typeof question.scoring === "string"
-      ? (JSON.parse(question.scoring) as Scoring)
-      : question.scoring;
 
   const checkToShowRubric = () => {
     if (
@@ -411,147 +393,30 @@ const Question: FC<Props> = ({
     }
   };
 
-  useEffect(() => {
-    const initialize = async () => {
-      // One bootstrap per mount. This page renders a component per question,
-      // so without the latch a page with several GitHub answers runs several
-      // handoffs at once and they cancel each other.
-      if (token || githubBootstrapStarted.current) return;
-      githubBootstrapStarted.current = true;
-
-      // Reads what GitHub sent back once and clears it from the address bar
-      // whatever the outcome, so a failed exchange cannot be replayed on the
-      // next render and a refusal is not carried into the next redirect.
-      const pending = consumeGithubAuthorizationCode();
-
-      if (pending?.denial) {
-        toast.warning(describeGithubAuthFailure(pending.denial).message);
-        return;
-      }
-
-      if (pending?.code) {
-        const result = await exchangeGithubAuthorizationCode(
-          pending.code,
-          pending.state,
-        );
-        if (result.failure || !result.token) {
-          toast.warning(
-            describeGithubAuthFailure(result.failure ?? "unknown").message,
-          );
-          return;
-        }
-        if (await validateToken(result.token)) {
-          setToken(result.token);
-          setOctokit(new Octokit({ auth: result.token }));
-          toast.success(
-            "Github token has been authenticated successfully. You can now view files.",
-          );
-        } else {
-          toast.warning(describeGithubAuthFailure("token_rejected").message);
-        }
-        return;
-      }
-
-      const backendToken = await getStoredGithubToken();
-      if (backendToken && (await validateToken(backendToken))) {
-        setToken(backendToken);
-        setOctokit(new Octokit({ auth: backendToken }));
-        return;
-      }
-
-      // Another question on this page already owns the trip to github.com, or
-      // is still exchanging its code. Redirecting now would navigate the whole
-      // page away and cancel that exchange, which is how one stray redirect
-      // became a loop.
-      if (wasGithubAuthorizationConsumed() || isGithubExchangeInFlight()) {
-        return;
-      }
-
-      void authenticateUser();
-    };
-
-    if (questionResponses) {
-      for (const response of questionResponses) {
-        if (response.learnerResponse) {
-          const learnerResponse = parseLearnerResponse(
-            response.learnerResponse,
-          );
-          if (Array.isArray(learnerResponse)) {
-            for (const file of learnerResponse as LearnerFileResponse[]) {
-              if (file?.githubUrl) {
-                void initialize();
-                return;
-              }
-            }
-          }
-        }
-      }
-    }
-  }, [token, questionResponses]);
-
-  const validateToken = async (testToken: string): Promise<boolean> => {
-    const testOctokit = new Octokit({ auth: testToken });
-    try {
-      await testOctokit.request("GET /user");
-      return true;
-    } catch (error) {
-      return false;
-    }
-  };
-
-  const authenticateUser = async () => {
-    try {
-      const redirectUrl = window.location.href;
-      const { url } = await AuthorizeGithubBackend(assignmentId, redirectUrl);
-      if (url) window.open(url, "_self");
-      return;
-    } catch (error) {
-      toast.error("Failed to authenticate with GitHub.");
-    }
-  };
-
-  const handleGithubFileView = async (githubUrl: string) => {
-    if (!octokit && !token) {
-      await initializeOctokit();
-    } else {
-      void openFileInNewTab(githubUrl, octokit);
-    }
-  };
-
-  const initializeOctokit = async () => {
-    const backendToken = await getStoredGithubToken();
-    if (backendToken && (await validateToken(backendToken))) {
-      setToken(backendToken);
-      setOctokit(new Octokit({ auth: backendToken }));
-    } else {
-      consumeGithubAuthorizationCode();
-      void authenticateUser();
-    }
-  };
-
-  const highestScoreResponse = useMemo<
-    HighestScoreResponseType | undefined
-  >(() => {
-    if (!questionResponses || questionResponses.length === 0) {
-      return showSubmissionFeedback
-        ? { points: 0, feedback: [{ feedback: "This answer was blank" }] }
-        : undefined;
-    }
-    return questionResponses.reduce((acc, curr) =>
-      acc.points > curr.points ? acc : curr,
-    );
-  }, [questionResponses, showSubmissionFeedback]);
+  // Points null means the server hid them. An unanswered question has no
+  // response row; it scored 0 when scores are shown.
+  const earnedPoints: number | null = response
+    ? response.points
+    : showQuestionScore && !unsupported
+      ? 0
+      : null;
+  const responseFeedback: Feedback[] | null = response
+    ? response.feedback
+    : showSubmissionFeedback && !unsupported
+      ? BLANK_ANSWER_FEEDBACK
+      : null;
+  // Feedback the server withheld, as opposed to feedback that never existed.
+  const feedbackHidden = Boolean(response) && response.feedback === null;
 
   // A question response should never display more points than the question is
   // worth. Some historical multi-select responses were graded above the
   // question maximum; clamp for display so the per-question score, its
-  // pass/partial styling, and the attempt total all agree. The -1 sentinel
-  // ("points hidden") is preserved.
-  const displayedPoints =
-    highestScoreResponse?.points === -1
-      ? -1
+  // pass/partial styling, and the attempt total all agree.
+  const displayedPoints: number | null =
+    earnedPoints === null
+      ? null
       : Math.min(
-          highestScoreResponse?.points ?? 0,
+          earnedPoints,
           typeof totalPoints === "number"
             ? totalPoints
             : Number.POSITIVE_INFINITY,
@@ -563,7 +428,7 @@ const Question: FC<Props> = ({
     highlighting?: ResponseHighlighting;
     annotatedPdfUrl?: string;
   }>(() => {
-    const feedbackEntry = highestScoreResponse?.feedback?.[0];
+    const feedbackEntry = responseFeedback?.[0];
     let feedbackText =
       typeof feedbackEntry?.feedback === "string"
         ? feedbackEntry.feedback
@@ -648,7 +513,7 @@ const Question: FC<Props> = ({
       highlighting,
       annotatedPdfUrl,
     };
-  }, [highestScoreResponse]);
+  }, [responseFeedback]);
 
   const allHighlights = useMemo(() => {
     const pages = parsedFeedback.highlighting?.pages;
@@ -733,32 +598,26 @@ const Question: FC<Props> = ({
     if (parsedFeedback.structuredFeedback?.summary) {
       return parsedFeedback.structuredFeedback.summary;
     }
-    if (highestScoreResponse?.points !== undefined) {
+    if (displayedPoints !== null) {
       return `Awarded ${displayedPoints}/${totalPoints} points.`;
     }
     return "";
-  }, [
-    highestScoreResponse?.points,
-    parsedFeedback.structuredFeedback,
-    totalPoints,
-  ]);
+  }, [displayedPoints, parsedFeedback.structuredFeedback, totalPoints]);
 
-  const questionResponse = questionResponses?.[0];
+  // Right/wrong colouring of a scored answer needs a visible score and an
+  // author who lets correctness show at all.
+  const shouldShowHighlighting =
+    correctAnswerVisibility !== "NEVER" && displayedPoints !== null;
 
-  const shouldShowHighlighting = correctAnswerVisibility !== "NEVER";
-
-  const learnerResponse: LearnerResponseType =
-    (learnerChoices && learnerChoices.length > 0
-      ? learnerChoices
-      : undefined) ??
-    learnerTextResponse ??
-    learnerFileResponse ??
-    learnerUrlResponse ??
-    learnerAnswerChoice ??
-    (questionResponse?.learnerResponse
-      ? parseLearnerResponse(questionResponse.learnerResponse)
-      : undefined);
+  const learnerResponse = toLearnerResponse(response?.learnerResponse);
   const renderLearnerAnswer = () => {
+    if (unsupported) {
+      return (
+        <p className="text-gray-700 bg-gray-50 border border-gray-300 rounded p-2 w-full">
+          {UNSUPPORTED_QUESTION_NOTICE}
+        </p>
+      );
+    }
     if (
       type === "TEXT" &&
       learnerResponse &&
@@ -839,18 +698,20 @@ const Question: FC<Props> = ({
         <ul className="list-none text-gray-800 w-full flex flex-col justify-start gap-y-2">
           {choices.map((choiceObj, idx) => {
             const isSelected = selectedTexts.has(choiceObj.choice);
-
-            const isCorrect = choiceObj.isCorrect;
+            // The server sends isCorrect only when correct answers may be
+            // shown for this attempt; without it nothing is marked.
+            const correctnessKnown = typeof choiceObj.isCorrect === "boolean";
+            const isCorrect = choiceObj.isCorrect === true;
             return (
               <li
                 key={idx}
                 className={`flex items-start mb-2 px-2 py-2 ${
-                  shouldShowHighlighting
-                    ? isSelected && showSubmissionFeedback
+                  correctnessKnown
+                    ? isSelected
                       ? isCorrect
                         ? "bg-green-50 border border-green-500 rounded"
                         : "bg-red-50 border border-red-700 rounded"
-                      : isCorrect && showCorrectAnswer
+                      : isCorrect
                         ? "bg-green-50 border border-green-500 rounded"
                         : ""
                     : isSelected
@@ -882,9 +743,7 @@ const Question: FC<Props> = ({
                       {choiceObj.choice}
                     </div>
 
-                    {isSelected &&
-                      choiceObj.feedback &&
-                      showSubmissionFeedback && (
+                    {isSelected && choiceObj.feedback && (
                         <div className="mt-1 text-sm italic">
                           <span
                             className={
@@ -898,12 +757,10 @@ const Question: FC<Props> = ({
                   </div>
 
                   <div className="flex-shrink-0 ml-2">
-                    {shouldShowHighlighting &&
-                      isCorrect &&
-                      showCorrectAnswer && (
-                        <CheckIcon className="w-5 h-5 text-green-500" />
-                      )}
-                    {shouldShowHighlighting && !isCorrect && isSelected && (
+                    {correctnessKnown && isCorrect && (
+                      <CheckIcon className="w-5 h-5 text-green-500" />
+                    )}
+                    {correctnessKnown && !isCorrect && isSelected && (
                       <XMarkIcon className="w-5 h-5 text-red-500" />
                     )}
                   </div>
@@ -934,30 +791,6 @@ const Question: FC<Props> = ({
         </p>
       );
     } else if (type === "CODE" || type === "UPLOAD" || type === "LINK_FILE") {
-      if (
-        ["PRESENTATION", "LIVE_RECORDING"].includes(question.responseType) &&
-        typeof learnerResponse === "object"
-      ) {
-        const transcript =
-          "transcript" in learnerResponse
-            ? learnerResponse.transcript
-            : undefined;
-        return (
-          <p
-            className={`text-gray-800 w-full ${
-              shouldShowHighlighting
-                ? displayedPoints === totalPoints
-                  ? "bg-green-50 border border-green-500 rounded p-2"
-                  : displayedPoints > 0
-                    ? "bg-yellow-50 border border-yellow-500 rounded p-2"
-                    : "bg-red-50 border border-red-700 rounded p-2"
-                : "bg-gray-50 border border-gray-300 rounded p-2"
-            }`}
-          >
-            Transcript: {transcript}
-          </p>
-        );
-      }
       if (Array.isArray(learnerResponse) && learnerResponse.length > 0) {
         return (
           <div className="space-y-2">
@@ -968,14 +801,10 @@ const Question: FC<Props> = ({
                     <span className="font-medium">{file.filename}</span>
                     <button
                       onClick={() => {
-                        if (file.githubUrl) {
-                          void handleGithubFileView(file.githubUrl);
-                        } else {
-                          void handleFileView(
-                            learnerResponse as LearnerFileResponse[],
-                            idx,
-                          );
-                        }
+                        void handleFileView(
+                          learnerResponse as LearnerFileResponse[],
+                          idx,
+                        );
                       }}
                       className="px-3 py-1 text-sm bg-purple-100 hover:bg-purple-200 text-purple-800 rounded-md transition-colors flex items-center gap-1"
                     >
@@ -1060,7 +889,9 @@ const Question: FC<Props> = ({
         <h2 className="text-xl font-semibold text-gray-800">
           Question {number}
         </h2>
-        {highestScoreResponse?.points === -1 ? (
+        {unsupported ? (
+          <p className="text-sm text-gray-600 mt-2 md:mt-0">Not graded</p>
+        ) : displayedPoints === null ? (
           <p className="text-sm text-gray-600 mt-2 md:mt-0">Points hidden</p>
         ) : (
           <p className="text-sm text-gray-600">
@@ -1076,7 +907,7 @@ const Question: FC<Props> = ({
         className="mb-2 sm:mb-4 pb-2 sm:pb-4 border-b text-gray-700"
         allowCopy={!(questionControls?.disableCopy ?? false)}
       >
-        {questionText}
+        {questionText ?? ""}
       </RichTextViewer>
 
       {checkToShowRubric() && (
@@ -1090,9 +921,9 @@ const Question: FC<Props> = ({
 
       <div className="w-full mb-4">{renderLearnerAnswer()}</div>
 
-      {highestScoreResponse?.feedback && (
+      {(responseFeedback || feedbackHidden) && (
         <div className="mt-4">
-          {!showSubmissionFeedback ? (
+          {feedbackHidden || !showSubmissionFeedback ? (
             <div className="p-4 rounded-lg bg-gray-50 flex items-center gap-4">
               <div className="flex-shrink-0 w-6 justify-center items-center flex">
                 <SparklesIcon className="w-4 h-4 text-violet-600" />

@@ -201,3 +201,49 @@ describe("getSubmitButtonStatus while a file is uploading", () => {
     ).toEqual({ disabled: true, reason: "File upload in progress..." });
   });
 });
+
+describe("unsupported recording and presentation questions", () => {
+  const recording = (id: number, responseType: string) =>
+    question(id, "UPLOAD", {
+      responseType,
+      presentationResponse: { transcript: "old draft" },
+    } as Partial<QuestionStore>);
+
+  it.each(["PRESENTATION", "VIDEO", "AUDIO", "LIVE_RECORDING"])(
+    "never makes a %s question required",
+    (responseType) => {
+      expect(
+        getSubmitButtonStatus(
+          [question(1, "TEXT", ANSWERED_TEXT), recording(2, responseType)],
+          false,
+          false,
+          true,
+        ),
+      ).toEqual({ disabled: false, reason: null });
+    },
+  );
+
+  it("does not count a leftover draft on one as an answer", () => {
+    expect(
+      getSubmitButtonStatus(
+        [question(1, "TEXT"), recording(2, "LIVE_RECORDING")],
+        false,
+      ),
+    ).toEqual({ disabled: true, reason: "No questions have been answered" });
+  });
+
+  it("lets an attempt made only of them be submitted", () => {
+    expect(
+      getSubmitButtonStatus([recording(1, "PRESENTATION")], false, false, true),
+    ).toEqual({ disabled: false, reason: null });
+  });
+
+  it("does not warn about a missing file for one", () => {
+    expect(
+      buildSubmitWarning(
+        [question(1, "TEXT", ANSWERED_TEXT), recording(2, "PRESENTATION")],
+        {},
+      ),
+    ).toBeNull();
+  });
+});

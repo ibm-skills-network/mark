@@ -1,23 +1,14 @@
-import { readFile } from "@/app/Helpers/fileReader";
 import { QuestionStore, ResponseType } from "@/config/types";
-import { getStoredGithubToken } from "@/lib/talkToBackend";
 import { getUploadAcceptMap } from "@/lib/upload-accept";
 import {
   learnerFileResponse,
-  useGitHubStore,
   useLearnerOverviewStore,
   useLearnerStore,
 } from "@/stores/learner";
-import { Octokit } from "@octokit/rest";
-import { IconBrandGithub } from "@tabler/icons-react";
 import { motion } from "framer-motion";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
-import { useDropzone } from "react-dropzone";
+import { useRef, useState } from "react";
 import CustomFileViewer from "./FileViewer";
-import GithubUploadModal from "./GithubUploadModal";
-import PresentationGrader from "./PresentationGrader";
-import VideoPresentationEditor from "./VideoPresentationEditor";
 import FileUploader from "@/components/FileUploader";
 import InAppBrowserUploadNotice from "./InAppBrowserUploadNotice";
 
@@ -30,7 +21,6 @@ interface FileUploadSectionProps {
 
 const FileUploadSection = ({
   question,
-  onFileChange,
   removeFileUpload,
 }: FileUploadSectionProps) => {
   const questionId = question.id;
@@ -46,31 +36,12 @@ const FileUploadSection = ({
   // Whether the latest upload on this question failed, so the submit guard
   // can name it once the uploader goes idle.
   const lastUploadFailedRef = useRef(false);
-  const [, setError] = useState<string | null>(null);
   const [showContent, setShowContent] = useState(false);
   const learnerFileResponse = useLearnerStore((state) =>
     state.getFileUpload(questionId),
   );
   const activeAttemptId = useLearnerStore((state) => state.activeAttemptId);
   const [fileBlob] = useState<Blob | null>(null);
-  const onDrop = async (acceptedFiles: File[]) => {
-    try {
-      const fileContents: learnerFileResponse[] = await Promise.all(
-        acceptedFiles.map(async (file) => {
-          const result = await readFile(file, questionId);
-          return {
-            filename: file.name,
-            content: result.content,
-            githubUrl: "",
-          };
-        }),
-      );
-      fileContents.forEach((file) => addFileUpload(file, questionId));
-    } catch (error) {
-      setError(error as string);
-    }
-  };
-
   const closePreview = () => {
     setShowContent(false);
     setCurrentFileContent(null);
@@ -79,75 +50,6 @@ const FileUploadSection = ({
   const assignmentId =
     useLearnerOverviewStore((state) => state.assignmentId) ||
     parseInt(usePathname().split("/")[2]);
-  const { questionGitHubState } = useGitHubStore();
-  const selectedFiles = questionGitHubState[questionId]?.selectedFiles || [];
-  const persistStateForQuestion = useGitHubStore(
-    (state) => state.persistStateForQuestion,
-  );
-  const [, setOctokit] = useState<Octokit | null>(null);
-  const getTokenFromBackend = async () => {
-    const token = await getStoredGithubToken();
-    return token;
-  };
-  const addToPath = useGitHubStore((state) => state.addToPath);
-  const isGithubModalOpen =
-    questionGitHubState[questionId]?.isGithubModalOpen || false;
-  const setGithubModalOpen = (isOpen: boolean) => {
-    useGitHubStore.setState((state) => ({
-      questionGitHubState: {
-        ...state.questionGitHubState,
-        [questionId]: {
-          ...state.questionGitHubState[questionId],
-          isGithubModalOpen: isOpen,
-        },
-      },
-    }));
-  };
-  const setActiveQuestionId = useGitHubStore(
-    (state) => state.setActiveQuestionId,
-  );
-  const changeSelectedFiles = (
-    questionId: number,
-    files: learnerFileResponse[],
-  ) => {
-    useGitHubStore.setState((state) => {
-      const currentFiles =
-        state.questionGitHubState[questionId]?.selectedFiles || [];
-      if (JSON.stringify(currentFiles) === JSON.stringify(files)) {
-        return state;
-      }
-
-      return {
-        questionGitHubState: {
-          ...state.questionGitHubState,
-          [questionId]: {
-            ...state.questionGitHubState[questionId],
-            selectedFiles: files,
-          },
-        },
-      };
-    });
-  };
-
-  useEffect(() => {
-    setActiveQuestionId(questionId);
-    persistStateForQuestion();
-  }, [questionId]);
-  useEffect(() => {
-    void getTokenFromBackend().then((token) => {
-      if (token) {
-        const octokit = new Octokit({
-          auth: token,
-        });
-        setOctokit(octokit);
-      }
-    });
-  }, []);
-  useDropzone({
-    onDrop,
-    accept: getUploadAcceptMap(questionType, responseType),
-    multiple: true,
-  });
 
   return (
     <motion.div
@@ -156,168 +58,59 @@ const FileUploadSection = ({
       animate={{ y: 0, opacity: 1 }}
       exit={{ y: 50, opacity: 0 }}
     >
-      {responseType === "LIVE_RECORDING" ? (
-        <PresentationGrader question={question} assignmentId={assignmentId} />
-      ) : responseType === "PRESENTATION" ? (
-        <VideoPresentationEditor
-          question={question}
-          assignmentId={assignmentId}
+      <div className="flex flex-1">
+        <div className="flex flex-col gap-4 pr-4 w-full">
+          <InAppBrowserUploadNotice />
+          <FileUploader
+            key={`file-uploader-${questionId}`}
+            uploadType={"learner"}
+            attemptId={activeAttemptId ?? undefined}
+            context={{
+              assignmentId,
+              questionId,
+            }}
+            onUploadComplete={(file: learnerFileResponse) => {
+              lastUploadFailedRef.current = false;
+              addFileUpload(file, questionId);
+            }}
+            onDeleteComplete={(key: string) => {
+              const fileToDelete = learnerFileResponse.find(
+                (file) => file.key === key,
+              );
+              if (fileToDelete) {
+                removeFileUpload(fileToDelete, questionId);
+              }
+            }}
+            onUploadError={() => {
+              lastUploadFailedRef.current = true;
+            }}
+            onUploadStateChange={(isUploading) => {
+              if (isUploading) {
+                lastUploadFailedRef.current = false;
+                setQuestionUploadStatus(questionId, "uploading");
+                return;
+              }
+              setQuestionUploadStatus(
+                questionId,
+                lastUploadFailedRef.current ? "failed" : null,
+              );
+            }}
+            showUploadedFiles={true}
+            uploadedFiles={learnerFileResponse}
+            acceptedFileTypes={getUploadAcceptMap(questionType, responseType)}
+          />
+        </div>
+      </div>
+
+      {showContent && (
+        <CustomFileViewer
+          file={{
+            filename,
+            content: currentFileContent,
+            blob: fileBlob,
+          }}
+          onClose={closePreview}
         />
-      ) : (
-        <>
-          <div className="flex flex-1">
-            <div className="flex flex-col gap-4 pr-4 w-full">
-              {responseType === "CODE" && (
-                <div className="bg-white dark:bg-gray-800 py-8 flex flex-col items-center border gap-4 border-gray-200 dark:border-gray-700 rounded-md p-4">
-                  <span className="text-lg dark:text-gray-100">
-                    Browse your repositories and select the files you need.
-                  </span>
-                  <button
-                    className="flex items-center gap-2 px-4 py-2 bg-black text-white rounded-md hover:bg-gray-800 dark:border dark:border-gray-600"
-                    onClick={() => {
-                      setGithubModalOpen(true);
-                    }}
-                  >
-                    <IconBrandGithub className="h-5 w-5 text-white" />
-                    Select from GitHub
-                  </button>
-                </div>
-              )}
-              <InAppBrowserUploadNotice />
-              <FileUploader
-                key={`file-uploader-${questionId}`}
-                uploadType={"learner"}
-                attemptId={activeAttemptId ?? undefined}
-                context={{
-                  assignmentId,
-                  questionId,
-                }}
-                onUploadComplete={(file: learnerFileResponse) => {
-                  lastUploadFailedRef.current = false;
-                  addFileUpload(file, questionId);
-                  changeSelectedFiles(questionId, [...selectedFiles, file]);
-                }}
-                onDeleteComplete={(key: string) => {
-                  const fileToDelete = learnerFileResponse.find(
-                    (file) => file.key === key,
-                  );
-                  if (fileToDelete) {
-                    removeFileUpload(fileToDelete, questionId);
-                    changeSelectedFiles(
-                      questionId,
-                      selectedFiles.filter((file) => file.filename !== key),
-                    );
-                  }
-                }}
-                onUploadError={() => {
-                  lastUploadFailedRef.current = true;
-                }}
-                onUploadStateChange={(isUploading) => {
-                  if (isUploading) {
-                    lastUploadFailedRef.current = false;
-                    setQuestionUploadStatus(questionId, "uploading");
-                    return;
-                  }
-                  setQuestionUploadStatus(
-                    questionId,
-                    lastUploadFailedRef.current ? "failed" : null,
-                  );
-                }}
-                showUploadedFiles={true}
-                uploadedFiles={learnerFileResponse}
-                acceptedFileTypes={getUploadAcceptMap(
-                  questionType,
-                  responseType,
-                )}
-              />
-            </div>
-          </div>
-
-          {isGithubModalOpen && responseType === "CODE" && (
-            <GithubUploadModal
-              onClose={() => setGithubModalOpen(false)}
-              assignmentId={assignmentId}
-              questionId={questionId}
-              owner={questionGitHubState[questionId].owner}
-              setOwner={(owner) => {
-                useGitHubStore.setState((state) => ({
-                  questionGitHubState: {
-                    ...state.questionGitHubState,
-                    [questionId]: {
-                      ...state.questionGitHubState[questionId],
-                      owner,
-                    },
-                  },
-                }));
-              }}
-              repos={questionGitHubState[questionId].repos}
-              setRepos={(repos) => {
-                useGitHubStore.setState((state) => ({
-                  questionGitHubState: {
-                    ...state.questionGitHubState,
-                    [questionId]: {
-                      ...state.questionGitHubState[questionId],
-                      repos,
-                    },
-                  },
-                }));
-              }}
-              currentPath={questionGitHubState[questionId].currentPath}
-              setCurrentPath={(currentPath) => {
-                useGitHubStore.setState((state) => ({
-                  questionGitHubState: {
-                    ...state.questionGitHubState,
-                    [questionId]: {
-                      ...state.questionGitHubState[questionId],
-                      currentPath,
-                    },
-                  },
-                }));
-              }}
-              addToPath={addToPath}
-              selectedRepo={questionGitHubState[questionId].selectedRepo}
-              setSelectedRepo={(selectedRepo) => {
-                useGitHubStore.setState((state) => ({
-                  questionGitHubState: {
-                    ...state.questionGitHubState,
-                    [questionId]: {
-                      ...state.questionGitHubState[questionId],
-                      selectedRepo,
-                    },
-                  },
-                }));
-              }}
-              selectedFiles={selectedFiles}
-              setSelectedFiles={(files) => {
-                changeSelectedFiles(questionId, files);
-              }}
-              repoContents={questionGitHubState[questionId].repoContents}
-              setRepoContents={(repoContents) => {
-                useGitHubStore.setState((state) => ({
-                  questionGitHubState: {
-                    ...state.questionGitHubState,
-                    [questionId]: {
-                      ...state.questionGitHubState[questionId],
-                      repoContents,
-                    },
-                  },
-                }));
-              }}
-              onFileChange={onFileChange}
-            />
-          )}
-
-          {showContent && (
-            <CustomFileViewer
-              file={{
-                filename,
-                content: currentFileContent,
-                blob: fileBlob,
-              }}
-              onClose={closePreview}
-            />
-          )}
-        </>
       )}
     </motion.div>
   );

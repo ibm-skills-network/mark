@@ -1,4 +1,5 @@
 import { handleJumpToQuestion } from "@/app/Helpers/handleJumpToQuestion";
+import { isUnsupportedQuestion } from "@/lib/unsupported-questions";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import type { QuestionStore } from "@config/types";
 import { ChevronDownIcon, ChevronUpIcon } from "@heroicons/react/24/outline";
@@ -41,7 +42,9 @@ function Overview({ questions }: Props) {
   const getQuestionButtonClasses = useCallback(
     (question: QuestionStore, index: number) => {
       const isRequired =
-        requireAllQuestions && !optionalQuestionIds.includes(question.id);
+        requireAllQuestions &&
+        !optionalQuestionIds.includes(question.id) &&
+        !isUnsupportedQuestion(question);
 
       let baseClasses =
         "w-8 h-9 md:w-10 md:h-11 border rounded-md text-center cursor-pointer focus:outline-none flex flex-col items-center";

@@ -5,8 +5,6 @@ import type {
   PresentationQuestionResponse,
   QuestionStatus,
   QuestionStore,
-  RepoContentItem,
-  RepoType,
   slideMetaData,
 } from "@/config/types";
 import { createAssignmentScopedStorage } from "@/lib/assignment-storage";
@@ -19,16 +17,6 @@ import { createSafeStorage } from "@/lib/safe-storage";
 import { withTextFileContent } from "@/lib/learner-file-content";
 import { parseRandomizedChoices } from "@/app/learner/utils/randomizedChoices";
 import type { QuestionUploadStatus, UploadStatusByQuestion } from "@/lib/utils";
-
-type GitHubQuestionState = {
-  repos: RepoType[];
-  owner: string | null;
-  selectedRepo: string | null;
-  repoContents: RepoContentItem[];
-  currentPath: string[];
-  selectedFiles: learnerFileResponse[];
-  isGithubModalOpen: boolean;
-};
 
 interface VideoRecorderState {
   recording: boolean;
@@ -228,122 +216,6 @@ export const getAssignmentIdFromURL = (role: string): string | null => {
 
 const ASSIGNMENT_ID = getAssignmentIdFromURL("learner");
 
-type GitHubState = {
-  questionGitHubState: Record<number, GitHubQuestionState>;
-  activeQuestionId: number | null;
-  setGithubModalOpen: (isOpen: boolean) => void;
-  setActiveQuestionId: (questionId: number) => void;
-  repos: RepoType[];
-  owner: string | null;
-  selectedRepo: string | null;
-  repoContents: RepoContentItem[];
-  currentPath: string[];
-  selectedFiles: learnerFileResponse[];
-  isGithubModalOpen: boolean;
-  setRepos: (repos: RepoType[]) => void;
-  setOwner: (owner: string | null) => void;
-  setSelectedRepo: (repo: string | null) => void;
-  setRepoContents: (contents: RepoContentItem[]) => void;
-  setCurrentPath: (path: string[]) => void;
-  addToPath: (path: string) => void;
-  setSelectedFiles: (files: learnerFileResponse[]) => void;
-  persistStateForQuestion: () => void;
-  clearGithubStore: () => void;
-};
-
-export const useGitHubStore = createWithEqualityFn<GitHubState>()(
-  persist(
-    devtools(
-      (set, get) => ({
-        questionGitHubState: {},
-        activeQuestionId: null,
-        setActiveQuestionId: (questionId) => {
-          const { questionGitHubState, persistStateForQuestion } = get();
-
-          if (get().activeQuestionId !== null) {
-            persistStateForQuestion();
-          }
-
-          set({
-            activeQuestionId: questionId,
-            ...questionGitHubState[questionId],
-          });
-        },
-
-        repos: [],
-        owner: null,
-        selectedRepo: null,
-        repoContents: [],
-        currentPath: [],
-        selectedFiles: [],
-        isGithubModalOpen: false,
-        setGithubModalOpen: (isOpen) => set({ isGithubModalOpen: isOpen }),
-        addToPath: (path) => set({ currentPath: [...get().currentPath, path] }),
-        setRepos: (repos) => set({ repos }),
-        setOwner: (owner) => set({ owner }),
-        setSelectedRepo: (repo) => set({ selectedRepo: repo }),
-        setRepoContents: (contents) => set({ repoContents: contents }),
-        setCurrentPath: (path) => set({ currentPath: path }),
-        setSelectedFiles: (files) => set({ selectedFiles: files }),
-        clearGithubStore: () => {
-          // The live fields are what persistStateForQuestion writes back into
-          // questionGitHubState, so emptying only the map leaves the previous
-          // selection to be re-persisted the next time a question is opened.
-          set({
-            questionGitHubState: {},
-            activeQuestionId: null,
-            selectedRepo: null,
-            repoContents: [],
-            currentPath: [],
-            selectedFiles: [],
-            isGithubModalOpen: false,
-          });
-        },
-        persistStateForQuestion: () => {
-          const {
-            activeQuestionId,
-            repos,
-            owner,
-            selectedRepo,
-            repoContents,
-            currentPath,
-            selectedFiles,
-            questionGitHubState,
-            isGithubModalOpen,
-          } = get();
-
-          if (activeQuestionId === null) return;
-
-          set({
-            questionGitHubState: {
-              ...questionGitHubState,
-              [activeQuestionId]: {
-                repos,
-                owner,
-                selectedRepo,
-                repoContents,
-                currentPath,
-                selectedFiles,
-                isGithubModalOpen,
-              },
-            },
-          });
-        },
-      }),
-      { name: "github-store", trace: true, traceLimit: 25 },
-    ),
-    {
-      name: "github-store",
-      storage: createJSONStorage(() => createSafeStorage()),
-      partialize: (state) => ({
-        questionGitHubState: state.questionGitHubState,
-        activeQuestionId: state.activeQuestionId,
-      }),
-    },
-  ),
-  shallow,
-);
-
 export type LearnerState = {
   activeAttemptId: number | null;
   activeQuestionNumber: number | null | undefined;
@@ -380,9 +252,6 @@ export type learnerFileResponse = {
   imageBucket?: string;
   imageKey?: string;
   mimeType?: string;
-  owner?: string;
-  repo?: RepoType;
-  path?: string;
 
   imageAnalysisResult?: {
     width: number;
@@ -400,7 +269,6 @@ export type learnerFileResponse = {
   key?: string;
   bucket?: string;
   fileType?: string;
-  githubUrl?: string;
 };
 export type LearnerActions = {
   setTranscript: (questionId: number, transcript: string) => void;
@@ -747,8 +615,8 @@ export const useLearnerStore = createWithEqualityFn<
           get().setQuestionStatus(questionId);
         },
         onFileChange: (files, questionId) => {
-          // Preserve source metadata through selection, autosave, and grading.
-          // The API requires a GitHub URL or storage coordinates for each file.
+          // Preserve storage metadata through selection and grading: the API
+          // grades each file from its bucket and key.
           const formattedFiles = files.map((file) =>
             withTextFileContent({ ...file }),
           );
@@ -879,11 +747,6 @@ export const useLearnerStore = createWithEqualityFn<
           if (get().activeAttemptId === id) {
             return;
           }
-          // GitHub file picks live in their own store and are only cleared on
-          // a submit the client saw succeed — the same condition that cannot
-          // be relied on here — so they have to be dropped with the drafts or
-          // the new attempt opens with the last attempt's repo files attached.
-          useGitHubStore.getState().clearGithubStore();
           set({
             activeAttemptId: id,
             questions: [],
