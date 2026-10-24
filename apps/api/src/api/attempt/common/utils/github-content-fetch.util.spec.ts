@@ -475,7 +475,11 @@ describe("fetchUrlContentForGrading", () => {
         "https://github.com/octocat/hello-world/blob/main/missing.js",
       );
 
-      expect(result).toEqual({ body: "", isFunctional: false });
+      expect(result).toEqual({
+        body: "",
+        isFunctional: false,
+        failure: { code: "url_unreachable", httpStatus: 404 },
+      });
     });
 
     it("treats a 410 and an unresolvable host as confirmed misses", async () => {
@@ -484,14 +488,22 @@ describe("fetchUrlContentForGrading", () => {
         fetchUrlContentForGrading(
           "https://github.com/octocat/hello-world/blob/main/gone.js",
         ),
-      ).resolves.toEqual({ body: "", isFunctional: false });
+      ).resolves.toEqual({
+        body: "",
+        isFunctional: false,
+        failure: { code: "url_unreachable", httpStatus: 410 },
+      });
 
       mockedSafeGet.mockRejectedValueOnce(networkError("ENOTFOUND"));
       await expect(
         fetchUrlContentForGrading(
           "https://github.com/octocat/hello-world/blob/main/gone.js",
         ),
-      ).resolves.toEqual({ body: "", isFunctional: false });
+      ).resolves.toEqual({
+        body: "",
+        isFunctional: false,
+        failure: { code: "url_unreachable" },
+      });
     });
 
     it("throws a rate-limit error rather than scoring a 429 as unreadable", async () => {
@@ -571,7 +583,11 @@ describe("fetchUrlContentForGrading", () => {
 
       await expect(
         fetchUrlContentForGrading("http://www.apache.org/licenses/"),
-      ).resolves.toEqual({ body: "", isFunctional: false });
+      ).resolves.toEqual({
+        body: "",
+        isFunctional: false,
+        failure: { code: "url_unreachable" },
+      });
     });
 
     it("still retries a 504 that the origin itself returned", async () => {
@@ -591,7 +607,11 @@ describe("fetchUrlContentForGrading", () => {
 
       await expect(
         fetchUrlContentForGrading("https://learner.example.com/missing"),
-      ).resolves.toEqual({ body: "", isFunctional: false });
+      ).resolves.toEqual({
+        body: "",
+        isFunctional: false,
+        failure: { code: "url_unreachable", httpStatus: 404 },
+      });
     });
   });
 
@@ -760,7 +780,11 @@ describe("fetchUrlContentForGrading", () => {
         "https://github.com/octocat/hello-world",
       );
 
-      expect(result).toEqual({ body: "", isFunctional: false });
+      expect(result).toEqual({
+        body: "",
+        isFunctional: false,
+        failure: { code: "url_unreachable", httpStatus: 404 },
+      });
     });
 
     it("propagates GithubRateLimitedError when the metadata-fallback call itself is rate-limited after README misses", async () => {
@@ -851,7 +875,7 @@ describe("fetchUrlContentForGrading", () => {
       expect(result).toEqual({ body: java, isFunctional: true });
       expect(mockedSafeGet).toHaveBeenCalledWith(
         "https://raw.githubusercontent.com/acme/shop/main/Customer.java",
-        { responseType: "text" },
+        expect.objectContaining({ responseType: "text" }),
       );
     });
 
@@ -916,7 +940,11 @@ describe("fetchUrlContentForGrading", () => {
         "https://example.com/unreachable",
       );
 
-      expect(result).toEqual({ body: "", isFunctional: false });
+      expect(result).toEqual({
+        body: "",
+        isFunctional: false,
+        failure: { code: "url_unreachable", httpStatus: 404 },
+      });
     });
   });
 

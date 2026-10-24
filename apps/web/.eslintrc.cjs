@@ -46,6 +46,7 @@ module.exports = {
   ignorePatterns: [
     "app/learner/\\(components\\)/**/*.js",
     "dist/",
+    "lib/vendor/",
     "node_modules/",
     ".turbo",
     ".next/",

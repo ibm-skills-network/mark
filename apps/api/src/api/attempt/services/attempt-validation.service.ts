@@ -22,6 +22,7 @@ import {
 import { UserSession } from "../../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../../database/prisma.service";
 import { GradingKillSwitchService } from "../../ai-feature-flags/grading-kill-switch.service";
+import { isPastSubmissionGrace } from "../../assignment/attempt/helper/submission-deadline.helper";
 
 /**
  * Where-clause matching this learner+assignment's active (unsubmitted,
@@ -177,14 +178,14 @@ export class AttemptValidationService {
   }
 
   /**
-   * Checks if an attempt is expired
+   * Whether a submit received at `receivedAt` is past the attempt's deadline
+   * plus the shared grace window.
    * @param expiresAt The expiration date of the attempt
+   * @param receivedAt When the API received the submit; defaults to now
    * @returns True if the attempt is expired
    */
-  isAttemptExpired(expiresAt: Date | null): boolean {
-    if (!expiresAt) return false;
-    const tenSecondsBeforeNow = new Date(Date.now() - 10 * 1000);
-    return tenSecondsBeforeNow > expiresAt;
+  isAttemptExpired(expiresAt: Date | null, receivedAt?: Date): boolean {
+    return isPastSubmissionGrace(expiresAt, receivedAt);
   }
 
   /**
@@ -192,8 +193,7 @@ export class AttemptValidationService {
    * @param expiresAt The expiration date of the assignment attempt
    */
   checkSubmissionDeadline(expiresAt: Date | null | undefined): void {
-    const thirtySecondsBeforeNow = new Date(Date.now() - 30 * 1000);
-    if (expiresAt && thirtySecondsBeforeNow > expiresAt) {
+    if (isPastSubmissionGrace(expiresAt)) {
       throw new UnprocessableEntityException(
         SUBMISSION_DEADLINE_EXCEPTION_MESSAGE,
       );

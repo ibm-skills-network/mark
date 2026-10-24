@@ -19,6 +19,12 @@ import type {
   SubmitAssignmentResponse,
 } from "@config/types";
 import { toast } from "sonner";
+import {
+  GradingUnableError,
+  isLearnerFixableFailure,
+  parseGradingFailure,
+  type GradingFailure,
+} from "@/lib/grading-failure";
 import { submitReportAuthor } from "@/lib/talkToBackend";
 import { apiClient, APIError, isNetworkError } from "./api-client";
 import {
@@ -40,6 +46,17 @@ import {
  */
 const ATTEMPT_IN_PROGRESS_CODE = "ATTEMPT_IN_PROGRESS";
 const ATTEMPT_TIME_RANGE_EXCEEDED_CODE = "ATTEMPT_TIME_RANGE_EXCEEDED";
+
+/**
+ * Code on the 409 a submit gets when the attempt's deadline already closed it.
+ * Keep in sync with apps/api/src/api/assignment/attempt/helper/submission-deadline.helper.ts.
+ */
+const ATTEMPT_CLOSED_AT_TIME_LIMIT_CODE = "ATTEMPT_CLOSED_AT_TIME_LIMIT";
+
+export const ATTEMPT_CLOSED_AT_TIME_LIMIT_MESSAGE =
+  "This attempt was already closed at its time limit.";
+export const ATTEMPT_ALREADY_SUBMITTED_MESSAGE =
+  "This attempt has already been submitted.";
 
 /**
  * Creates a attempt for a given assignment.
@@ -139,8 +156,16 @@ export function isAiTemporarilyDisabled(err: unknown): boolean {
  * is graded; the caller should show its results rather than an error.
  */
 export class AttemptAlreadySubmittedError extends Error {
-  constructor(public readonly attemptId: number) {
-    super(`Attempt ${attemptId} has already been submitted.`);
+  constructor(
+    public readonly attemptId: number,
+    /** The attempt was closed by its deadline, not submitted by the learner. */
+    public readonly closedAtTimeLimit = false,
+  ) {
+    super(
+      closedAtTimeLimit
+        ? ATTEMPT_CLOSED_AT_TIME_LIMIT_MESSAGE
+        : ATTEMPT_ALREADY_SUBMITTED_MESSAGE,
+    );
     this.name = "AttemptAlreadySubmittedError";
   }
 }
@@ -166,7 +191,9 @@ export type GradingProgressStatus =
   | "completed"
   | "failed"
   | "stalled"
-  | "disconnected";
+  | "disconnected"
+  // Terminal: the submission needs fixing by the learner (see grading-failure).
+  | "unable_to_grade";
 
 /**
  * Thrown when the grading stream stops being a usable source of truth. It is
@@ -586,6 +613,7 @@ export async function submitAssignment(
       currentQuestion?: number;
       totalQuestions?: number;
       gradingState?: GradingProgressDetails;
+      failure?: GradingFailure;
     },
   ) => void,
   onGradingJobCreated?: (gradingJobId: string) => void,
@@ -622,7 +650,10 @@ export async function submitAssignment(
         getErrorStatus(apiError) === 409 &&
         !isAiTemporarilyDisabled(apiError)
       ) {
-        throw new AttemptAlreadySubmittedError(attemptId);
+        throw new AttemptAlreadySubmittedError(
+          attemptId,
+          getErrorCode(apiError) === ATTEMPT_CLOSED_AT_TIME_LIMIT_CODE,
+        );
       }
 
       // Duck-typed (not gated on `instanceof APIError`, which is unreliable
@@ -719,6 +750,39 @@ export async function submitAssignment(
         watchdog.stop();
         activeSource?.close();
         return true;
+      };
+
+      /**
+       * A terminal "Failed" frame. When the server says the learner can fix
+       * the submission, hand the fix list to the caller and stop: no toast,
+       * no report — nothing went wrong on our side. Anything else (older
+       * servers send no `failure`) keeps the red failure path as it was.
+       */
+      const handleFailedFrame = (
+        data: { failure?: unknown },
+        failureMessage: string,
+      ) => {
+        if (!settle()) return;
+        const failure = parseGradingFailure(data.failure);
+
+        if (isLearnerFixableFailure(failure)) {
+          console.info("[learner] grading blocked by learner-fixable issues", {
+            assignmentId,
+            attemptId,
+            gradingJobId,
+            issueCodes: failure.issues.map((issue) => issue.code),
+          });
+          onProgress?.("unable_to_grade", 0, failureMessage, { failure });
+          reject(new GradingUnableError(failureMessage, failure));
+          return;
+        }
+
+        onProgress?.("failed", 0, failureMessage);
+
+        setTimeout(() => {
+          toast.error(failureMessage);
+          reject(new Error(failureMessage));
+        }, 2000);
       };
 
       const handleIdleTimeout = () => {
@@ -822,14 +886,7 @@ export async function submitAssignment(
               }
               resolve(result);
             } else if (data.status === "Failed") {
-              if (!settle()) return;
-              const failureMessage = data.progress || "Grading failed";
-              onProgress?.("failed", 0, failureMessage);
-
-              setTimeout(() => {
-                toast.error(failureMessage);
-                reject(new Error(failureMessage));
-              }, 2000);
+              handleFailedFrame(data, data.progress || "Grading failed");
             }
           } catch (error) {
             console.error("SSE onmessage handler error:", error);
@@ -946,15 +1003,10 @@ export async function submitAssignment(
               const data = JSON.parse(event.data);
 
               if (data?.status === "Failed") {
-                if (!settle()) return;
-                const errorMessage =
-                  data.progress || data.error || "Grading failed";
-                onProgress?.("failed", 0, errorMessage);
-
-                setTimeout(() => {
-                  toast.error(errorMessage);
-                  reject(new Error(errorMessage));
-                }, 2000);
+                handleFailedFrame(
+                  data,
+                  data.progress || data.error || "Grading failed",
+                );
               } else if (data?.error) {
                 watchdog.noteGradingUpdate();
                 const streamErrorMessage =

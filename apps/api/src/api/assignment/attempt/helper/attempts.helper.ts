@@ -4,7 +4,10 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { BadRequestException } from "@nestjs/common";
 import { QuestionType } from "@prisma/client";
-import { fetchUrlContentForGrading } from "../../../attempt/common/utils/github-content-fetch.util";
+import {
+  fetchUrlContentForGrading,
+  GithubFetchResult,
+} from "../../../attempt/common/utils/github-content-fetch.util";
 import { ChoiceBasedQuestionResponseModel } from "../../../llm/model/choice.based.question.response.model";
 import { FileBasedQuestionResponseModel } from "../../../llm/model/file.based.question.response.model";
 import { TextBasedQuestionResponseModel } from "../../../llm/model/text.based.question.response.model";
@@ -222,9 +225,7 @@ export const AttemptHelper = {
     }
     return array;
   },
-  async fetchPlainTextFromUrl(
-    url: string,
-  ): Promise<{ body: string; isFunctional: boolean }> {
+  async fetchPlainTextFromUrl(url: string): Promise<GithubFetchResult> {
     return fetchUrlContentForGrading(url);
   },
 };

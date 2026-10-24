@@ -26,6 +26,12 @@ import {
   DocumentSection,
   ExtractionMetadata,
 } from "./structured-content.models";
+import {
+  DocumentLink,
+  DocumentLinkCollector,
+  collectPdfAnnotationLinks,
+  formatLinksBlock,
+} from "./document-links.util";
 
 type PageViewport = ReturnType<PDFPageProxy["getViewport"]>;
 
@@ -155,6 +161,9 @@ export class PdfStructureExtractorService {
       const imageBudget: PdfImageBudget = {
         remaining: MAX_IMAGES_PER_DOCUMENT,
       };
+      // Link targets live in annotations, outside the page text; collect them
+      // under one document-wide budget so the grader sees the URLs.
+      const linkCollector = new DocumentLinkCollector();
       for (let pageNumber = 1; pageNumber <= numberPages; pageNumber++) {
         try {
           const page = await this.extractPageStructure(
@@ -162,6 +171,7 @@ export class PdfStructureExtractorService {
             pageNumber,
             warnings,
             imageBudget,
+            linkCollector,
           );
           pages.push(page);
         } catch (error) {
@@ -182,6 +192,19 @@ export class PdfStructureExtractorService {
             ],
           });
         }
+      }
+
+      if (linkCollector.droppedCount > 0) {
+        warnings.push(
+          `Link cap reached: ${linkCollector.droppedCount} additional links not reported`,
+        );
+        this.logger.warn(
+          `pdf.links.capped ${JSON.stringify({
+            submissionId,
+            reported: linkCollector.count,
+            dropped: linkCollector.droppedCount,
+          })}`,
+        );
       }
 
       const allBlocks = pages.flatMap((p) => p.blocks);
@@ -285,6 +308,7 @@ export class PdfStructureExtractorService {
     pageNumber: number,
     warnings: string[],
     imageBudget?: PdfImageBudget,
+    linkCollector?: DocumentLinkCollector,
   ): Promise<StructuredPage> {
     const pageTask = pdfDocument.getPage(pageNumber);
     pageTask.catch((lateError: unknown) => {
@@ -324,6 +348,25 @@ export class PdfStructureExtractorService {
 
       const allBlocks = [...typedBlocks, ...imageBlocks];
 
+      if (linkCollector) {
+        const links = await this.extractPageLinks(
+          page,
+          pageNumber,
+          textItems,
+          linkCollector,
+          warnings,
+        );
+        const linksText = formatLinksBlock(`page ${pageNumber}`, links);
+        if (linksText) {
+          allBlocks.push({
+            blockId: `p${pageNumber}b${allBlocks.length}`,
+            type: "paragraph",
+            text: linksText,
+            page: pageNumber,
+          });
+        }
+      }
+
       return {
         pageNumber: pageNumber,
         blocks: allBlocks,
@@ -346,6 +389,48 @@ export class PdfStructureExtractorService {
         );
       }
     }
+  }
+
+  /**
+   * External link targets on one page, labelled with the text drawn inside
+   * each link's rectangle. A page whose annotations cannot be read reports no
+   * links and a warning; it never fails the page.
+   */
+  private async extractPageLinks(
+    page: PDFPageProxy,
+    pageNumber: number,
+    textItems: NormalizedTextItem[],
+    linkCollector: DocumentLinkCollector,
+    warnings: string[],
+  ): Promise<DocumentLink[]> {
+    if (!linkCollector.hasCapacity || typeof page.getAnnotations !== "function")
+      return [];
+
+    let annotations: unknown;
+    try {
+      const annotationsTask = page.getAnnotations({ intent: "display" });
+      annotationsTask.catch((lateError: unknown) => {
+        this.logger.warn(
+          `Late getAnnotations rejection on page ${pageNumber}: ` +
+            `${lateError instanceof Error ? lateError.message : String(lateError)}`,
+        );
+      });
+      annotations = await annotationsTask;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      warnings.push(`Failed to read links on page ${pageNumber}: ${message}`);
+      this.logger.warn(
+        `pdf.links.read_failed ${JSON.stringify({ pageNumber, message })}`,
+      );
+      return [];
+    }
+
+    return collectPdfAnnotationLinks(
+      annotations,
+      textItems,
+      linkCollector,
+      `page ${pageNumber}`,
+    );
   }
 
   private normalizeTextItems(

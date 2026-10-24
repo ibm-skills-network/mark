@@ -37,6 +37,8 @@ const SHARED_FIXTURES: Array<[string, string, boolean]> = [
   ["bare word", "dgtj", false],
   ["bare filename", "general.js", false],
   ["bare filename with extension case", "Report.PDF", false],
+  ["repository path, not a host", ".github/ISSUE_TEMPLATE", false],
+  ["host with an empty label", "github..com/owner/repo", false],
   ["github pages host", "owner.github.io", true],
   ["mistyped scheme separator", "https;//github.com/owner/repo", false],
   [

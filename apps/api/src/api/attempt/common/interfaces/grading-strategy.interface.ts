@@ -40,4 +40,11 @@ export interface IGradingStrategy<T = any> {
     learnerResponse: T,
     context: GradingContext,
   ): Promise<CreateQuestionResponseAttemptResponseDto>;
+
+  /**
+   * True when gradeResponse honours `context.sourceCheckOnly`: it reads the
+   * submitted link/file, throws if it is unusable, and returns before any
+   * model call. Strategies without it are skipped in that mode.
+   */
+  readonly supportsSourceCheck?: boolean;
 }

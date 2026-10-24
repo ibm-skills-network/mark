@@ -14,6 +14,13 @@ import QuestionPage from "../index";
 import Timer from "../Timer";
 import { getAssignment } from "@/lib/talkToBackend";
 
+// The fresh status read is unavailable here, so these cases exercise the
+// payload-clock fallback.
+jest.mock("@/lib/attempt-submission-status", () => ({
+  ...jest.requireActual("@/lib/attempt-submission-status"),
+  getAttemptSubmissionStatus: jest.fn().mockResolvedValue({ ok: false }),
+}));
+
 jest.mock("next/navigation", () => ({
   useParams: () => ({ assignmentId: "3663" }),
   useRouter: () => ({
@@ -21,6 +28,7 @@ jest.mock("next/navigation", () => ({
     replace: jest.fn(),
     prefetch: jest.fn(),
   }),
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 const mockSubmitAssignment = jest.fn();

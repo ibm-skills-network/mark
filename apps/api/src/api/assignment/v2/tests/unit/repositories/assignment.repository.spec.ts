@@ -171,6 +171,53 @@ describe("AssignmentRepository", () => {
       global.JSON.parse = originalJsonParse;
     });
 
+    it("never returns version rows to a learner, because they carry the answer key", async () => {
+      const questionVersion = {
+        id: 100,
+        questionId: 1,
+        question: "Version question 1",
+        type: QuestionType.SINGLE_CORRECT,
+        totalPoints: 15,
+        displayOrder: 1,
+        answer: "Paris",
+        authorComment: "key is Paris",
+        choices: [{ id: 1, choice: "Paris", isCorrect: true, points: 15 }],
+        scoring: { type: "AUTO" },
+      };
+      const version = {
+        id: 7,
+        isActive: true,
+        name: "Current Version Assignment",
+        questionOrder: [],
+        questionVersions: [questionVersion],
+      };
+      const mockAssignment = {
+        ...createMockAssignment({ id: 1 }),
+        currentVersionId: 7,
+        currentVersion: version,
+        versions: [version],
+        questions: [],
+      };
+      jest
+        .spyOn(prismaService.assignment, "findUnique")
+        .mockResolvedValue(mockAssignment);
+
+      const learnerResult = await repository.findById(1, sampleLearnerSession);
+      const serialized = JSON.stringify(learnerResult);
+
+      expect(learnerResult.name).toBe("Current Version Assignment");
+      expect(learnerResult).not.toHaveProperty("currentVersion");
+      expect(learnerResult).not.toHaveProperty("versions");
+      expect(learnerResult.questions).toBeUndefined();
+      expect(serialized).not.toContain("isCorrect");
+      expect(serialized).not.toContain("authorComment");
+      expect(serialized).not.toContain("key is Paris");
+
+      const authorResult = await repository.findById(1, sampleAuthorSession);
+      expect(authorResult.currentVersion).toBeDefined();
+      expect(authorResult.versions).toHaveLength(1);
+    });
+
     it("should throw NotFoundException if assignment is not found", async () => {
       const assignmentId = 999;
       jest

@@ -3,6 +3,8 @@ import { Test, TestingModule } from "@nestjs/testing";
 import { CreateQuestionResponseAttemptRequestDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.request.dto";
 import { QuestionDto } from "src/api/assignment/dto/update.questions.request.dto";
 import { ImageGradingService } from "src/api/llm/features/grading/services/image-grading.service";
+import { issueFromQuestionError } from "src/api/llm/features/grading/errors/grading-failure.mapper";
+import { SourceProcessingError } from "src/api/llm/features/grading/errors/source-processing.error";
 import { UnsupportedImageFormatError } from "src/api/llm/features/grading/errors/unsupported-image-format.error";
 import { Logger } from "winston";
 import { GRADING_AUDIT_SERVICE } from "../../../attempt.constants";
@@ -374,6 +376,57 @@ describe("ImageGradingStrategy - Type Safety Tests", () => {
         strategy.validateResponse(mockQuestion, requestDto),
       ).rejects.toMatchObject({
         learnerMessage: expect.stringMatching(/not a supported image format/i),
+      });
+    });
+
+    it("reports a non-image file as unsupported, not as a grading failure", async () => {
+      const requestDto = {
+        learnerFileResponse: [
+          {
+            filename: "DataScienceEcosystem.ipynb",
+            key: "2688/learner/8645/abc-DataScienceEcosystem.ipynb",
+            bucket: "mark-learner-submissions",
+          },
+        ],
+        language: "en",
+      } as any as CreateQuestionResponseAttemptRequestDto;
+
+      const error: unknown = await strategy
+        .validateResponse(mockQuestion, requestDto)
+        .catch((caught: unknown) => caught);
+
+      expect(error).toBeInstanceOf(UnsupportedImageFormatError);
+      expect((error as UnsupportedImageFormatError).learnerMessage).toBe(
+        '"DataScienceEcosystem.ipynb" is not a supported image format. Please upload a PNG, JPEG, GIF, or WebP image.',
+      );
+      expect(issueFromQuestionError(error, 8645)).toMatchObject({
+        code: "file_unsupported_type",
+        source: {
+          fileName: "DataScienceEcosystem.ipynb",
+          detectedType: "ipynb",
+        },
+      });
+    });
+
+    it("reports an oversized inline image as too large", async () => {
+      const requestDto = {
+        learnerFileResponse: [
+          {
+            filename: "huge.png",
+            imageData: `data:image/png;base64,${"A".repeat(28 * 1024 * 1024)}`,
+          },
+        ],
+        language: "en",
+      } as any as CreateQuestionResponseAttemptRequestDto;
+
+      const error: unknown = await strategy
+        .validateResponse(mockQuestion, requestDto)
+        .catch((caught: unknown) => caught);
+
+      expect(error).toBeInstanceOf(SourceProcessingError);
+      expect(issueFromQuestionError(error, 8645)).toMatchObject({
+        code: "file_too_large",
+        source: { kind: "file", fileName: "huge.png" },
       });
     });
 
