@@ -22,14 +22,14 @@
     "@vercel/oidc" "3.1.0"
 
 "@ai-sdk/openai@^2.0.0":
-  version "2.0.135"
-  resolved "https://registry.yarnpkg.com/@ai-sdk/openai/-/openai-2.0.135.tgz#6bbdc1f2328d9c2ef017e80844f8fa27adeb8d0b"
-  integrity sha512-WegblLiMdG0NR/2Ef0tKeT31Xslmq1oZB8kZeI3Bhl6RaFp1eEfCUX5VeOLvYpflgvsTBg/L+suwMBTJoR3+Tg==
+  version "2.0.136"
+  resolved "https://registry.yarnpkg.com/@ai-sdk/openai/-/openai-2.0.136.tgz#3fbfa0742b515a1d74439247fe36409548a074dd"
+  integrity sha512-qsqlKsUVEDNQEuJDgle0HNmQ5/6wxzXYGtYqxcL+O6q2GM4to8Ai7TWar0ZLCopexW4fBgd/gSr6omlTc0X5jQ==
   dependencies:
     "@ai-sdk/provider" "2.0.5"
-    "@ai-sdk/provider-utils" "3.0.41"
+    "@ai-sdk/provider-utils" "3.0.42"
 
-"@ai-sdk/provider-utils@3.0.41", "@ai-sdk/provider-utils@^3.0.26":
+"@ai-sdk/provider-utils@3.0.41", "@ai-sdk/provider-utils@3.0.42", "@ai-sdk/provider-utils@^3.0.26":
   version "3.0.42"
   resolved "https://registry.yarnpkg.com/@ai-sdk/provider-utils/-/provider-utils-3.0.42.tgz#0deab750b00eb5d150faf8ad540b9420cc3d04b4"
   integrity sha512-5DMgJ2HD4rR6mvoc7mqeW5roLHTTqDKNkGuLOWnF0+UCOu96xqPFMy3RbGKYAYDh5YhkwGBdbV7f6xSkLxzGXw==
