@@ -1,10 +1,20 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable unicorn/no-null */
 /* eslint-disable @typescript-eslint/require-await */
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import {
+  ForbiddenException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from "@nestjs/common";
 import { ReportType } from "@prisma/client";
 import { Response as ExpressResponse } from "express";
 import { Observable } from "rxjs";
+import {
+  AttemptSummaryResponseDto,
+  LearnerAttemptResponseDto,
+} from "../dto/learner-attempt.response.dto";
 import { BaseAssignmentAttemptResponseDto } from "src/api/assignment/attempt/dto/assignment-attempt/base.assignment.attempt.response.dto";
 import { LearnerUpdateAssignmentAttemptRequestDto } from "src/api/assignment/attempt/dto/assignment-attempt/create.update.assignment.attempt.request.dto";
 import {
@@ -14,10 +24,7 @@ import {
   RegradingStatusResponseDto,
   RequestRegradingResponseDto,
 } from "src/api/assignment/attempt/dto/assignment-attempt/feedback.request.dto";
-import {
-  AssignmentAttemptResponseDto,
-  GetAssignmentAttemptResponseDto,
-} from "src/api/assignment/attempt/dto/assignment-attempt/get.assignment.attempt.response.dto";
+import { GetAssignmentAttemptResponseDto } from "src/api/assignment/attempt/dto/assignment-attempt/get.assignment.attempt.response.dto";
 import { UpdateAssignmentAttemptResponseDto } from "src/api/assignment/attempt/dto/assignment-attempt/update.assignment.attempt.response.dto";
 import { CreateQuestionResponseAttemptRequestDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.request.dto";
 import { CreateQuestionResponseAttemptResponseDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
@@ -718,13 +725,57 @@ export class AttemptServiceV2 {
   async listAssignmentAttempts(
     assignmentId: number,
     userSession: UserSession,
-  ): Promise<AssignmentAttemptResponseDto[]> {
-    return this.prisma.assignmentAttempt.findMany({
-      where:
-        userSession.role === UserRole.AUTHOR
+  ): Promise<AttemptSummaryResponseDto[]> {
+    const isAuthor = userSession.role === UserRole.AUTHOR;
+    // An undefined userId would drop the filter and list every learner's rows.
+    if (!isAuthor && !userSession.userId) {
+      this.logger.warn(
+        `listAssignmentAttempts: learner session without userId assignment=${assignmentId}`,
+      );
+      throw new ForbiddenException("Forbidden resource");
+    }
+
+    const [assignment, attempts] = await Promise.all([
+      this.prisma.assignment.findUnique({
+        where: { id: assignmentId },
+        select: { showAssignmentScore: true },
+      }),
+      this.prisma.assignmentAttempt.findMany({
+        where: isAuthor
           ? { assignmentId }
           : { assignmentId, userId: userSession.userId },
-    });
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        select: {
+          id: true,
+          assignmentId: true,
+          assignmentVersionId: true,
+          userId: true,
+          submitted: true,
+          grade: true,
+          expiresAt: true,
+          createdAt: true,
+          questionOrder: true,
+          comments: true,
+          preferredLanguage: true,
+        },
+      }),
+    ]);
+
+    if (!assignment) {
+      throw new NotFoundException(
+        `Assignment with Id ${assignmentId} not found.`,
+      );
+    }
+
+    this.logger.debug(
+      `listAssignmentAttempts: assignment=${assignmentId} role=${userSession.role} count=${attempts.length}`,
+    );
+
+    const showScore = assignment.showAssignmentScore;
+    return attempts.map((attempt) => ({
+      ...attempt,
+      grade: showScore && attempt.submitted ? attempt.grade : null,
+    }));
   }
 
   /**
@@ -844,7 +895,7 @@ export class AttemptServiceV2 {
     attemptId: number,
     userSession: UserSession,
     language?: string,
-  ): Promise<GetAssignmentAttemptResponseDto> {
+  ): Promise<LearnerAttemptResponseDto> {
     return this.submissionService.getAssignmentAttempt(attemptId, language);
   }
 

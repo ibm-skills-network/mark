@@ -1,8 +1,8 @@
 //! Mark Rust API process.
 //!
-//! Foundation release: serves health endpoints and nothing else. Business
-//! routes arrive with the first migrated workflow and are mounted behind the
-//! `accept_operations` control so a dark deployment cannot take writes.
+//! Serves health endpoints and the learner assignment-load routes under
+//! `/api/v2`. Learner writes are mounted behind the `accept_operations`
+//! control so a dark deployment cannot take writes.
 
 use std::time::Duration;
 
@@ -31,8 +31,16 @@ async fn run(config: Config) -> anyhow::Result<()> {
     let health = HealthState::new(config.role, config.service_name.clone(), config.controls)
         .with_probe(DatabaseProbe::new(pool.clone(), Duration::from_secs(2)));
 
-    let router =
-        http::with_middleware(Router::new().merge(health.router()), config.request_timeout);
+    let learner = mark_learner::router(mark_learner::LearnerState {
+        pool: pool.clone(),
+        accept_operations: config.controls.accept_operations,
+    });
+    let router = http::with_middleware(
+        Router::new()
+            .merge(health.router())
+            .nest("/api/v2", learner),
+        config.request_timeout,
+    );
 
     http::serve(router, config.bind_addr, config.shutdown_grace).await?;
     pool.close().await;

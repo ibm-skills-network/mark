@@ -135,6 +135,8 @@ jobs:
 # Rust API configurations
 rustApi:
   enabled: false
+  # Gateway route families sent to the Rust API (learner-reads, learner-attempt-writes); empty routes nothing.
+  routes: []
   replicaCount: 1
   # Defaults to api.markDBName; DATABASE_URL is built from the postgres values unless secrets.DATABASE_URL is set.
   markDBName: ''

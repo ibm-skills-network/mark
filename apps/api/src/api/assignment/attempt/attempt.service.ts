@@ -57,7 +57,7 @@ import { QuestionAnswerContext } from "../../llm/model/base.question.evaluate.mo
 import { FileUploadQuestionEvaluateModel } from "../../llm/model/file.based.question.evaluate.model";
 import { TextBasedQuestionEvaluateModel } from "../../llm/model/text.based.question.evaluate.model";
 import { UrlBasedQuestionEvaluateModel } from "../../llm/model/url.based.question.evaluate.model";
-import type { LearnerGetAssignmentResponseDto } from "../dto/get.assignment.response.dto";
+import type { LegacyLearnerGetAssignmentResponseDto } from "../dto/get.assignment.response.dto";
 import {
   AttemptQuestionDto,
   QuestionDto,
@@ -847,7 +847,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
           assignment.currentVersion?.correctAnswerVisibility || "NEVER",
         feedbacksForQuestions: this.constructFeedbacksForQuestions(
           successfulQuestionResponses,
-          assignment as unknown as LearnerGetAssignmentResponseDto,
+          assignment as unknown as LegacyLearnerGetAssignmentResponseDto,
         ),
       };
     } else {
@@ -879,7 +879,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
           assignment.currentVersion?.correctAnswerVisibility || "NEVER",
         feedbacksForQuestions: this.constructFeedbacksForQuestions(
           successfulQuestionResponses,
-          assignment as unknown as LearnerGetAssignmentResponseDto,
+          assignment as unknown as LegacyLearnerGetAssignmentResponseDto,
         ),
       };
     }
@@ -1932,7 +1932,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
    */
   private async autoGradeExpiredAttempt(
     attemptId: number,
-    assignment: LearnerGetAssignmentResponseDto,
+    assignment: LegacyLearnerGetAssignmentResponseDto,
   ): Promise<void> {
     void assignment;
     const attempt = await this.prisma.assignmentAttempt.findUnique({
@@ -2002,7 +2002,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
    * @param userSession The user session.
    */
   private async validateNewAttempt(
-    assignment: LearnerGetAssignmentResponseDto,
+    assignment: LegacyLearnerGetAssignmentResponseDto,
     userSession: UserSession,
   ): Promise<void> {
     const now = new Date();
@@ -2105,7 +2105,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
    * @returns The expiration date or null.
    */
   private calculateAttemptExpiresAt(
-    assignment: LearnerGetAssignmentResponseDto,
+    assignment: LegacyLearnerGetAssignmentResponseDto,
   ): Date | null {
     if (
       assignment.allotedTimeMinutes !== undefined &&
@@ -2494,7 +2494,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
    */
   private constructFeedbacksForQuestions(
     successfulQuestionResponses: CreateQuestionResponseAttemptResponseDto[],
-    assignment: LearnerGetAssignmentResponseDto,
+    assignment: LegacyLearnerGetAssignmentResponseDto,
   ) {
     return successfulQuestionResponses.map((feedbackForQuestion) => {
       const { totalPoints, feedback, ...otherData } = feedbackForQuestion;
@@ -3253,7 +3253,7 @@ export class AttemptServiceV1 implements OnModuleDestroy {
    * @returns The time range start date.
    */
   private calculateTimeRangeStartDate(
-    assignment: LearnerGetAssignmentResponseDto,
+    assignment: LegacyLearnerGetAssignmentResponseDto,
   ): Date {
     if (assignment.attemptsTimeRangeHours) {
       return new Date(

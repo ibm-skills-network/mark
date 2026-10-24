@@ -2,7 +2,7 @@ import {
   UserRole,
   type UserSession,
 } from "src/auth/interfaces/user.session.interface";
-import type { LearnerGetAssignmentResponseDto } from "../../dto/get.assignment.response.dto";
+import type { LegacyLearnerGetAssignmentResponseDto } from "../../dto/get.assignment.response.dto";
 import { AssignmentServiceV1 } from "./assignment.service";
 
 /**
@@ -65,7 +65,7 @@ describe("AssignmentServiceV1.get language handling", () => {
       .spyOn(service, "findOne")
       .mockImplementation(
         async () =>
-          ({ ...authored }) as unknown as LearnerGetAssignmentResponseDto,
+          ({ ...authored }) as unknown as LegacyLearnerGetAssignmentResponseDto,
       );
     return { service, prisma, llmFacade };
   };

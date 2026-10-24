@@ -3,6 +3,7 @@ import {
   ExecutionContext,
   Injectable,
   NestInterceptor,
+  SetMetadata,
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { Observable } from "rxjs";
@@ -64,11 +65,13 @@ function isLearnerFileField(fieldPath: string): boolean {
 export const TRANSFORM_METADATA_KEY = "data-transform";
 
 /**
- * Decorator to configure data transformation for endpoints
+ * Decorator to configure data transformation for endpoints. SetMetadata puts
+ * the options on the handler function, which is where the interceptor's
+ * reflector looks; `Reflect.metadata` on a method lands on the prototype
+ * instead and was never seen.
  */
-export const DataTransform = (
-  options: TransformOptions = {},
-): MethodDecorator => Reflect.metadata(TRANSFORM_METADATA_KEY, options);
+export const DataTransform = (options: TransformOptions = {}) =>
+  SetMetadata(TRANSFORM_METADATA_KEY, options);
 
 /**
  * NestJS interceptor for automatic request/response data transformation

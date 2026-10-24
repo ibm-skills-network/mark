@@ -140,10 +140,14 @@ const mapChoicesToIndices = (values: unknown[], choiceTexts: string[]) => {
 const hydrateQuestionResponse = (question: QuestionStore): QuestionStore => {
   const latestResponse = getLatestQuestionResponse(question);
   const rawResponse = latestResponse?.learnerResponse;
-  const parsedResponse =
-    typeof rawResponse === "string" && rawResponse.trim().length > 0
-      ? parseLearnerResponse(rawResponse)
-      : undefined;
+  // The attempt read serves the stored JSON value as-is: usually a JSON
+  // string, but it may already be an array or object.
+  const parsedResponse: unknown =
+    typeof rawResponse === "string"
+      ? rawResponse.trim().length > 0
+        ? parseLearnerResponse(rawResponse)
+        : undefined
+      : (rawResponse ?? undefined);
   const updated: Partial<QuestionStore> = {};
 
   if (latestResponse?.learnerResponse) {
@@ -152,8 +156,7 @@ const hydrateQuestionResponse = (question: QuestionStore): QuestionStore => {
 
   const hasPresentation = isPresentationResponse(parsedResponse);
   if (!question.presentationResponse && hasPresentation) {
-    updated.presentationResponse =
-      parsedResponse as PresentationQuestionResponse;
+    updated.presentationResponse = parsedResponse;
   }
 
   if (

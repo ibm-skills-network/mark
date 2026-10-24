@@ -1,0 +1,29 @@
+[package]
+name = "mark-learner"
+description = "Learner assignment-load routes: assignment read, languages, attempt list/create/read/abandon"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+axum.workspace = true
+chrono.workspace = true
+form_urlencoded.workspace = true
+rand.workspace = true
+serde.workspace = true
+# preserve_order keeps stored JSON key order when choices are re-serialised,
+# matching what JSON.stringify produced in the legacy backend.
+serde_json = { workspace = true, features = ["preserve_order"] }
+sqlx.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+http-body-util.workspace = true
+mark-platform.workspace = true
+tokio.workspace = true
+tower.workspace = true
+
+[lints]
+workspace = true

@@ -24,6 +24,17 @@ import {
 
 const logger = new Logger("AttemptQuestionsMapper");
 
+/** Stored scoring, parsed when held as JSON text; absent or unparsable is null. */
+function parseStoredScoring(value: unknown): unknown {
+  if (typeof value !== "string") return value ?? null;
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    // Unparsable scoring text is treated as absent.
+    return null;
+  }
+}
+
 /**
  * Extended Choice type to include optional id property
  */
@@ -87,7 +98,7 @@ export type PrismaNestedVariant = {
  */
 export interface TranslatedContent {
   translatedText: string;
-  translatedChoices?: ExtendedChoice[] | string;
+  translatedChoices?: ExtendedChoice[] | string | null;
 }
 
 /**
@@ -293,20 +304,21 @@ export class AttemptQuestionsMapper {
             (index) => baseChoices[index],
           );
 
-          if (orderedBaseChoices.length === baseChoices.length) {
+          // A partial permutation cannot place every choice, so authored
+          // order stands for both the base and the translated lists.
+          if (permutation.length === baseChoices.length) {
             finalChoices = orderedBaseChoices;
+            this.reorderTranslatedChoices(
+              variantTranslations,
+              permutation,
+              baseChoices,
+            );
+            this.reorderTranslatedChoices(
+              questionTranslations,
+              permutation,
+              baseChoices,
+            );
           }
-
-          this.reorderTranslatedChoices(
-            variantTranslations,
-            permutation,
-            baseChoices,
-          );
-          this.reorderTranslatedChoices(
-            questionTranslations,
-            permutation,
-            baseChoices,
-          );
         }
 
         const mergedTranslations = variant
@@ -332,8 +344,9 @@ export class AttemptQuestionsMapper {
               ),
         );
 
+        // Raw choices go through: the learner shaper decides what to reveal.
         const sanitizedTranslations =
-          this.sanitizeTranslationsChoices(mergedTranslations);
+          this.withParsedTranslationChoices(mergedTranslations);
         return {
           id: originalQ.id,
           question: primaryTranslation.translatedText,
@@ -342,8 +355,10 @@ export class AttemptQuestionsMapper {
           authorComment: null,
           maxWords: variant?.maxWords ?? originalQ?.maxWords,
           maxCharacters: variant?.maxCharacters ?? originalQ?.maxCharacters,
-          scoring:
-            (variant?.scoring as unknown as ScoringDto) ?? originalQ.scoring,
+          scoring: this.preferParsedScoring(
+            variant?.scoring,
+            originalQ.scoring,
+          ),
           totalPoints: originalQ.totalPoints,
           answer: variant?.answer ?? originalQ.answer,
           type: originalQ.type,
@@ -382,7 +397,7 @@ export class AttemptQuestionsMapper {
         );
 
         const sanitizedTranslations =
-          this.sanitizeTranslationsChoices(questionTranslations);
+          this.withParsedTranslationChoices(questionTranslations);
 
         return {
           id: originalQ.id,
@@ -433,11 +448,37 @@ export class AttemptQuestionsMapper {
   private static withoutAuthoredLanguage(
     translations: Record<string, TranslatedContent>,
   ): Record<string, TranslatedContent> {
+    // Copies, so reordering below never mutates the caller's translation map.
     return Object.fromEntries(
-      Object.entries(translations).filter(
-        ([code]) => !this.isAuthoredLanguage(code),
-      ),
+      Object.entries(translations)
+        .filter(([code]) => !this.isAuthoredLanguage(code))
+        .map(([code, content]) => [
+          code,
+          {
+            translatedText: content.translatedText,
+            translatedChoices:
+              this.parseOptionalChoices(content.translatedChoices) ?? undefined,
+          },
+        ]),
     );
+  }
+
+  /**
+   * Stored translated choices: an array, or JSON text of one. Anything else
+   * means the translation has no choices of its own.
+   */
+  private static parseOptionalChoices(
+    choices: unknown,
+  ): ExtendedChoice[] | null {
+    if (Array.isArray(choices)) return choices as ExtendedChoice[];
+    if (typeof choices !== "string") return null;
+    try {
+      const parsed: unknown = JSON.parse(choices);
+      return Array.isArray(parsed) ? (parsed as ExtendedChoice[]) : null;
+    } catch {
+      // Unparsable text carries no usable choices; fall back to authored.
+      return null;
+    }
   }
 
   private static isAuthoredLanguage(language: string): boolean {
@@ -501,30 +542,34 @@ export class AttemptQuestionsMapper {
   }
 
   /**
-   * Sanitize choices in all translations
-   *
-   * @param translations - The translations object with choices
-   * @returns A new translations object with sanitized choices
+   * Translations with `translatedChoices` as a parsed array or null. Choice
+   * fields are left intact; the learner shaper strips them per visibility.
    */
-  private static sanitizeTranslationsChoices(
+  private static withParsedTranslationChoices(
     translations: Record<string, TranslatedContent>,
   ): Record<string, TranslatedContent> {
-    const sanitizedTranslations: Record<string, TranslatedContent> = {};
+    const parsedTranslations: Record<string, TranslatedContent> = {};
 
     for (const [lang, content] of Object.entries(translations)) {
-      sanitizedTranslations[lang] = {
+      parsedTranslations[lang] = {
         translatedText: content.translatedText,
-        translatedChoices: content.translatedChoices
-          ? (this.sanitizeChoicesForDisplay(
-              Array.isArray(content.translatedChoices)
-                ? (content.translatedChoices as unknown as ExtendedChoice[])
-                : this.parseChoices(content.translatedChoices),
-            ) as ExtendedChoice[])
-          : null,
+        translatedChoices: this.parseOptionalChoices(content.translatedChoices),
       };
     }
 
-    return sanitizedTranslations;
+    return parsedTranslations;
+  }
+
+  /**
+   * The variant's scoring when it holds a value (stored text is parsed),
+   * else the question's.
+   */
+  private static preferParsedScoring(
+    variantScoring: unknown,
+    questionScoring: unknown,
+  ): ScoringDto | null {
+    return (parseStoredScoring(variantScoring) ??
+      parseStoredScoring(questionScoring)) as ScoringDto | null;
   }
 
   /**
@@ -652,16 +697,17 @@ export class AttemptQuestionsMapper {
     permutation: number[],
     originalChoices: ExtendedChoice[],
   ): void {
+    if (permutation.length !== originalChoices.length) return;
     for (const lang in translations) {
       const translationObject = translations[lang];
+      if (!translationObject) continue;
+      const origTranslatedChoices = this.parseOptionalChoices(
+        translationObject.translatedChoices,
+      );
       if (
-        translationObject &&
-        translationObject.translatedChoices &&
-        Array.isArray(translationObject.translatedChoices) &&
-        translationObject.translatedChoices.length === originalChoices.length
+        origTranslatedChoices &&
+        origTranslatedChoices.length === originalChoices.length
       ) {
-        const origTranslatedChoices =
-          translationObject.translatedChoices as unknown as ExtendedChoice[];
         const reorderedTranslatedChoices = permutation.map(
           (index) => origTranslatedChoices[index],
         );

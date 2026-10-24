@@ -29,6 +29,8 @@ import {
   UserSessionRequest,
 } from "src/auth/interfaces/user.session.interface";
 import { Roles } from "src/auth/role/roles.global.guard";
+import { DataTransform } from "src/common/interceptors/data-transform.interceptor";
+import { normalizeLangQuery } from "src/helpers/query-language";
 import { AttemptTier } from "src/job-queue/attempt-tier";
 import { Logger } from "winston";
 import {
@@ -46,16 +48,17 @@ import {
   RegradingStatusResponseDto,
   RequestRegradingResponseDto,
 } from "../assignment/attempt/dto/assignment-attempt/feedback.request.dto";
-import {
-  AssignmentAttemptResponseDto,
-  GetAssignmentAttemptResponseDto,
-} from "../assignment/attempt/dto/assignment-attempt/get.assignment.attempt.response.dto";
+import { GetAssignmentAttemptResponseDto } from "../assignment/attempt/dto/assignment-attempt/get.assignment.attempt.response.dto";
 import { UpdateAssignmentAttemptResponseDto } from "../assignment/attempt/dto/assignment-attempt/update.assignment.attempt.response.dto";
 import { ReportRequestDTO } from "../assignment/attempt/dto/assignment-attempt/post.assignment.report.dto";
 import { AssignmentAttemptAccessControlGuard } from "../assignment/attempt/guards/assignment.attempt.access.control.guard";
 import { CreateQuestionResponseAttemptRequestDto } from "../assignment/attempt/dto/question-response/create.question.response.attempt.request.dto";
 import { CreateQuestionResponseAttemptResponseDto } from "../assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
 import { GRADING_AUDIT_SERVICE } from "./attempt.constants";
+import {
+  AttemptSummaryResponseDto,
+  LearnerAttemptResponseDto,
+} from "./dto/learner-attempt.response.dto";
 import { AttemptServiceV2 } from "./services/attempt.service";
 import { GradingProgressService } from "./services/grading-progress.service";
 import { GradingAuditService } from "./services/question-response/grading-audit.service";
@@ -86,6 +89,7 @@ export class AttemptControllerV2 {
   @Post()
   @Roles(UserRole.LEARNER)
   @UseGuards(AssignmentAttemptAccessControlGuard)
+  @DataTransform({ encodeResponse: false })
   @ApiOperation({
     summary: "Create an assignment attempt for an assignment.",
   })
@@ -114,6 +118,7 @@ export class AttemptControllerV2 {
   @Post(":attemptId/abandon")
   @Roles(UserRole.LEARNER, UserRole.AUTHOR)
   @UseGuards(AssignmentAttemptAccessControlGuard)
+  @DataTransform({ encodeResponse: false })
   @ApiOperation({
     summary:
       "Abandon an in-progress attempt that is pinned to a stale assignment version.",
@@ -142,8 +147,9 @@ export class AttemptControllerV2 {
   @Get()
   @Roles(UserRole.LEARNER, UserRole.AUTHOR)
   @UseGuards(AssignmentAttemptAccessControlGuard)
+  @DataTransform({ encodeResponse: false })
   @ApiOperation({ summary: "List assignment attempts for an assignment." })
-  @ApiResponse({ status: 200, type: [AssignmentAttemptResponseDto] })
+  @ApiResponse({ status: 200, type: [AttemptSummaryResponseDto] })
   @ApiResponse({ status: 403 })
   @ApiResponse({
     status: 422,
@@ -163,7 +169,7 @@ export class AttemptControllerV2 {
   listAssignmentAttempts(
     @Param("assignmentId") assignmentId: number,
     @Req() request: UserSessionRequest,
-  ): Promise<AssignmentAttemptResponseDto[]> {
+  ): Promise<AttemptSummaryResponseDto[]> {
     return this.attemptService.listAssignmentAttempts(
       Number(assignmentId),
       request.userSession,
@@ -173,18 +179,19 @@ export class AttemptControllerV2 {
   @Get(":attemptId")
   @Roles(UserRole.LEARNER, UserRole.AUTHOR)
   @UseGuards(AssignmentAttemptAccessControlGuard)
+  @DataTransform({ encodeResponse: false })
   @ApiOperation({ summary: "Get an assignment attempt for an assignment." })
-  @ApiResponse({ status: 200, type: GetAssignmentAttemptResponseDto })
+  @ApiResponse({ status: 200, type: LearnerAttemptResponseDto })
   @ApiResponse({ status: 403 })
   getAssignmentAttempt(
     @Param("attemptId") assignmentAttemptId: number,
     @Req() request: UserSessionRequest,
-    @Query("lang") lang?: string,
-  ): Promise<GetAssignmentAttemptResponseDto> {
+    @Query("lang") lang?: unknown,
+  ): Promise<LearnerAttemptResponseDto> {
     return this.attemptService.getAssignmentAttempt(
       Number(assignmentAttemptId),
       request.userSession,
-      lang,
+      normalizeLangQuery(lang),
     );
   }
 

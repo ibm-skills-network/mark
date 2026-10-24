@@ -160,6 +160,7 @@ describe("ApiController", () => {
       } as any;
 
       mockResponse = {
+        setHeader: jest.fn(),
         status: jest.fn().mockReturnThis(),
         send: jest.fn().mockReturnThis(),
       } as any;
@@ -328,6 +329,7 @@ describe("ApiController", () => {
       } as any;
 
       mockResponse = {
+        setHeader: jest.fn(),
         status: jest.fn().mockReturnThis(),
         send: jest.fn().mockReturnThis(),
       } as any;

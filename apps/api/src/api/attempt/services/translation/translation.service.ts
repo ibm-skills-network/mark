@@ -132,7 +132,7 @@ export class TranslationService {
     // image once per language, so an eight-question assignment translated into
     // 23 languages served a 4.6 MB attempt whatever language was asked for.
     // The client refetches the attempt when the learner switches language.
-    const translations = await this.prisma.translation.findMany({
+    const candidateRows = await this.prisma.translation.findMany({
       where: {
         languageCode: { startsWith: languageFamily, mode: "insensitive" },
         OR: [
@@ -140,7 +140,13 @@ export class TranslationService {
           ...(variantIds.length > 0 ? [{ variantId: { in: variantIds } }] : []),
         ],
       },
+      orderBy: { id: "asc" },
     });
+    // The prefix also matches other families ("fr" vs "fry"); keep exact ones.
+    const translations = candidateRows.filter(
+      (row) =>
+        row.languageCode.trim().toLowerCase().split("-")[0] === languageFamily,
+    );
 
     const translationMap = new Map<string, Record<string, any>>();
 

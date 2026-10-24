@@ -73,10 +73,13 @@ import {
   AttemptQuestionsMapper,
   EnhancedAttemptQuestionDto,
 } from "../common/utils/attempt-questions-mapper.util";
+import { toLearnerAttemptQuestion } from "../common/utils/learner-attempt-shape.util";
 import {
+  DEFAULT_PASSING_GRADE,
   meetsPassingGrade,
   resolvePassedIndicator,
 } from "../common/utils/pass-fail.util";
+import { LearnerAttemptResponseDto } from "../dto/learner-attempt.response.dto";
 import { AttemptAccessCacheService } from "./attempt-access-cache.service";
 import { AttemptGradingService } from "./attempt-grading.service";
 import {
@@ -211,19 +214,22 @@ export class AttemptSubmissionService {
       };
     }
 
+    // Ordered by id so the question pool (and variant draw) is deterministic.
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentId },
       include: {
         currentVersion: {
           include: {
-            questionVersions: true,
+            questionVersions: { orderBy: { id: "asc" } },
           },
         },
         questions: {
           where: { isDeleted: false },
+          orderBy: { id: "asc" },
           include: {
             variants: {
               where: { isDeleted: false },
+              orderBy: { id: "asc" },
             },
           },
         },
@@ -950,14 +956,15 @@ export class AttemptSubmissionService {
   async getAssignmentAttempt(
     attemptId: number,
     language?: string,
-  ): Promise<GetAssignmentAttemptResponseDto> {
+  ): Promise<LearnerAttemptResponseDto> {
     const normalizedLanguage = this.getNormalizedLanguage(language);
 
     const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
       where: { id: attemptId },
       include: {
-        questionResponses: true,
+        questionResponses: { orderBy: { id: "asc" } },
         questionVariants: {
+          orderBy: { questionId: "asc" },
           include: {
             questionVariant: {
               include: {
@@ -968,7 +975,7 @@ export class AttemptSubmissionService {
         },
         assignmentVersion: {
           include: {
-            questionVersions: true,
+            questionVersions: { orderBy: { id: "asc" } },
           },
         },
       },
@@ -1011,7 +1018,16 @@ export class AttemptSubmissionService {
       currentVersion: {
         correctAnswerVisibility: CorrectAnswerVisibility;
       } | null;
-    };
+    } | null;
+
+    if (!assignment) {
+      this.logger.warn(
+        `getAssignmentAttempt: attempt=${attemptId} references missing assignment=${assignmentAttempt.assignmentId}`,
+      );
+      throw new NotFoundException(
+        `AssignmentAttempt with Id ${attemptId} not found.`,
+      );
+    }
 
     const cachedQuestions =
       await this.attemptAccessCacheService.getQuestionDtosForAttemptAccess({
@@ -1081,7 +1097,7 @@ export class AttemptSubmissionService {
       questions: questionsForTranslation,
     } as unknown as UpdateAssignmentQuestionsDto;
 
-    const finalQuestions: AttemptQuestionDto[] =
+    const mappedQuestions =
       await AttemptQuestionsMapper.buildQuestionsWithTranslations(
         formattedAttempt,
         assignmentForTranslation,
@@ -1089,11 +1105,16 @@ export class AttemptSubmissionService {
         normalizedLanguage,
       );
 
-    this.removeSensitiveData(
-      finalQuestions,
-      { correctAnswerVisibility: visibilityForAttempt },
+    // Answer-key fields are revealed only once the attempt is submitted and
+    // the visibility setting allows it (`visibilityForAttempt` is NEVER while
+    // the attempt is open).
+    const revealAnswers = this.shouldShowCorrectAnswers(
+      visibilityForAttempt,
       assignmentAttempt.grade || 0,
       assignment.passingGrade,
+    );
+    const finalQuestions = mappedQuestions.map((question) =>
+      toLearnerAttemptQuestion(question, revealAnswers),
     );
 
     const versionMismatch =
@@ -1101,19 +1122,47 @@ export class AttemptSubmissionService {
       assignment.currentVersionId !== null &&
       assignmentAttempt.assignmentVersionId !== assignment.currentVersionId;
 
+    this.logger.debug(
+      `getAssignmentAttempt: attempt=${attemptId} assignment=${assignmentAttempt.assignmentId} questions=${finalQuestions.length} language=${normalizedLanguage}`,
+    );
+
+    // Built key by key: the attempt was loaded with relations (question
+    // versions, variants) that carry the answer key and must not be spread.
     // No pass/fail verdict here on purpose. This route serves the in-progress
     // attempt, so it has none of the clamping the completed route applies to
     // historically over-scored responses; deriving `passed` from the raw
     // persisted grade would contradict the verdict the learner is shown on the
     // success page. Pass/fail belongs to the completed and submit responses.
     return {
-      ...this.withoutAnswerKeyRelations(assignmentAttempt),
+      id: assignmentAttempt.id,
+      assignmentId: assignmentAttempt.assignmentId,
+      assignmentVersionId: assignmentAttempt.assignmentVersionId,
+      userId: assignmentAttempt.userId,
+      submitted: assignmentAttempt.submitted,
+      grade:
+        assignmentAttempt.submitted && assignment.showAssignmentScore
+          ? assignmentAttempt.grade
+          : null,
+      expiresAt: assignmentAttempt.expiresAt,
+      createdAt: assignmentAttempt.createdAt,
+      questionOrder: assignmentAttempt.questionOrder,
+      comments: assignmentAttempt.comments,
+      preferredLanguage: assignmentAttempt.preferredLanguage,
       serverNow: readServerClock(),
-      // The spread carries the persisted grade, which must not reach a learner
-      // whose assignment hides the score.
-      grade: assignment.showAssignmentScore ? assignmentAttempt.grade : null,
       questions: finalQuestions,
-      passingGrade: assignment.passingGrade,
+      questionResponses: assignmentAttempt.questionResponses.map(
+        (response) => ({
+          id: response.id,
+          assignmentAttemptId: response.assignmentAttemptId,
+          questionId: response.questionId,
+          learnerResponse: response.learnerResponse,
+          points: response.points,
+          feedback: response.feedback,
+          metadata: response.metadata,
+          gradedAt: response.gradedAt,
+        }),
+      ),
+      passingGrade: assignment.passingGrade ?? DEFAULT_PASSING_GRADE,
       showAssignmentScore: assignment.showAssignmentScore,
       showSubmissionFeedback: assignment.showSubmissionFeedback,
       showQuestionScore: assignment.showQuestionScore,
@@ -1122,6 +1171,13 @@ export class AttemptSubmissionService {
         assignment.currentVersion?.correctAnswerVisibility || "NEVER",
       currentVersionId: assignment.currentVersionId,
       versionMismatch,
+      assignmentVersion: assignmentAttempt.assignmentVersion
+        ? {
+            id: assignmentAttempt.assignmentVersion.id,
+            allotedTimeMinutes:
+              assignmentAttempt.assignmentVersion.allotedTimeMinutes,
+          }
+        : null,
     };
   }
 
@@ -2276,91 +2332,6 @@ export class AttemptSubmissionService {
     const { questionVersions: _versions, ...versionScalars } =
       assignmentVersion;
     return { ...rest, assignmentVersion: versionScalars } as Stripped;
-  }
-
-  private removeSensitiveData(
-    questions: AttemptQuestionDto[],
-    assignment: { correctAnswerVisibility: CorrectAnswerVisibility },
-    grade: number,
-    passingGrade: number,
-  ): void {
-    for (const question of questions) {
-      if (!question.scoring?.showRubricsToLearner) {
-        delete question.scoring?.rubrics;
-      }
-
-      question.authorComment = null;
-      if (question.choices) {
-        for (const choice of question.choices) {
-          delete choice.points;
-          if (
-            !this.shouldShowCorrectAnswers(
-              assignment.correctAnswerVisibility || "NEVER",
-              grade,
-              passingGrade,
-            )
-          ) {
-            delete choice.isCorrect;
-            delete choice.feedback;
-          }
-        }
-      }
-
-      if (question.translations) {
-        for (const lang in question.translations) {
-          const translationObject = question.translations[lang];
-          if (translationObject?.translatedChoices) {
-            for (const choice of translationObject.translatedChoices) {
-              delete choice.points;
-              if (
-                !this.shouldShowCorrectAnswers(
-                  assignment.correctAnswerVisibility,
-                  grade,
-                  passingGrade,
-                )
-              ) {
-                delete choice.isCorrect;
-                delete choice.feedback;
-              }
-            }
-          }
-        }
-      }
-
-      if (
-        question.randomizedChoices &&
-        typeof question.randomizedChoices === "string"
-      ) {
-        const randomizedArray = JSON.parse(
-          question.randomizedChoices,
-        ) as Array<{
-          points?: number;
-          isCorrect?: boolean;
-          feedback?: string;
-          [key: string]: any;
-        }>;
-        if (Array.isArray(randomizedArray)) {
-          for (const choice of randomizedArray) {
-            delete choice.points;
-            if (
-              !this.shouldShowCorrectAnswers(
-                assignment.correctAnswerVisibility || "NEVER",
-                grade,
-                passingGrade,
-              )
-            ) {
-              delete choice.isCorrect;
-              delete choice.feedback;
-            }
-          }
-          question.randomizedChoices = JSON.stringify(randomizedArray);
-        } else {
-          question.randomizedChoices = JSON.stringify([]);
-        }
-      }
-
-      delete question.answer;
-    }
   }
 
   private applyAnswerVisibilityToQuestionDtos(

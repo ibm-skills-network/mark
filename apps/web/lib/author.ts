@@ -642,6 +642,7 @@ export async function getAttempts(
     const attempts = (await withTransientRetry(() =>
       apiClient.get(endpointURL, {
         quiet: true,
+        transformResponse: false,
         headers: {
           ...(cookies ? { Cookie: cookies } : {}),
           ...(options?.learnerContext

@@ -181,6 +181,7 @@ describe("AttemptAccessCacheService", () => {
         assignmentId: 44,
         isDeleted: false,
       },
+      orderBy: { id: "asc" },
     });
     expect(
       fakeRedis.values.get("mark:attempt-access:assignment:44:1777165200000"),
@@ -356,5 +357,37 @@ describe("AttemptAccessCacheService", () => {
       ).resolves.toBeUndefined();
       expect(scanSpy).not.toHaveBeenCalled();
     });
+  });
+  it("keeps zero limits and leaves absent scoring null", async () => {
+    (mockPrisma.question.findMany as jest.Mock).mockResolvedValue([
+      {
+        id: 1,
+        question: "Q",
+        type: "TEXT",
+        assignmentId: 44,
+        totalPoints: 1,
+        maxWords: 0,
+        maxCharacters: null,
+        choices: null,
+        scoring: null,
+        answer: null,
+        gradingContextQuestionIds: [],
+        responseType: null,
+        isDeleted: false,
+        randomizedChoices: null,
+        videoPresentationConfig: null,
+        liveRecordingConfig: null,
+      },
+    ]);
+
+    const [question] = await service.getQuestionDtosForAttemptAccess({
+      assignmentId: 44,
+      assignmentUpdatedAt: new Date("2026-10-01T00:00:00.000Z"),
+      assignmentVersionId: null,
+    });
+
+    expect(question.maxWords).toBe(0);
+    expect(question.maxCharacters).toBeUndefined();
+    expect(question.scoring).toBeNull();
   });
 });

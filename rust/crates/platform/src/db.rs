@@ -12,6 +12,19 @@
 //! * Named prepared statements are only safe with pgbouncer 1.21+ and
 //!   `max_prepared_statements` configured. Until that is verified on the live
 //!   pooler, the statement cache is disabled so sqlx uses unnamed statements.
+//!
+//! Unnamed statements carry their own hazard. sqlx runs a non-persistent
+//! query with binds as two round trips: Parse + Describe + Sync, wait for
+//! `ReadyForQuery`, then Bind + Execute + Close + Sync. Outside a transaction
+//! each Sync ends the implicit transaction, so pgbouncer may send the second
+//! half to a different server connection, which fails with "unnamed prepared
+//! statement does not exist". Therefore:
+//!
+//! * Never run a bare `sqlx::query(..)` on the pool. Run request statements
+//!   inside an explicit transaction (`pool.begin()`): pgbouncer pins one
+//!   server connection while it is open.
+//! * Probes that need no parameters use the simple query protocol
+//!   (`sqlx::raw_sql`), which creates no prepared statement at all.
 
 use std::str::FromStr;
 use std::time::{Duration, Instant};
@@ -39,7 +52,8 @@ pub fn pool(config: &Config) -> anyhow::Result<PgPool> {
 /// Round-trip a trivial query. Used by readiness; bounded by `timeout`.
 pub async fn ping(pool: &PgPool, timeout: Duration) -> Result<Duration, PingError> {
     let started = Instant::now();
-    let query = sqlx::query("SELECT 1").persistent(false).execute(pool);
+    // Simple protocol: one message, no prepared statement (see module docs).
+    let query = sqlx::raw_sql("SELECT 1").execute(pool);
     match tokio::time::timeout(timeout, query).await {
         Ok(Ok(_)) => {
             let elapsed = started.elapsed();

@@ -619,3 +619,135 @@ describe("AssignmentAttemptAccessControlGuard — ownership is proven, not infer
     ).resolves.toBe(true);
   });
 });
+
+describe("AssignmentAttemptAccessControlGuard — session and route id strictness", () => {
+  const mockPrisma = {
+    assignment: { findUnique: jest.fn() },
+    assignmentGroup: { findFirst: jest.fn() },
+    assignmentAttempt: { findFirst: jest.fn(), findUnique: jest.fn() },
+    question: { findFirst: jest.fn() },
+    $transaction: jest.fn(),
+  } as unknown as PrismaService & { $transaction: jest.Mock };
+
+  let guard: AssignmentAttemptAccessControlGuard;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockPrisma.$transaction = jest.fn();
+    guard = new AssignmentAttemptAccessControlGuard(
+      new Reflector(),
+      mockPrisma,
+      mockLogger as never,
+    );
+  });
+
+  const contextFor = (
+    session: Partial<UserSession>,
+    params: Record<string, string>,
+    method = "GET",
+  ): ExecutionContext =>
+    ({
+      switchToHttp: () => ({
+        getRequest: () => ({
+          userSession: {
+            userId: "learner@example.com",
+            role: UserRole.LEARNER,
+            assignmentId: 42,
+            groupId: "group-1",
+            ...session,
+          },
+          params,
+          method,
+          originalUrl: "/api/v2/assignments/42/attempts",
+        }),
+      }),
+    }) as ExecutionContext;
+
+  it.each(["0", "-1", "12abc", "2147483648", "99999999999999999999", "012"])(
+    "refuses assignment id %p with 403 Invalid assignment ID, never the session id",
+    async (raw) => {
+      await expect(
+        guard.canActivate(contextFor({}, { assignmentId: raw })),
+      ).rejects.toMatchObject({
+        constructor: ForbiddenException,
+        message: "Invalid assignment ID",
+      });
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["0", "-1", "12abc", "2147483648"])(
+    "refuses attempt id %p with 403 Invalid attempt ID",
+    async (raw) => {
+      await expect(
+        guard.canActivate(
+          contextFor({}, { assignmentId: "42", attemptId: raw }),
+        ),
+      ).rejects.toMatchObject({
+        constructor: ForbiddenException,
+        message: "Invalid attempt ID",
+      });
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([
+    ["POST", undefined],
+    ["POST", ""],
+    ["GET", undefined],
+  ])(
+    "refuses a %s collection request from a learner with userId %p before any query",
+    async (method, userId) => {
+      await expect(
+        guard.canActivate(
+          contextFor({ userId }, { assignmentId: "42" }, method),
+        ),
+      ).resolves.toBe(false);
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([undefined, ""])(
+    "never queries the group link for groupId %p and denies the collection",
+    async (groupId) => {
+      mockPrisma.$transaction.mockResolvedValue([{ id: 42 }]);
+      await expect(
+        guard.canActivate(contextFor({ groupId }, { assignmentId: "42" })),
+      ).resolves.toBe(false);
+      expect(mockPrisma.assignmentGroup.findFirst).not.toHaveBeenCalled();
+      expect(mockPrisma.$transaction.mock.calls[0][0]).toHaveLength(1);
+    },
+  );
+
+  it("still lets a learner without a group read their own attempt", async () => {
+    mockPrisma.$transaction.mockResolvedValue([
+      { id: 42 },
+      { id: 7, assignmentId: 42, userId: "learner@example.com" },
+    ]);
+    await expect(
+      guard.canActivate(
+        contextFor(
+          { groupId: undefined },
+          { assignmentId: "42", attemptId: "7" },
+        ),
+      ),
+    ).resolves.toBe(true);
+    expect(mockPrisma.assignmentGroup.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("refuses a write to that attempt without a group", async () => {
+    mockPrisma.$transaction.mockResolvedValue([
+      { id: 42 },
+      { id: 7, assignmentId: 42, userId: "learner@example.com" },
+    ]);
+    await expect(
+      guard.canActivate(
+        contextFor(
+          { groupId: undefined },
+          { assignmentId: "42", attemptId: "7" },
+          "PATCH",
+        ),
+      ),
+    ).resolves.toBe(false);
+  });
+});

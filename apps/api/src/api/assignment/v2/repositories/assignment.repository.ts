@@ -1,5 +1,11 @@
 import { Injectable, Logger, NotFoundException } from "@nestjs/common";
-import { Assignment, Question, QuestionVariant } from "@prisma/client";
+import {
+  Assignment,
+  AssignmentVersion,
+  Prisma,
+  Question,
+  QuestionVariant,
+} from "@prisma/client";
 import { applyQuestionOrder } from "src/api/assignment/utils/question-order.util";
 import { DEFAULT_PASSING_GRADE } from "src/api/attempt/common/utils/pass-fail.util";
 import {
@@ -55,7 +61,7 @@ const FIELDS = [
 type FieldKey = (typeof FIELDS)[number];
 
 /** Typed defaults for overlapping fields */
-const DEFAULTS: Partial<Record<FieldKey, unknown>> = {
+const DEFAULTS = {
   attemptsBeforeCoolDown: 1,
   retakeAttemptCoolDownMinutes: 5,
   passingGrade: DEFAULT_PASSING_GRADE,
@@ -69,7 +75,104 @@ const DEFAULTS: Partial<Record<FieldKey, unknown>> = {
   showPassFailIndicator: false,
   requireAllQuestions: false,
   optionalQuestionIds: [],
-};
+} as const satisfies Partial<Record<FieldKey, unknown>>;
+
+/** `questionControls` is a JSON object; tolerate one stored as JSON text. */
+function learnerQuestionControls(
+  value: Prisma.JsonValue | null,
+): Prisma.JsonObject | null {
+  let parsed: unknown = value;
+  if (typeof value === "string") {
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      // Unparsable text carries no controls; the learner view shows none.
+      return null;
+    }
+  }
+  return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+    ? (parsed as Prisma.JsonObject)
+    : null;
+}
+
+/**
+ * The learner view of an assignment. Everything merges version -> base ->
+ * defaults except the attempt and time limits, `published` and
+ * `showAssignmentScore`, which are read from the base row: attempt creation
+ * and grade visibility enforce the base row, so showing the version's values
+ * would promise behaviour the server does not apply.
+ */
+function buildLearnerAssignment(
+  base: Assignment,
+  version: AssignmentVersion | null,
+): LearnerGetAssignmentResponseDto {
+  return {
+    id: base.id,
+    name: prefer(version?.name, base.name) ?? base.name,
+    introduction: prefer(version?.introduction, base.introduction),
+    instructions: prefer(version?.instructions, base.instructions),
+    gradingCriteriaOverview: prefer(
+      version?.gradingCriteriaOverview,
+      base.gradingCriteriaOverview,
+    ),
+    timeEstimateMinutes: prefer(
+      version?.timeEstimateMinutes,
+      base.timeEstimateMinutes,
+    ),
+    attemptsBeforeCoolDown:
+      base.attemptsBeforeCoolDown ?? DEFAULTS.attemptsBeforeCoolDown,
+    // Create enforces no cooldown for a null value, so the learner sees 0.
+    retakeAttemptCoolDownMinutes: base.retakeAttemptCoolDownMinutes ?? 0,
+    type: prefer(version?.type, base.type) ?? base.type,
+    graded: prefer(version?.graded, base.graded) ?? DEFAULTS.graded,
+    numAttempts: base.numAttempts ?? DEFAULTS.numAttempts,
+    allotedTimeMinutes: base.allotedTimeMinutes ?? null,
+    requireAllQuestions:
+      prefer(version?.requireAllQuestions, base.requireAllQuestions) ??
+      DEFAULTS.requireAllQuestions,
+    optionalQuestionIds: prefer(
+      version?.optionalQuestionIds,
+      base.optionalQuestionIds,
+    ) ?? [...DEFAULTS.optionalQuestionIds],
+    attemptsPerTimeRange: base.attemptsPerTimeRange ?? null,
+    attemptsTimeRangeHours: base.attemptsTimeRangeHours ?? null,
+    passingGrade:
+      prefer(version?.passingGrade, base.passingGrade) ?? DEFAULTS.passingGrade,
+    displayOrder: prefer(version?.displayOrder, base.displayOrder),
+    questionDisplay:
+      prefer(version?.questionDisplay, base.questionDisplay) ??
+      DEFAULTS.questionDisplay,
+    numberOfQuestionsPerAttempt: base.numberOfQuestionsPerAttempt ?? null,
+    questionOrder: version?.questionOrder?.length
+      ? version.questionOrder
+      : (base.questionOrder ?? []),
+    published: base.published ?? false,
+    showAssignmentScore:
+      base.showAssignmentScore ?? DEFAULTS.showAssignmentScore,
+    showQuestionScore:
+      prefer(version?.showQuestionScore, base.showQuestionScore) ??
+      DEFAULTS.showQuestionScore,
+    showSubmissionFeedback:
+      prefer(version?.showSubmissionFeedback, base.showSubmissionFeedback) ??
+      DEFAULTS.showSubmissionFeedback,
+    showQuestions:
+      prefer(version?.showQuestions, base.showQuestions) ??
+      DEFAULTS.showQuestions,
+    showPassFailIndicator:
+      prefer(version?.showPassFailIndicator, base.showPassFailIndicator) ??
+      DEFAULTS.showPassFailIndicator,
+    correctAnswerVisibility:
+      prefer(version?.correctAnswerVisibility, base.correctAnswerVisibility) ??
+      base.correctAnswerVisibility,
+    questionControls: learnerQuestionControls(
+      prefer(version?.questionControls, base.questionControls),
+    ),
+    updatedAt: base.updatedAt,
+    languageCode: prefer(version?.languageCode, base.languageCode),
+    currentVersionId: base.currentVersionId ?? null,
+    success: true,
+  };
+}
 
 /** Safe coalescer */
 function prefer<T>(...vals: Array<T | null | undefined>): T | null {
@@ -224,7 +327,9 @@ export class AssignmentRepository {
     id: number,
     userSession?: UserSession,
   ): Promise<GetAssignmentResponseDto | LearnerGetAssignmentResponseDto> {
-    const isLearner = userSession?.role === UserRole.LEARNER;
+    if (userSession?.role === UserRole.LEARNER) {
+      return this.findLearnerView(id);
+    }
 
     const result = await this.prisma.assignment.findUnique({
       where: { id },
@@ -310,25 +415,6 @@ export class AssignmentRepository {
       processedAssignment = this.processAssignmentData(result);
     }
 
-    if (isLearner) {
-      // Version rows carry every question's answer, correct choices, rubrics
-      // and author comments. Authors need them for the version UI; learners
-      // only need the merged scalar fields above.
-      const learnerFields: Partial<
-        typeof processedAssignment & {
-          currentVersion?: unknown;
-          versions?: unknown;
-        }
-      > = { ...processedAssignment };
-      delete learnerFields.currentVersion;
-      delete learnerFields.versions;
-      return {
-        ...learnerFields,
-        success: true,
-        questions: undefined,
-      } as LearnerGetAssignmentResponseDto;
-    }
-
     return {
       ...processedAssignment,
       success: true,
@@ -338,6 +424,37 @@ export class AssignmentRepository {
           alreadyInBackend: true,
         })) ?? [],
     } as unknown as GetAssignmentResponseDto;
+  }
+
+  /**
+   * Learner read: only the scalar columns the contract lists. Version rows
+   * carry every question's answer key, so they are read without their
+   * question versions and never returned.
+   */
+  private async findLearnerView(
+    id: number,
+  ): Promise<LearnerGetAssignmentResponseDto> {
+    const result = await this.prisma.assignment.findUnique({
+      where: { id },
+      include: {
+        currentVersion: true,
+        versions: {
+          where: { isActive: true },
+          orderBy: { id: "desc" },
+          take: 1,
+        },
+      },
+    });
+
+    if (!result) {
+      throw new NotFoundException(`Assignment with Id ${id} not found.`);
+    }
+
+    const { currentVersion, versions, ...base } = result;
+    return buildLearnerAssignment(
+      base,
+      pickActiveVersion(currentVersion, versions),
+    );
   }
 
   /**

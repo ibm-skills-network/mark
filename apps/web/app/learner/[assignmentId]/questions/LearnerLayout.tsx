@@ -92,6 +92,23 @@ const attemptRejectionModals: Record<
       },
     ],
   },
+  "assignment not published": {
+    logStep: "Assignment not published",
+    statusCode: 403,
+    headline: "This assignment is not published",
+    error:
+      "This assignment is not published yet, so an attempt cannot be started. Please check back later or contact your instructor.",
+    userSteps: [
+      {
+        title: "Contact your instructor",
+        description: "Ask them to publish the assignment.",
+      },
+      {
+        title: "Return to course",
+        description: "Go back to the course home.",
+      },
+    ],
+  },
   "attempt in progress": {
     logStep: "Attempt in progress but could not be resumed",
     statusCode: 422,

@@ -1,5 +1,8 @@
 import { Test, TestingModule } from "@nestjs/testing";
-import { UnprocessableEntityException } from "@nestjs/common";
+import {
+  ForbiddenException,
+  UnprocessableEntityException,
+} from "@nestjs/common";
 import { AttemptValidationService } from "./attempt-validation.service";
 import { PrismaService } from "../../../database/prisma.service";
 import { GradingKillSwitchService } from "../../ai-feature-flags/grading-kill-switch.service";
@@ -29,6 +32,7 @@ describe("AttemptValidationService - validateNewAttempt error codes", () => {
 
   const baseAssignment = {
     id: 123,
+    published: true,
     attemptsPerTimeRange: null,
     attemptsTimeRangeHours: null,
     numAttempts: -1,
@@ -105,6 +109,22 @@ describe("AttemptValidationService - validateNewAttempt error codes", () => {
       ),
       "ATTEMPT_MAX_REACHED",
     );
+  });
+  it("refuses an unpublished assignment with 403 ASSIGNMENT_NOT_PUBLISHED before the kill switch", async () => {
+    const promise = service.validateNewAttempt(
+      { ...baseAssignment, published: false } as never,
+      userSession,
+    );
+
+    await expect(promise).rejects.toBeInstanceOf(ForbiddenException);
+    const error = await promise.catch((error_: unknown) => error_);
+    expect((error as ForbiddenException).getResponse()).toEqual({
+      statusCode: 403,
+      code: "ASSIGNMENT_NOT_PUBLISHED",
+      message: "This assignment is not published.",
+    });
+    expect(mockGradingKillSwitch.assertGradingAllowed).not.toHaveBeenCalled();
+    expect(mockPrisma.assignmentAttempt.findFirst).not.toHaveBeenCalled();
   });
 });
 
