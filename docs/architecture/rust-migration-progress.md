@@ -30,6 +30,20 @@ Plan: `rust-migration-master-plan.md`. Contracts: `contracts/`.
 - 2026-10-24: deploy image tags are release tags only (`X.Y.Z-rcN`), never branch or commit tags.
 - 2026-10-24: on GET attempt, `choices` are always `{id, choice}`; `isCorrect`/`feedback` appear only on `randomizedChoices` and `translatedChoices` items after submission when visibility allows. Matches legacy behaviour and the completed-attempt route.
 
+## Review findings, learner-load slice (2026-10-24)
+
+An independent divergence review of the two implementations found 24 items. Fixed in this slice:
+
+- TypeScript guards accepted a session with no `groupId` (Prisma drops an undefined filter, so any group's link granted access) and let a learner with no `userId` resume any learner's active attempt on create. Both now refuse with 403 before querying; Rust already did.
+- Route ids no longer fall back to the session's assignment id; ids outside the i32 range are rejected before the query instead of surfacing as 500.
+- `user-session` header must be an object with string fields; anything else is 400 on both sides.
+- Attempt-read shaping: `choices` never carry `feedback`; revealed `randomizedChoices` and `translatedChoices` always carry `feedback` (null when absent); `scoring` omitted when stored null; `maxWords`/`maxCharacters` of 0 kept; translation keys limited to the requested family; frozen order applied to translated choices only when it covers every choice.
+- Learner assignment view: `published` and `showAssignmentScore` from the base row; cooldown default 0 to match enforcement; `questionControls` parsed when stored as a string.
+- Rust: whole floats as integers; writes-off answers the standard 503 with `Retry-After`; version rows with a null `questionId` no longer pick up an unrelated question's variants.
+- TypeScript: P2028/P2034 map to 503; `Prisma.DbNull` for unusable frozen choices; deterministic `ORDER BY id` on the pools the seeded shuffle consumes.
+
+Accepted differences: Express adds ETag/304 and helmet headers and `charset=utf-8`; Rust does not. Author responses never reach Rust (gateway routes learners only). Choice shuffle distribution differs (legacy sort-random is biased) but not any single response's bytes.
+
 ## Operating notes for the learner-load slice
 
 - Routing a family to Rust needs `rustApi.enabled: true`, `rustApi.routes` listing the family, and `MARK_RUST_ACCEPT_OPERATIONS=true` on rust-api. With the switch off, the two POST routes answer 503 and the GET assignment group-link self-heal (a write) is skipped, so an unlinked learner would get 403 instead of being healed.
