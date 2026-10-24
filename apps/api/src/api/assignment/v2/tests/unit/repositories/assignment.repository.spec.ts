@@ -363,9 +363,80 @@ describe("AssignmentRepository", () => {
       expect(result).toMatchObject({
         numAttempts: -1,
         attemptsBeforeCoolDown: 1,
-        retakeAttemptCoolDownMinutes: 5,
+        retakeAttemptCoolDownMinutes: 0,
       });
     });
+
+    it("reads published and showAssignmentScore from the base row", async () => {
+      const base = createMockAssignment({
+        id: 1,
+        published: false,
+        showAssignmentScore: false,
+      });
+      const version = {
+        ...base,
+        id: 7,
+        isActive: true,
+        published: true,
+        showAssignmentScore: true,
+      };
+      jest.spyOn(prismaService.assignment, "findUnique").mockResolvedValue({
+        ...base,
+        currentVersion: version,
+        versions: [],
+      } as never);
+
+      const result = await repository.findById(1, sampleLearnerSession);
+
+      expect(result).toMatchObject({
+        published: false,
+        showAssignmentScore: false,
+      });
+    });
+
+    it("defaults null base published/showAssignmentScore to false/true", async () => {
+      const base = createMockAssignment({
+        id: 1,
+        published: null,
+        showAssignmentScore: null,
+      } as never);
+      jest.spyOn(prismaService.assignment, "findUnique").mockResolvedValue({
+        ...base,
+        currentVersion: null,
+        versions: [],
+      } as never);
+
+      const result = await repository.findById(1, sampleLearnerSession);
+
+      expect(result).toMatchObject({
+        published: false,
+        showAssignmentScore: true,
+      });
+    });
+
+    it.each([
+      ['{"a":1}', { a: 1 }],
+      ["not json", null],
+      ["[1,2]", null],
+      ['"text"', null],
+    ])(
+      "parses questionControls stored as JSON text %p",
+      async (stored, expected) => {
+        const base = createMockAssignment({
+          id: 1,
+          questionControls: stored,
+        } as never);
+        jest.spyOn(prismaService.assignment, "findUnique").mockResolvedValue({
+          ...base,
+          currentVersion: null,
+          versions: [],
+        } as never);
+
+        const result = await repository.findById(1, sampleLearnerSession);
+
+        expect(result.questionControls).toEqual(expected);
+      },
+    );
 
     it("should throw NotFoundException if assignment is not found", async () => {
       const assignmentId = 999;

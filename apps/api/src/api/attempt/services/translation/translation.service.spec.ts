@@ -62,6 +62,44 @@ describe("TranslationService.getTranslationsForAttempt", () => {
     );
   });
 
+  it("drops rows whose family only shares the prefix, in id order", async () => {
+    mockPrismaService.translation.findMany.mockResolvedValue([
+      {
+        questionId: 7,
+        variantId: null,
+        languageCode: "fr",
+        translatedText: "Choisissez",
+        translatedChoices: null,
+      },
+      {
+        questionId: 7,
+        variantId: null,
+        languageCode: "fry",
+        translatedText: "Frisian",
+        translatedChoices: null,
+      },
+      {
+        questionId: 7,
+        variantId: null,
+        languageCode: "FR-ca",
+        translatedText: "Choisis",
+        translatedChoices: null,
+      },
+    ]);
+
+    const result = await service.getTranslationsForAttempt(
+      baseAttempt,
+      questions,
+      "fr",
+    );
+
+    expect(mockPrismaService.translation.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ orderBy: { id: "asc" } }),
+    );
+    const entry = result.get("question-7") ?? {};
+    expect(Object.keys(entry)).toEqual(["fr", "FR-ca", "en"]);
+  });
+
   // Regional rows are stored under their full code (zh-CN, zh-TW, uk-UA), and
   // the client picks the entry matching its own full locale, so the family
   // prefix has to keep every regional row of the requested language.

@@ -93,6 +93,31 @@ describe("AllExceptionsFilter database connection failures", () => {
     );
   });
 
+  it.each(["P2028", "P2034"])(
+    "answers 503 with Retry-After for transient transaction code %s",
+    (code) => {
+      const { filter } = makeFilter();
+      const { host, response } = makeHost();
+
+      filter.catch(
+        new Prisma.PrismaClientKnownRequestError("transaction failed", {
+          code,
+          clientVersion: CLIENT_VERSION,
+        }),
+        host,
+      );
+
+      expect(response.status).toHaveBeenCalledWith(
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+      expect(response.setHeader).toHaveBeenCalledWith("Retry-After", "1");
+      expect(response.json).toHaveBeenCalledWith({
+        statusCode: HttpStatus.SERVICE_UNAVAILABLE,
+        message: "Service temporarily unavailable",
+      });
+    },
+  );
+
   it("tells the client to retry shortly without leaking the database message", () => {
     const { filter } = makeFilter();
     const { host, response } = makeHost();

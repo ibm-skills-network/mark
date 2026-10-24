@@ -732,7 +732,7 @@ export class AttemptServiceV2 {
       this.logger.warn(
         `listAssignmentAttempts: learner session without userId assignment=${assignmentId}`,
       );
-      throw new ForbiddenException();
+      throw new ForbiddenException("Forbidden resource");
     }
 
     const [assignment, attempts] = await Promise.all([

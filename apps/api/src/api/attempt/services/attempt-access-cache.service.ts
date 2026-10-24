@@ -14,7 +14,6 @@ import {
   isRedisReady,
 } from "src/job-queue/redis.connection";
 import { EnhancedAttemptQuestionDto } from "../common/utils/attempt-questions-mapper.util";
-import { ScoringType } from "src/api/assignment/question/dto/create.update.question.request.dto";
 
 const ATTEMPT_ACCESS_CACHE_TTL_SECONDS = 10 * 60;
 
@@ -84,6 +83,7 @@ export class AttemptAccessCacheService implements OnModuleDestroy {
               assignmentId: parameters.assignmentId,
               isDeleted: false,
             },
+            orderBy: { id: "asc" },
           }),
         );
 
@@ -286,14 +286,12 @@ export class AttemptAccessCacheService implements OnModuleDestroy {
       type: question.type,
       assignmentId,
       totalPoints: question.totalPoints,
-      maxWords: question.maxWords || undefined,
-      maxCharacters: question.maxCharacters || undefined,
+      // A limit of 0 is a real value; only null/undefined mean "no limit".
+      maxWords: question.maxWords ?? undefined,
+      maxCharacters: question.maxCharacters ?? undefined,
       choices: this.parseJsonValue<Choice[]>(question.choices, []),
-      scoring: this.parseJsonValue<ScoringDto>(question.scoring, {
-        type: ScoringType.CRITERIA_BASED,
-        showRubricsToLearner: false,
-        rubrics: [],
-      }),
+      // No stored scoring stays absent rather than inventing a rubric type.
+      scoring: this.parseJsonValue<ScoringDto | null>(question.scoring, null),
       answer: answerValue,
       gradingContextQuestionIds: question.gradingContextQuestionIds || [],
       responseType: question.responseType || undefined,

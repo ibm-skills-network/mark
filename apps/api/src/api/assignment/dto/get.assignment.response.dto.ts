@@ -58,7 +58,9 @@ export class LegacyLearnerGetAssignmentResponseDto extends OmitType(
 
 /**
  * The learner view of an assignment. Explicit so nothing from the version
- * rows (answers, rubrics, author comments) can ride along.
+ * rows (answers, rubrics, author comments) can ride along. Attempt and time
+ * limits, `published` and `showAssignmentScore` come from the base row;
+ * everything else merges version -> base -> defaults.
  */
 export class LearnerGetAssignmentResponseDto {
   @ApiProperty({ type: Number }) id: number;
@@ -70,7 +72,8 @@ export class LearnerGetAssignmentResponseDto {
   @ApiProperty({ type: Number, nullable: true })
   timeEstimateMinutes: number | null;
   @ApiProperty({ type: Number }) attemptsBeforeCoolDown: number;
-  @ApiProperty({ type: Number }) retakeAttemptCoolDownMinutes: number;
+  @ApiProperty({ type: Number, description: "0 when not set." })
+  retakeAttemptCoolDownMinutes: number;
   @ApiProperty({ enum: AssignmentType }) type: AssignmentType;
   @ApiProperty({ type: Boolean }) graded: boolean;
   @ApiProperty({ type: Number, description: "-1 means unlimited." })
@@ -98,7 +101,11 @@ export class LearnerGetAssignmentResponseDto {
   @ApiProperty({ type: Boolean }) showPassFailIndicator: boolean;
   @ApiProperty({ enum: CorrectAnswerVisibility })
   correctAnswerVisibility: CorrectAnswerVisibility;
-  @ApiProperty({ type: Object, nullable: true })
+  @ApiProperty({
+    type: Object,
+    nullable: true,
+    description: "A JSON object, or null when the stored value is not one.",
+  })
   questionControls: Prisma.JsonValue | null;
   @ApiProperty({ type: Date }) updatedAt: Date;
   @ApiProperty({ type: String, nullable: true }) languageCode: string | null;

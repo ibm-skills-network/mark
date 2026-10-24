@@ -208,3 +208,32 @@ describe("TranslationService.applyTranslationsToAssignment", () => {
     expect(assignment).toMatchObject(authored);
   });
 });
+
+describe("TranslationService.getAvailableLanguages", () => {
+  it("lists stored codes in id order, then en", async () => {
+    const findMany = jest
+      .fn()
+      .mockResolvedValue([{ languageCode: "fr" }, { languageCode: "de" }]);
+    const service = new TranslationService(
+      { assignmentTranslation: { findMany } } as never,
+      {} as never,
+      { updateJobStatus: jest.fn() } as never,
+      { isDisabled: () => false } as never,
+      {} as never,
+    );
+    try {
+      await expect(service.getAvailableLanguages(5)).resolves.toEqual([
+        "fr",
+        "de",
+        "en",
+      ]);
+      expect(findMany).toHaveBeenCalledWith({
+        where: { assignmentId: 5 },
+        select: { languageCode: true },
+        orderBy: { id: "asc" },
+      });
+    } finally {
+      await service.onModuleDestroy();
+    }
+  });
+});

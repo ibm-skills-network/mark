@@ -7,6 +7,7 @@ import {
   NotFoundException,
 } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
+import { Prisma } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
 import {
@@ -20,14 +21,17 @@ import { sanitizeForLog } from "../../../../logger/sanitize";
 // under its own verb, so this cannot be widened by a crafted request.
 const READ_ONLY_METHODS = new Set(["GET", "HEAD"]);
 
+const MAX_INT32 = 2_147_483_647;
+
 // Strict positive-integer parser. Rejects NaN, decimals (`"1.5"`),
 // exponent form (`"1e3"`), hex (`"0x1"`), whitespace, leading `+`, and
 // leading zeros — anything that `Number()` would coerce but that is
-// not a clean canonical positive integer string.
+// not a clean canonical positive integer string. Ids past int32 cannot
+// name a row (and would make Prisma throw), so they are refused too.
 const parsePositiveIntId = (raw: string | undefined): number | undefined => {
-  if (typeof raw !== "string" || raw.length === 0) return undefined;
+  if (typeof raw !== "string" || !/^\d+$/.test(raw)) return undefined;
   const n = Number(raw);
-  if (!Number.isInteger(n) || n <= 0) return undefined;
+  if (!Number.isInteger(n) || n <= 0 || n > MAX_INT32) return undefined;
   if (String(n) !== raw) return undefined;
   return n;
 };
@@ -125,11 +129,7 @@ export class AssignmentAttemptAccessControlGuard implements CanActivate {
         ? readNonEmptyString(userSession.userId)
         : undefined;
 
-    if (
-      attemptId !== undefined &&
-      userSession?.role === UserRole.LEARNER &&
-      learnerUserId === undefined
-    ) {
+    if (userSession?.role === UserRole.LEARNER && learnerUserId === undefined) {
       this.logger.warn("attempt_access_denied: session carries no user id", {
         denial_reason: "missing_session_user_id",
         assignment_id: assignmentId,
@@ -141,18 +141,30 @@ export class AssignmentAttemptAccessControlGuard implements CanActivate {
       return false;
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const queries: any[] = [
-      this.prisma.assignment.findUnique({ where: { id: assignmentId } }),
+    // Prisma drops `groupId: undefined` from a where clause, which would match
+    // any group's link, so an absent group is treated as no link.
+    const groupId = readNonEmptyString(userSession?.groupId);
 
-      this.prisma.assignmentGroup.findFirst({
-        where: {
-          assignmentId: assignmentId,
-          groupId: userSession.groupId,
-        },
-      }),
+    // Built in a fixed order; absent lookups read back as null.
+    const lookups: Array<{
+      name: "assignment" | "group" | "attempt" | "question";
+      query: Prisma.PrismaPromise<unknown>;
+    }> = [
+      {
+        name: "assignment",
+        query: this.prisma.assignment.findUnique({
+          where: { id: assignmentId },
+        }),
+      },
     ];
-
+    if (groupId !== undefined) {
+      lookups.push({
+        name: "group",
+        query: this.prisma.assignmentGroup.findFirst({
+          where: { assignmentId, groupId },
+        }),
+      });
+    }
     if (attemptId !== undefined) {
       const whereClause: {
         id: number;
@@ -167,25 +179,31 @@ export class AssignmentAttemptAccessControlGuard implements CanActivate {
         whereClause.userId = learnerUserId;
       }
 
-      queries.push(
-        this.prisma.assignmentAttempt.findFirst({ where: whereClause }),
-      );
+      lookups.push({
+        name: "attempt",
+        query: this.prisma.assignmentAttempt.findFirst({ where: whereClause }),
+      });
     }
-
     if (questionId !== undefined) {
-      queries.push(
-        this.prisma.question.findFirst({
-          where: {
-            id: questionId,
-            assignmentId: assignmentId,
-          },
+      lookups.push({
+        name: "question",
+        query: this.prisma.question.findFirst({
+          where: { id: questionId, assignmentId },
         }),
-      );
+      });
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const [assignment, assignmentGroup, attempt, questionInAssignment] =
-      await this.prisma.$transaction(queries);
+    const results: unknown[] = await this.prisma.$transaction(
+      lookups.map((lookup) => lookup.query),
+    );
+    const resultOf = (name: (typeof lookups)[number]["name"]): unknown => {
+      const index = lookups.findIndex((lookup) => lookup.name === name);
+      return index === -1 ? null : (results[index] ?? null);
+    };
+    const assignment = resultOf("assignment");
+    const assignmentGroup = resultOf("group");
+    const attempt = resultOf("attempt");
+    const questionInAssignment = resultOf("question");
 
     // Ownership is asserted against the row itself rather than inferred from
     // "a row came back", so the allowance below holds even if the query that

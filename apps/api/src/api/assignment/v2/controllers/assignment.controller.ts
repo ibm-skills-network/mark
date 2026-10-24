@@ -61,7 +61,10 @@ import {
   QuestionDto,
   UpdateAssignmentQuestionsDto,
 } from "../../dto/update.questions.request.dto";
-import { AssignmentAccessControlGuard } from "../../guards/assignment.access.control.guard";
+import {
+  AssignmentAccessControlGuard,
+  NoGroupLinkHeal,
+} from "../../guards/assignment.access.control.guard";
 import {
   CompleteAssignmentFileDto,
   InitiateAssignmentFilesDto,
@@ -573,6 +576,7 @@ export class AssignmentControllerV2 {
   @Get(":id/languages")
   @Roles(UserRole.LEARNER, UserRole.AUTHOR)
   @UseGuards(AssignmentAccessControlGuard)
+  @NoGroupLinkHeal()
   @DataTransform({ encodeResponse: false })
   @ApiOperation({ summary: "Get available languages" })
   @ApiParam({ name: "id", required: true, description: "Assignment ID" })

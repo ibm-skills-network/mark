@@ -2,6 +2,7 @@ import { Injectable, Logger, NotFoundException } from "@nestjs/common";
 import {
   Assignment,
   AssignmentVersion,
+  Prisma,
   Question,
   QuestionVariant,
 } from "@prisma/client";
@@ -76,11 +77,30 @@ const DEFAULTS = {
   optionalQuestionIds: [],
 } as const satisfies Partial<Record<FieldKey, unknown>>;
 
+/** `questionControls` is a JSON object; tolerate one stored as JSON text. */
+function learnerQuestionControls(
+  value: Prisma.JsonValue | null,
+): Prisma.JsonObject | null {
+  let parsed: unknown = value;
+  if (typeof value === "string") {
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      // Unparsable text carries no controls; the learner view shows none.
+      return null;
+    }
+  }
+  return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+    ? (parsed as Prisma.JsonObject)
+    : null;
+}
+
 /**
  * The learner view of an assignment. Everything merges version -> base ->
- * defaults except the attempt and time limits, which are read from the base
- * row: attempt creation enforces the base row, so showing the version's
- * values would promise limits the server does not apply.
+ * defaults except the attempt and time limits, `published` and
+ * `showAssignmentScore`, which are read from the base row: attempt creation
+ * and grade visibility enforce the base row, so showing the version's values
+ * would promise behaviour the server does not apply.
  */
 function buildLearnerAssignment(
   base: Assignment,
@@ -101,9 +121,8 @@ function buildLearnerAssignment(
     ),
     attemptsBeforeCoolDown:
       base.attemptsBeforeCoolDown ?? DEFAULTS.attemptsBeforeCoolDown,
-    retakeAttemptCoolDownMinutes:
-      base.retakeAttemptCoolDownMinutes ??
-      DEFAULTS.retakeAttemptCoolDownMinutes,
+    // Create enforces no cooldown for a null value, so the learner sees 0.
+    retakeAttemptCoolDownMinutes: base.retakeAttemptCoolDownMinutes ?? 0,
     type: prefer(version?.type, base.type) ?? base.type,
     graded: prefer(version?.graded, base.graded) ?? DEFAULTS.graded,
     numAttempts: base.numAttempts ?? DEFAULTS.numAttempts,
@@ -127,10 +146,9 @@ function buildLearnerAssignment(
     questionOrder: version?.questionOrder?.length
       ? version.questionOrder
       : (base.questionOrder ?? []),
-    published: prefer(version?.published, base.published) ?? false,
+    published: base.published ?? false,
     showAssignmentScore:
-      prefer(version?.showAssignmentScore, base.showAssignmentScore) ??
-      DEFAULTS.showAssignmentScore,
+      base.showAssignmentScore ?? DEFAULTS.showAssignmentScore,
     showQuestionScore:
       prefer(version?.showQuestionScore, base.showQuestionScore) ??
       DEFAULTS.showQuestionScore,
@@ -146,7 +164,9 @@ function buildLearnerAssignment(
     correctAnswerVisibility:
       prefer(version?.correctAnswerVisibility, base.correctAnswerVisibility) ??
       base.correctAnswerVisibility,
-    questionControls: prefer(version?.questionControls, base.questionControls),
+    questionControls: learnerQuestionControls(
+      prefer(version?.questionControls, base.questionControls),
+    ),
     updatedAt: base.updatedAt,
     languageCode: prefer(version?.languageCode, base.languageCode),
     currentVersionId: base.currentVersionId ?? null,

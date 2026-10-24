@@ -606,6 +606,7 @@ export class TranslationService implements OnModuleDestroy {
       await this.prisma.assignmentTranslation.findMany({
         where: { assignmentId },
         select: { languageCode: true },
+        orderBy: { id: "asc" },
       });
 
     for (const translation of assignmentTranslations) {

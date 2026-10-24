@@ -214,19 +214,22 @@ export class AttemptSubmissionService {
       };
     }
 
+    // Ordered by id so the question pool (and variant draw) is deterministic.
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentId },
       include: {
         currentVersion: {
           include: {
-            questionVersions: true,
+            questionVersions: { orderBy: { id: "asc" } },
           },
         },
         questions: {
           where: { isDeleted: false },
+          orderBy: { id: "asc" },
           include: {
             variants: {
               where: { isDeleted: false },
+              orderBy: { id: "asc" },
             },
           },
         },
@@ -959,8 +962,9 @@ export class AttemptSubmissionService {
     const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
       where: { id: attemptId },
       include: {
-        questionResponses: true,
+        questionResponses: { orderBy: { id: "asc" } },
         questionVariants: {
+          orderBy: { questionId: "asc" },
           include: {
             questionVariant: {
               include: {
@@ -971,7 +975,7 @@ export class AttemptSubmissionService {
         },
         assignmentVersion: {
           include: {
-            questionVersions: true,
+            questionVersions: { orderBy: { id: "asc" } },
           },
         },
       },

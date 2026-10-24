@@ -132,6 +132,77 @@ describe("toLearnerAttemptQuestion", () => {
   });
 });
 
+describe("toLearnerAttemptQuestion revealed wire shape", () => {
+  const revealed = () =>
+    JSON.parse(
+      JSON.stringify(
+        toLearnerAttemptQuestion(
+          mapped({
+            choices: storedChoices,
+            randomizedChoices: JSON.stringify([
+              { id: 1, choice: "A", isCorrect: true, points: 5 },
+              { id: 2, choice: "B", feedback: 3 },
+            ]),
+          }),
+          true,
+        ),
+      ),
+    ) as {
+      choices: Array<Record<string, unknown>>;
+      randomizedChoices: Array<Record<string, unknown>>;
+      translations: Record<
+        string,
+        { translatedChoices: Array<Record<string, unknown>> }
+      >;
+    };
+
+  it("keeps choices to exactly id and choice", () => {
+    for (const choice of revealed().choices) {
+      expect(Object.keys(choice).sort()).toEqual(["choice", "id"]);
+    }
+  });
+
+  it("always carries feedback on revealed frozen and translated items", () => {
+    const wire = revealed();
+    expect(wire.randomizedChoices).toEqual([
+      { id: 1, choice: "A", isCorrect: true, feedback: null },
+      { id: 2, choice: "B", feedback: null },
+    ]);
+    expect(wire.translations.fr.translatedChoices).toEqual([
+      { id: 1, choice: "A", isCorrect: true, feedback: null },
+    ]);
+  });
+});
+
+describe("toLearnerAttemptQuestion optional keys", () => {
+  it.each([null, undefined, "not json", "[1]", 5])(
+    "omits scoring when the stored value is %p",
+    (scoring) => {
+      expect(
+        toLearnerAttemptQuestion(mapped({ scoring }), false),
+      ).not.toHaveProperty("scoring");
+    },
+  );
+
+  it("keeps a zero word or character limit", () => {
+    const shaped = toLearnerAttemptQuestion(
+      mapped({ maxWords: 0, maxCharacters: 0 }),
+      false,
+    );
+    expect(shaped.maxWords).toBe(0);
+    expect(shaped.maxCharacters).toBe(0);
+  });
+
+  it("serves randomizedChoices as null when nothing survives sanitising", () => {
+    expect(
+      toLearnerAttemptQuestion(
+        mapped({ randomizedChoices: [{ id: 1 }, "x", { choice: {} }] }),
+        true,
+      ).randomizedChoices,
+    ).toBeNull();
+  });
+});
+
 describe("sanitizeRandomizedChoices", () => {
   it.each([
     ["boolean flag string", "false"],

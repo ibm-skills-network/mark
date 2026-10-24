@@ -396,14 +396,16 @@ describe("AttemptSubmissionService - Grading Validation", () => {
         include: {
           currentVersion: {
             include: {
-              questionVersions: true,
+              questionVersions: { orderBy: { id: "asc" } },
             },
           },
           questions: {
             where: { isDeleted: false },
+            orderBy: { id: "asc" },
             include: {
               variants: {
                 where: { isDeleted: false },
+                orderBy: { id: "asc" },
               },
             },
           },
@@ -1463,15 +1465,66 @@ describe("AttemptSubmissionService - Grading Validation", () => {
         .spyOn(AttemptQuestionsMapper, "buildQuestionsWithTranslations")
         .mockResolvedValue([choiceQuestion()] as never);
 
-      const result = await service.getAssignmentAttempt(71, "en");
+      try {
+        const result = await service.getAssignmentAttempt(71, "en");
+        const wire = JSON.parse(JSON.stringify(result.questions)) as Array<{
+          choices: Array<Record<string, unknown>>;
+          randomizedChoices: Array<Record<string, unknown>>;
+        }>;
 
-      expect(result.questions[0].choices?.[0]).toMatchObject({
-        choice: "A",
-        isCorrect: true,
+        // `choices` never carries the key, even once revealed.
+        for (const choice of wire[0].choices) {
+          expect(Object.keys(choice).sort()).toEqual(["choice", "id"]);
+        }
+        // The frozen list carries isCorrect and feedback when revealed.
+        expect(wire[0].randomizedChoices).toEqual([
+          { id: null, choice: "B", isCorrect: false, feedback: "wrong" },
+          { id: null, choice: "A", isCorrect: true, feedback: "right" },
+        ]);
+        expect(JSON.stringify(wire)).not.toContain("points");
+      } finally {
+        translationBuildSpy.mockRestore();
+      }
+    });
+
+    it("serves feedback as null on revealed items the author left without any", async () => {
+      mockTranslationService.getTranslationsForAttempt.mockResolvedValue(
+        new Map(),
+      );
+      mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+        ...assignmentAttempt,
+        submitted: true,
       });
-      expect(result.questions[0].choices?.[0]).not.toHaveProperty("points");
+      const translationBuildSpy = jest
+        .spyOn(AttemptQuestionsMapper, "buildQuestionsWithTranslations")
+        .mockResolvedValue([
+          {
+            ...choiceQuestion(),
+            randomizedChoices: [{ id: 1, choice: "A", isCorrect: true }],
+            translations: {
+              fr: {
+                translatedText: "Q",
+                translatedChoices: JSON.stringify([
+                  { id: 1, choice: "Un", isCorrect: true, points: 5 },
+                ]),
+              },
+            },
+          },
+        ] as never);
 
-      translationBuildSpy.mockRestore();
+      try {
+        const result = await service.getAssignmentAttempt(71, "fr");
+        const wire = JSON.stringify(result.questions[0]);
+
+        expect(wire).toContain(
+          '"randomizedChoices":[{"id":1,"choice":"A","isCorrect":true,"feedback":null}]',
+        );
+        expect(wire).toContain(
+          '"translatedChoices":[{"id":1,"choice":"Un","isCorrect":true,"feedback":null}]',
+        );
+      } finally {
+        translationBuildSpy.mockRestore();
+      }
     });
 
     it("strips the pinned version's question versions and the variant rows from completed attempt reads", async () => {
@@ -1593,6 +1646,30 @@ describe("AttemptSubmissionService - Grading Validation", () => {
       expect(result.questions.map((question) => question.id)).toEqual([
         101, 202,
       ]);
+
+      translationBuildSpy.mockRestore();
+    });
+
+    it("loads the attempt's responses and variant picks in a stable order", async () => {
+      mockTranslationService.getTranslationsForAttempt.mockResolvedValue(
+        new Map(),
+      );
+      const translationBuildSpy = jest
+        .spyOn(AttemptQuestionsMapper, "buildQuestionsWithTranslations")
+        .mockResolvedValue([] as never);
+
+      await service.getAssignmentAttempt(71, "en");
+
+      expect(mockPrisma.assignmentAttempt.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({
+          include: expect.objectContaining({
+            questionResponses: { orderBy: { id: "asc" } },
+            questionVariants: expect.objectContaining({
+              orderBy: { questionId: "asc" },
+            }),
+          }),
+        }),
+      );
 
       translationBuildSpy.mockRestore();
     });

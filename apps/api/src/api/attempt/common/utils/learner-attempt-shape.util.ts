@@ -135,7 +135,9 @@ export function toLearnerAttemptQuestion(
     question: question.question,
     type: question.type,
     responseType: question.responseType ?? null,
-    choices: sanitizeLearnerChoices(question.choices, revealAnswers),
+    // `choices` never carries the key; reveals live on the frozen and
+    // translated lists only.
+    choices: sanitizeLearnerChoices(question.choices, false),
     translations: sanitizeTranslations(question.translations, revealAnswers),
     authorComment: null,
     totalPoints: question.totalPoints,
