@@ -8,6 +8,9 @@ metadata:
     {{- include "mark.rustApi.labels" . | nindent 4 }}
 data:
   PORT: {{ .Values.rustApi.containerPort | quote }}
+{{- if and .Values.api.enabled (not (hasKey .Values.rustApi.config "MARK_INTERNAL_API_URL")) }}
+  MARK_INTERNAL_API_URL: {{ printf "http://%s:%v" (include "mark.api.name" .) .Values.api.service.port | quote }}
+{{- end }}
 {{- range $name, $value := .Values.rustApi.config }}
 {{- if ne $name "PORT" }}
   {{ $name }}: {{ $value | toString | quote }}

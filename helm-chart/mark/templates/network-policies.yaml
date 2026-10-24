@@ -171,7 +171,7 @@ spec:
 {{- end }}
 
 {{- if .Values.rustApi.enabled }}
-# For mark-rust-api: allow ingress from api-gateway only and egress to postgres only.
+# For mark-rust-api: allow ingress from api-gateway only; egress to postgres, mark-api (grading queue) and lti-gateway (grade passback).
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -196,6 +196,19 @@ spec:
         podSelector:
           matchLabels:
             app.kubernetes.io/name: apps-postgres-pgbouncer
+    {{- if .Values.api.enabled }}
+    - to:
+      - podSelector:
+          matchLabels:
+            {{- include "mark.api.labels" $ | nindent 12 }}
+      ports:
+      - protocol: TCP
+        port: {{ .Values.api.containerPort }}
+    {{- end }}
+    - to:
+      - podSelector:
+          matchLabels:
+            app.kubernetes.io/name: lti-gateway
   policyTypes:
   - Ingress
   - Egress
