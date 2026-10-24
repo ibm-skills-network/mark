@@ -46,6 +46,8 @@ import {
  */
 const ATTEMPT_IN_PROGRESS_CODE = "ATTEMPT_IN_PROGRESS";
 const ATTEMPT_TIME_RANGE_EXCEEDED_CODE = "ATTEMPT_TIME_RANGE_EXCEEDED";
+/** Code on the 403 a create gets when the assignment is not published. */
+const ASSIGNMENT_NOT_PUBLISHED_CODE = "ASSIGNMENT_NOT_PUBLISHED";
 
 /**
  * Code on the 409 a submit gets when the attempt's deadline already closed it.
@@ -75,6 +77,7 @@ export async function createAttempt(
   | "ai temporarily unavailable"
   | "attempt in progress"
   | "time range exceeded"
+  | "assignment not published"
 > {
   const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/attempts`;
   try {
@@ -82,6 +85,7 @@ export async function createAttempt(
       endpointURL,
       undefined,
       {
+        transformResponse: false,
         headers: {
           "Content-Type": "application/json",
           ...(cookies
@@ -109,6 +113,9 @@ export async function createAttempt(
       return "ai temporarily unavailable";
     }
     const status = getErrorStatus(err);
+    if (status === 403 && getErrorCode(err) === ASSIGNMENT_NOT_PUBLISHED_CODE) {
+      return "assignment not published";
+    }
     if (status === 422) {
       // The API throws 422 for three distinct reasons; only a real max-attempts
       // lockout may surface as "no more attempts". Match on the body code, not
@@ -240,7 +247,11 @@ export async function abandonAttempt(
 ): Promise<boolean> {
   const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/attempts/${attemptId}/abandon`;
   try {
-    await apiClient.post<{ id: number; success: true }>(endpointURL, {});
+    await apiClient.post<{ id: number; success: true }>(
+      endpointURL,
+      {},
+      { transformResponse: false },
+    );
     return true;
   } catch (err) {
     console.error("abandonAttempt failed", err);
@@ -270,6 +281,7 @@ export async function getAttempt(
     const attempt = await withTransientRetry(() =>
       apiClient.get<AssignmentAttemptWithQuestions>(endpointURL, {
         quiet: true,
+        transformResponse: false,
         headers: {
           ...(cookies
             ? {

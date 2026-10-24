@@ -574,7 +574,15 @@ export type QuestionStore = LearnerGetQuestionResponse &
   QuestionAttemptRequest & {
     status: QuestionStatus;
     authorComment?: string;
-    randomizedChoices?: boolean;
+    /**
+     * Author preview: whether to shuffle. Attempt read: the frozen choice
+     * order as an array, or null (legacy responses sent it as a JSON string).
+     */
+    randomizedChoices?:
+      | boolean
+      | { id: number | null; choice: string }[]
+      | string
+      | null;
     learnerResponse: string;
     translationOn: boolean;
     selectedLanguage: string;
@@ -721,8 +729,11 @@ export type AssignmentAttempt = {
 export interface AssignmentAttemptWithQuestions extends AssignmentAttempt {
   questions: QuestionStore[];
   assignmentDetails?: AssignmentDetails;
-  assignmentVersion?: Partial<Pick<AssignmentDetails, "allotedTimeMinutes">> &
-    Record<string, unknown>;
+  /** The pinned version: only its id and time limit are served. */
+  assignmentVersion?: {
+    id?: number;
+    allotedTimeMinutes?: number | null;
+  } | null;
   assignment?: Partial<Pick<AssignmentDetails, "allotedTimeMinutes">> &
     Record<string, unknown>;
   assignmentVersionId?: number | null;

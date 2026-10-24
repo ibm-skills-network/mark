@@ -165,7 +165,18 @@ function LearnerHeader() {
       if (!assignmentId) return;
 
       try {
-        const supportedLanguages = await getSupportedLanguages(assignmentId);
+        let supportedLanguages: string[];
+        try {
+          supportedLanguages = await getSupportedLanguages(assignmentId);
+        } catch (error) {
+          // The languages route can refuse (403/404); keep the header usable
+          // with the authored language instead of skipping the session fetch.
+          console.warn(
+            `Supported languages unavailable for assignment ${assignmentId}; falling back to English`,
+            error,
+          );
+          supportedLanguages = ["en"];
+        }
         if (cancelled) return;
         const sortedLanguages = [...supportedLanguages].sort((a, b) =>
           getLanguageName(a).localeCompare(getLanguageName(b)),

@@ -136,6 +136,18 @@ describe("LearnerLayout attempt resolution", () => {
     expect(element.props.headline).toBe("No more attempts available");
   });
 
+  it("explains an unpublished assignment instead of the generic 500", async () => {
+    getAttemptsMock.mockResolvedValue([]);
+    createAttemptMock.mockResolvedValue("assignment not published");
+
+    const element = await LearnerLayout(props);
+
+    expect(element.type).toBe(ErrorModal);
+    expect(element.props.headline).toBe("This assignment is not published");
+    expect(element.props.statusCode).toBe(403);
+    expect(element.props.error).not.toBe("Attempt could not be created");
+  });
+
   it("does not render 'No more attempts available' for a time-range limit", async () => {
     getAttemptsMock.mockResolvedValue([]);
     createAttemptMock.mockResolvedValue("time range exceeded");

@@ -805,3 +805,37 @@ describe("LearnerHeader learner-fixable grading failure", () => {
     }
   });
 });
+
+describe("LearnerHeader supported-languages failure", () => {
+  const backend: {
+    getSupportedLanguages: jest.Mock;
+    getUser: jest.Mock;
+  } = jest.requireMock("@/lib/talkToBackend");
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    localStorage.clear();
+    mockUseParams.mockReturnValue({ assignmentId: "3428" });
+    mockSearchParams.mockImplementation(() => new URLSearchParams());
+    seedLearnerState(3428);
+    jest.spyOn(console, "warn").mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it("falls back to English and keeps loading the session when languages are refused", async () => {
+    backend.getSupportedLanguages.mockRejectedValueOnce(
+      new Error("Forbidden resource"),
+    );
+
+    await act(async () => {
+      render(<LearnerHeader />);
+    });
+
+    expect(backend.getSupportedLanguages).toHaveBeenCalledWith(3428);
+    expect(backend.getUser).toHaveBeenCalled();
+    expect(toast.error).not.toHaveBeenCalledWith("Failed to fetch data.");
+  });
+});

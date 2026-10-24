@@ -17,6 +17,7 @@ import { shallow } from "zustand/shallow";
 import { createWithEqualityFn } from "zustand/traditional";
 import { createSafeStorage } from "@/lib/safe-storage";
 import { withTextFileContent } from "@/lib/learner-file-content";
+import { parseRandomizedChoices } from "@/app/learner/utils/randomizedChoices";
 import type { QuestionUploadStatus, UploadStatusByQuestion } from "@/lib/utils";
 
 type GitHubQuestionState = {
@@ -944,12 +945,16 @@ export const useLearnerStore = createWithEqualityFn<
                 ? { ...prevDataForQuestion, ...q }
                 : q;
 
-              if (
-                (!questionData.choices || questionData.choices.length === 0) &&
-                (questionData as any).randomizedChoices &&
-                Array.isArray((questionData as any).randomizedChoices)
-              ) {
-                questionData.choices = (questionData as any).randomizedChoices;
+              if (!questionData.choices || questionData.choices.length === 0) {
+                const frozenChoices = parseRandomizedChoices(
+                  questionData.randomizedChoices,
+                );
+                if (frozenChoices && frozenChoices.length > 0) {
+                  // Attempt choices are sanitised to id + text; the store's
+                  // Choice type also covers the author shape.
+                  questionData.choices =
+                    frozenChoices as unknown as QuestionStore["choices"];
+                }
               }
 
               return questionData;

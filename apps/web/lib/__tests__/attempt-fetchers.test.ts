@@ -225,3 +225,53 @@ describe("getCompletedAttempt", () => {
     expect(console.error).toHaveBeenCalled();
   });
 });
+
+describe("plain JSON attempt reads", () => {
+  it("getAttempts asks the client not to transform the response", async () => {
+    apiClient.get.mockResolvedValue([{ ...attemptRow, grade: null }]);
+
+    const attempts = await getAttempts(1);
+
+    expect(apiClient.get).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ transformResponse: false }),
+    );
+    expect(attempts?.[0]?.grade).toBeNull();
+  });
+
+  it("getAttempt asks the client not to transform the response", async () => {
+    apiClient.get.mockResolvedValue({ ...attemptRow, questions: [] });
+
+    await getAttempt(1, 7);
+
+    expect(apiClient.get).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ transformResponse: false }),
+    );
+  });
+
+  it("uses the pinned version's time limit as the expiry fallback", async () => {
+    apiClient.get.mockResolvedValue({
+      ...attemptRow,
+      questions: [],
+      assignmentVersion: { id: 3, allotedTimeMinutes: 30 },
+    });
+
+    const attempt = await getAttempt(1, 7);
+
+    expect(attempt?.expiresAt).toBe("2026-07-01T00:30:00.000Z");
+  });
+
+  it("accepts a null assignmentVersion", async () => {
+    apiClient.get.mockResolvedValue({
+      ...attemptRow,
+      questions: [],
+      assignmentVersion: null,
+    });
+
+    const attempt = await getAttempt(1, 7);
+
+    expect(attempt?.id).toBe(7);
+    expect(attempt?.expiresAt).toBeNull();
+  });
+});

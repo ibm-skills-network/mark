@@ -2238,6 +2238,8 @@ export async function getAssignment(
   const responseBody = (await withTransientRetry(() =>
     apiClient.get(url, {
       quiet: options?.quiet ?? false,
+      // Plain JSON on the wire: no base64 decode, no string-to-JSON heuristic.
+      transformResponse: false,
       headers: {
         "Cache-Control": "no-cache",
         ...(cookies ? { Cookie: cookies } : {}),
