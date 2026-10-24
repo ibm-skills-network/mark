@@ -30,6 +30,7 @@ const handler = QuestionController.prototype.getOrCreateTranslation;
 // the package does not export them.
 const THROTTLER_LIMIT = "THROTTLER:LIMIT";
 const THROTTLER_TTL = "THROTTLER:TTL";
+const THROTTLER_SKIP = "THROTTLER:SKIP";
 
 describe("POST /assignments/:assignmentId/questions/:id/translations", () => {
   describe("route metadata", () => {
@@ -38,6 +39,12 @@ describe("POST /assignments/:assignmentId/questions/:id/translations", () => {
         AssignmentQuestionAccessControlGuard,
         UserThrottlerGuard,
       ]);
+    });
+
+    it("skips the strict throttler shared with admin auth", () => {
+      expect(Reflect.getMetadata(`${THROTTLER_SKIP}strict`, handler)).toBe(
+        true,
+      );
     });
 
     it("allows 60 requests per user per 60 s", () => {

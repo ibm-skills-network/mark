@@ -17,7 +17,7 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
-import { Throttle } from "@nestjs/throttler";
+import { SkipThrottle, Throttle } from "@nestjs/throttler";
 import { Response } from "express";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
@@ -221,6 +221,8 @@ export class QuestionController {
   // Access first, so only requests that may translate count against the
   // per-user limit. Every miss is a paid LLM call.
   @UseGuards(AssignmentQuestionAccessControlGuard, UserThrottlerGuard)
+  // Every registered throttler applies; only the default one is meant here.
+  @SkipThrottle({ strict: true })
   @Throttle({ default: { limit: 60, ttl: 60_000 } })
   @ApiOperation({ summary: "Request a translation for a question" })
   @ApiBody({ type: QuestionTranslationRequestDto })
