@@ -146,10 +146,10 @@ async fn writes_are_refused_when_disabled() {
     ] {
         let (status, retry, body) = call(app(false), "POST", uri, Some(LEARNER)).await;
         assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
-        assert_eq!(retry, None);
+        assert_eq!(retry.as_deref(), Some("1"));
         assert_eq!(
             body,
-            r#"{"statusCode":503,"message":"Writes are not enabled on this backend"}"#
+            r#"{"statusCode":503,"message":"Service temporarily unavailable"}"#
         );
     }
 }
@@ -172,6 +172,59 @@ async fn unreachable_database_is_503_with_retry_after() {
         assert_eq!(
             body,
             r#"{"statusCode":503,"message":"Service temporarily unavailable"}"#
+        );
+    }
+}
+
+#[tokio::test]
+async fn impossible_ids_are_answered_before_the_database() {
+    // The database is unreachable, so any query would answer 503.
+    for uri in [
+        "/api/v2/assignments/0",
+        "/api/v2/assignments/2147483648",
+        "/api/v2/assignments/0/languages",
+        "/api/v2/assignments/2147483648/languages",
+    ] {
+        let (status, _, body) = call(app(true), "GET", uri, Some(LEARNER)).await;
+        assert_eq!(status, StatusCode::NOT_FOUND, "{uri}");
+        assert_eq!(
+            body, r#"{"message":"Assignment not found","error":"Not Found","statusCode":404}"#,
+            "{uri}"
+        );
+    }
+    for (method, uri, message) in [
+        (
+            "GET",
+            "/api/v2/assignments/0/attempts",
+            "Invalid assignment ID",
+        ),
+        (
+            "POST",
+            "/api/v2/assignments/2147483648/attempts",
+            "Invalid assignment ID",
+        ),
+        (
+            "GET",
+            "/api/v2/assignments/2147483648/attempts/9",
+            "Invalid assignment ID",
+        ),
+        (
+            "GET",
+            "/api/v2/assignments/5/attempts/0",
+            "Invalid attempt ID",
+        ),
+        (
+            "POST",
+            "/api/v2/assignments/5/attempts/2147483648/abandon",
+            "Invalid attempt ID",
+        ),
+    ] {
+        let (status, _, body) = call(app(true), method, uri, Some(LEARNER)).await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "{method} {uri}");
+        assert_eq!(
+            body,
+            format!(r#"{{"message":"{message}","error":"Forbidden","statusCode":403}}"#),
+            "{method} {uri}"
         );
     }
 }

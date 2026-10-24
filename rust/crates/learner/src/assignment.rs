@@ -60,7 +60,8 @@ pub struct LearnerAssignment {
 /// Defaults applied after version and base row (legacy `DEFAULTS`).
 pub mod defaults {
     pub const ATTEMPTS_BEFORE_COOL_DOWN: i32 = 1;
-    pub const RETAKE_COOL_DOWN_MINUTES: i32 = 5;
+    /// No cooldown, matching what create enforces for a null value.
+    pub const RETAKE_COOL_DOWN_MINUTES: i32 = 0;
     pub const PASSING_GRADE: i32 = 50;
     pub const QUESTION_DISPLAY: &str = "ONE_PER_PAGE";
     pub const NUM_ATTEMPTS: i32 = -1;
@@ -78,7 +79,8 @@ fn question_controls(value: Option<Value>) -> Option<Value> {
 }
 
 /// Version -> base -> defaults for everything except the limit fields,
-/// which come from the base row (then defaults). `questionOrder` is the
+/// `published` and `showAssignmentScore`, which come from the base row (then
+/// defaults). `questionOrder` is the
 /// version's when non-empty.
 pub fn merge_learner_view(
     base: &AssignmentRow,
@@ -123,8 +125,8 @@ pub fn merge_learner_view(
         } else {
             v.question_order.clone()
         },
-        published: prefer!(published).unwrap_or(false),
-        show_assignment_score: prefer!(show_assignment_score).unwrap_or(true),
+        published: b.published.unwrap_or(false),
+        show_assignment_score: b.show_assignment_score.unwrap_or(true),
         show_question_score: prefer!(show_question_score).unwrap_or(true),
         show_submission_feedback: prefer!(show_submission_feedback).unwrap_or(true),
         show_questions: prefer!(show_questions).unwrap_or(true),
@@ -189,13 +191,14 @@ pub async fn get_assignment(
     let lang = Lang::from_query(query.as_deref());
     info!(assignment_id, user_id = session.log_user(), role = role.as_str(), lang = %lang.code, "get assignment requested");
 
+    let id = access::assignment_route_id(&session, role, assignment_id)?;
     let mut conn = state.pool.acquire().await?;
     let heal = if state.accept_operations {
         Heal::Allowed
     } else {
         Heal::Never
     };
-    let id = access::assignment_read(&mut conn, &session, role, assignment_id, heal).await?;
+    let id = access::assignment_read(&mut conn, &session, id, heal).await?;
     if role == Role::Author {
         info!(
             assignment_id = id,
@@ -255,8 +258,9 @@ pub async fn get_languages(
         role = role.as_str(),
         "get languages requested"
     );
+    let id = access::assignment_route_id(&session, role, assignment_id)?;
     let mut conn = state.pool.acquire().await?;
-    let id = access::assignment_read(&mut conn, &session, role, assignment_id, Heal::Never).await?;
+    let id = access::assignment_read(&mut conn, &session, id, Heal::Never).await?;
     let languages = with_english(store::language_codes(&mut conn, id).await?);
     info!(
         assignment_id = id,
@@ -328,9 +332,9 @@ mod tests {
         assert_eq!(view.instructions.as_deref(), Some("v instr"));
         // false/0 from the version win over the base row.
         assert_eq!(view.passing_grade, 0);
-        assert!(!view.published);
-        assert!(!view.show_assignment_score);
-        // Limits come from the base row, then defaults.
+        // published, showAssignmentScore and limits come from the base row.
+        assert!(view.published);
+        assert!(view.show_assignment_score);
         assert_eq!(view.num_attempts, 3);
         assert_eq!(view.alloted_time_minutes, Some(30));
         assert_eq!(view.attempts_per_time_range, Some(2));
@@ -355,7 +359,21 @@ mod tests {
         row.settings.num_attempts = None;
         row.settings.question_display = None;
         row.settings.show_questions = None;
+        row.settings.retake_attempt_cool_down_minutes = None;
+        row.settings.published = None;
+        row.settings.show_assignment_score = None;
+        let version = SettingsRow {
+            retake_attempt_cool_down_minutes: Some(7),
+            published: Some(true),
+            show_assignment_score: Some(false),
+            ..SettingsRow::default()
+        };
+        let view = merge_learner_view(&row, Some(&version));
+        assert_eq!(view.retake_attempt_cool_down_minutes, 0);
+        assert!(!view.published);
+        assert!(view.show_assignment_score);
         let view = merge_learner_view(&row, None);
+        assert_eq!(view.retake_attempt_cool_down_minutes, 0);
         assert_eq!(view.passing_grade, 50);
         assert_eq!(view.num_attempts, -1);
         assert_eq!(view.question_display, "ONE_PER_PAGE");

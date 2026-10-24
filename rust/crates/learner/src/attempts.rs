@@ -15,7 +15,7 @@ use crate::access::{self, Intent};
 use crate::attempt_view::{self, AttemptQuestion, ViewContext};
 use crate::choices;
 use crate::error::{ApiError, ErrorCode};
-use crate::params::{iso, iso_opt, like_prefix, now_millis, Lang};
+use crate::params::{iso, iso_opt, like_prefix, now_millis, whole_f64, Lang};
 use crate::principal::{Role, UserSession};
 use crate::shuffle;
 use crate::store::{
@@ -33,6 +33,7 @@ pub struct AttemptSummary {
     pub assignment_version_id: Option<i32>,
     pub user_id: String,
     pub submitted: bool,
+    #[serde(serialize_with = "whole_f64")]
     pub grade: Option<f64>,
     pub expires_at: Option<String>,
     pub created_at: String,
@@ -79,6 +80,7 @@ pub struct QuestionResponseView {
     pub assignment_attempt_id: i32,
     pub question_id: i32,
     pub learner_response: Value,
+    #[serde(serialize_with = "whole_f64")]
     pub points: Option<f64>,
     pub feedback: Value,
     pub metadata: Value,
@@ -322,14 +324,26 @@ pub fn freeze_selection(
     }
 }
 
+/// Live variants belonging to a pool row. A version row with a null
+/// `questionId` has none: its served id is the version row's own id, which
+/// may coincide with an unrelated live question's id.
+pub fn variants_of<'a>(
+    question: &PoolQuestionRow,
+    variants: &'a [PoolVariantRow],
+) -> Vec<&'a PoolVariantRow> {
+    let Some(live_id) = question.live_question_id else {
+        return Vec::new();
+    };
+    variants
+        .iter()
+        .filter(|v| v.question_id == live_id)
+        .collect()
+}
+
 fn freeze_all(pool: &[PoolQuestionRow], variants: &[PoolVariantRow]) -> Vec<FrozenSelectionInsert> {
     let mut rng = rand::rng();
     pool.iter()
-        .map(|q| {
-            let own: Vec<&PoolVariantRow> =
-                variants.iter().filter(|v| v.question_id == q.id).collect();
-            freeze_selection(q, &own, &mut rng)
-        })
+        .map(|q| freeze_selection(q, &variants_of(q, variants), &mut rng))
         .collect()
 }
 
@@ -795,6 +809,7 @@ mod tests {
     fn freeze_selection_stores_json_text() {
         let q = PoolQuestionRow {
             id: 4,
+            live_question_id: Some(4),
             choices: Some(json!([{"id": 1, "choice": "a", "isCorrect": true}])),
             randomized_choices: Some(false),
         };
@@ -823,6 +838,36 @@ mod tests {
     }
 
     #[test]
+    fn null_question_id_version_rows_get_no_variants() {
+        let variant = |id, question_id| PoolVariantRow {
+            id,
+            question_id,
+            choices: None,
+            randomized_choices: None,
+        };
+        let variants = vec![variant(1, 40), variant(2, 41), variant(3, 40)];
+        // A version row whose questionId is null serves its own id (40),
+        // which collides with live question 40; it must not take 40's variants.
+        let orphan = PoolQuestionRow {
+            id: 40,
+            live_question_id: None,
+            choices: None,
+            randomized_choices: None,
+        };
+        assert!(variants_of(&orphan, &variants).is_empty());
+        let linked = PoolQuestionRow {
+            id: 40,
+            live_question_id: Some(40),
+            ..orphan
+        };
+        let ids: Vec<i32> = variants_of(&linked, &variants)
+            .iter()
+            .map(|v| v.id)
+            .collect();
+        assert_eq!(ids, vec![1, 3]);
+    }
+
+    #[test]
     fn summary_hides_grade() {
         let row = AttemptRow {
             id: 1,
@@ -848,5 +893,55 @@ mod tests {
         assert_eq!(wire["createdAt"], "2026-10-23T01:02:00.000Z");
         assert_eq!(wire["expiresAt"], Value::Null);
         assert_eq!(wire.as_object().unwrap().len(), 11);
+    }
+
+    #[test]
+    fn whole_number_floats_render_as_integers() {
+        let row = AttemptRow {
+            id: 1,
+            assignment_id: 2,
+            assignment_version_id: None,
+            user_id: "u".into(),
+            submitted: true,
+            grade: Some(1.0),
+            expires_at: None,
+            created_at: at(1, 2),
+            question_order: vec![],
+            comments: None,
+            preferred_language: None,
+        };
+        let text = serde_json::to_string(&summary(&row, true)).unwrap();
+        assert!(text.contains(r#""grade":1,"#), "{text}");
+        let half = AttemptRow {
+            grade: Some(0.5),
+            ..row.clone()
+        };
+        let text = serde_json::to_string(&summary(&half, true)).unwrap();
+        assert!(text.contains(r#""grade":0.5,"#), "{text}");
+        let zero = AttemptRow {
+            grade: Some(0.0),
+            ..row.clone()
+        };
+        let text = serde_json::to_string(&summary(&zero, true)).unwrap();
+        assert!(text.contains(r#""grade":0,"#), "{text}");
+        let text = serde_json::to_string(&summary(&row, false)).unwrap();
+        assert!(text.contains(r#""grade":null,"#), "{text}");
+
+        let response = |points| QuestionResponseView {
+            id: 1,
+            assignment_attempt_id: 1,
+            question_id: 1,
+            learner_response: Value::String("x".into()),
+            points,
+            feedback: Value::Null,
+            metadata: Value::Null,
+            graded_at: None,
+        };
+        let text = serde_json::to_string(&response(Some(2.0))).unwrap();
+        assert!(text.contains(r#""points":2,"#), "{text}");
+        let text = serde_json::to_string(&response(Some(1.5))).unwrap();
+        assert!(text.contains(r#""points":1.5,"#), "{text}");
+        let text = serde_json::to_string(&response(None)).unwrap();
+        assert!(text.contains(r#""points":null,"#), "{text}");
     }
 }

@@ -45,20 +45,34 @@ pub enum Heal {
     Never,
 }
 
-/// Assignment-level access for `GET /assignments/{id}` (with heal) and
-/// `GET /assignments/{id}/languages` (without). `assignment_id` is `None`
-/// when the route id was a well-formed integer that cannot name a row.
-pub async fn assignment_read(
-    conn: &mut PgConnection,
+/// The checks for the assignment routes that need no database: author
+/// scope, then 404 for a well-formed id that cannot name a row (`None`).
+/// Run before acquiring a connection.
+pub fn assignment_route_id(
     session: &UserSession,
     role: Role,
     assignment_id: Option<i32>,
-    heal: Heal,
 ) -> Result<i32, ApiError> {
     check_author_scope(session, role, assignment_id)?;
-    let Some(id) = assignment_id else {
-        return Err(assignment_not_found());
-    };
+    assignment_id.ok_or_else(|| {
+        warn!(
+            user_id = session.log_user(),
+            denial_reason = "assignment_id_out_of_range",
+            "access denied"
+        );
+        assignment_not_found()
+    })
+}
+
+/// Assignment-level access for `GET /assignments/{id}` (with heal) and
+/// `GET /assignments/{id}/languages` (without). `id` comes from
+/// [`assignment_route_id`].
+pub async fn assignment_read(
+    conn: &mut PgConnection,
+    session: &UserSession,
+    id: i32,
+    heal: Heal,
+) -> Result<i32, ApiError> {
     let group = session.non_empty_group_id();
     let Some(row) = store::assignment_access(conn, id, group).await? else {
         warn!(
@@ -273,6 +287,44 @@ mod tests {
         assert!(check_author_scope(&author, Role::Author, None).is_err());
         let learner = session("learner", Some(5));
         assert!(check_author_scope(&learner, Role::Learner, Some(6)).is_ok());
+    }
+
+    #[test]
+    fn impossible_assignment_ids_are_404() {
+        let learner = session("learner", Some(5));
+        assert_eq!(
+            assignment_route_id(&learner, Role::Learner, Some(5)).unwrap(),
+            5
+        );
+        // parse_int_pipe yields None for 0, negatives and ids above i32::MAX.
+        for raw in ["0", "-3", "2147483648", "99999999999999999999"] {
+            let parsed = crate::params::parse_int_pipe(raw).unwrap();
+            let err = assignment_route_id(&learner, Role::Learner, parsed).unwrap_err();
+            assert_eq!(
+                (err.status(), err.message()),
+                (StatusCode::NOT_FOUND, "Assignment not found"),
+                "{raw}"
+            );
+        }
+    }
+
+    #[test]
+    fn impossible_attempt_route_ids_are_403() {
+        let s = session("learner", None);
+        for raw in ["0", "2147483648", "-1", "1.5"] {
+            let err = attempt_route_assignment_id(raw, &s).unwrap_err();
+            assert_eq!(
+                (err.status(), err.message()),
+                (StatusCode::FORBIDDEN, "Invalid assignment ID"),
+                "{raw}"
+            );
+            let err = attempt_route_attempt_id(raw, &s).unwrap_err();
+            assert_eq!(
+                (err.status(), err.message()),
+                (StatusCode::FORBIDDEN, "Invalid attempt ID"),
+                "{raw}"
+            );
+        }
     }
 
     #[test]

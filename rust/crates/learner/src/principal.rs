@@ -3,8 +3,8 @@
 //! The gateway verifies the session cookie and sends a `user-session` header
 //! holding ASCII-escaped JSON. This service trusts that header and must only
 //! be reachable from the gateway. Missing header -> 401, unparsable -> 400.
-//! Fields are read leniently (unknown keys ignored, wrong-typed values treated
-//! as absent) because the guards decide what an absent value means.
+//! Unknown keys are ignored; a present field of the wrong type is a malformed
+//! header (400). The guards decide what an absent value means.
 
 use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
@@ -63,15 +63,24 @@ impl UserSession {
         let Value::Object(map) = value else {
             return Err(invalid());
         };
-        let string = |key: &str| map.get(key).and_then(Value::as_str).map(str::to_owned);
+        // A present field of the wrong type is a malformed header (400), the
+        // same as the legacy middleware; a JSON null counts as absent.
+        let string = |key: &str| match map.get(key) {
+            None | Some(Value::Null) => Ok(None),
+            Some(Value::String(s)) => Ok(Some(s.clone())),
+            Some(_) => Err(invalid()),
+        };
+        let role = string("role")?;
+        let assignment_id = match map.get("assignmentId") {
+            None | Some(Value::Null) => None,
+            Some(v @ Value::Number(_)) => Some(integral(v).ok_or_else(invalid)?),
+            Some(_) => return Err(invalid()),
+        };
         Ok(Self {
-            user_id: string("userId"),
-            role: map
-                .get("role")
-                .and_then(Value::as_str)
-                .and_then(Role::parse),
-            group_id: string("groupId"),
-            assignment_id: map.get("assignmentId").and_then(integral),
+            user_id: string("userId")?,
+            role: role.as_deref().and_then(Role::parse),
+            group_id: string("groupId")?,
+            assignment_id,
         })
     }
 
@@ -191,14 +200,29 @@ mod tests {
     }
 
     #[test]
-    fn unknown_or_mistyped_fields_are_absent() {
-        let s =
-            UserSession::parse(br#"{"role":"Learner","groupId":5,"assignmentId":"7"}"#).unwrap();
+    fn unknown_role_and_null_fields_are_absent() {
+        let s = UserSession::parse(br#"{"role":"Learner","groupId":null,"assignmentId":null}"#)
+            .unwrap();
         assert_eq!(s.role, None);
         assert_eq!(s.group_id, None);
         assert_eq!(s.assignment_id, None);
         assert_eq!(s.user_id, None);
         assert!(s.require_role(&[Role::Learner]).is_err());
+    }
+
+    #[test]
+    fn mistyped_fields_are_400() {
+        for raw in [
+            &br#"{"userId":5}"#[..],
+            br#"{"groupId":5}"#,
+            br#"{"role":7}"#,
+            br#"{"assignmentId":"7"}"#,
+            br#"{"assignmentId":7.5}"#,
+        ] {
+            let err = UserSession::parse(raw).unwrap_err();
+            assert_eq!(err.status(), StatusCode::BAD_REQUEST, "{raw:?}");
+            assert_eq!(err.message(), "Invalid user-session header");
+        }
     }
 
     #[test]

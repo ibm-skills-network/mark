@@ -121,6 +121,25 @@ pub fn now_millis() -> NaiveDateTime {
     chrono::Utc::now().naive_utc().trunc_subsecs(3)
 }
 
+/// `serialize_with` for `Option<f64>`: a whole number within the exactly
+/// representable integer range is written as an integer (`1`, not `1.0`),
+/// as `JSON.stringify` does; anything else as a float; `None` as `null`.
+#[allow(clippy::ref_option)] // serde's serialize_with passes &Option<T>
+pub fn whole_f64<S: serde::Serializer>(
+    value: &Option<f64>,
+    serializer: S,
+) -> Result<S::Ok, S::Error> {
+    const MAX_EXACT: f64 = 9_007_199_254_740_992.0; // 2^53
+    match *value {
+        None => serializer.serialize_none(),
+        Some(f) if f.fract() == 0.0 && f.abs() <= MAX_EXACT => {
+            #[allow(clippy::cast_possible_truncation)] // whole and within 2^53
+            serializer.serialize_i64(f as i64)
+        }
+        Some(f) => serializer.serialize_f64(f),
+    }
+}
+
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
 mod tests {

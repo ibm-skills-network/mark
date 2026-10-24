@@ -772,7 +772,12 @@ pub async fn insert_attempt(
 /// A question in the creation pool with what variant selection needs.
 #[derive(Debug, Clone, PartialEq)]
 pub struct PoolQuestionRow {
+    /// The id served to the learner: `COALESCE("questionId", id)` for a
+    /// version row, the question id for a live row.
     pub id: i32,
+    /// The live `Question` this row belongs to, or `None` for a version row
+    /// whose `questionId` is null. Only this id may pick up live variants.
+    pub live_question_id: Option<i32>,
     pub choices: Option<Value>,
     pub randomized_choices: Option<bool>,
 }
@@ -780,6 +785,7 @@ pub struct PoolQuestionRow {
 fn pool_row(r: &PgRow) -> Result<PoolQuestionRow> {
     Ok(PoolQuestionRow {
         id: r.try_get("poolId")?,
+        live_question_id: r.try_get("liveQuestionId")?,
         choices: r.try_get("choices")?,
         randomized_choices: r.try_get("randomizedChoices")?,
     })
@@ -790,7 +796,7 @@ pub async fn version_pool(
     version_id: i32,
 ) -> Result<Vec<PoolQuestionRow>> {
     q(
-        r#"SELECT COALESCE("questionId", id) AS "poolId", choices, "randomizedChoices"
+        r#"SELECT COALESCE("questionId", id) AS "poolId", "questionId" AS "liveQuestionId", choices, "randomizedChoices"
        FROM "QuestionVersion" WHERE "assignmentVersionId" = $1 ORDER BY id"#,
     )
     .bind(version_id)
@@ -805,8 +811,10 @@ pub async fn live_pool(
     conn: &mut PgConnection,
     assignment_id: i32,
 ) -> Result<Vec<PoolQuestionRow>> {
-    q(r#"SELECT id AS "poolId", choices, "randomizedChoices"
-       FROM "Question" WHERE "assignmentId" = $1 AND "isDeleted" = false ORDER BY id"#)
+    q(
+        r#"SELECT id AS "poolId", id AS "liveQuestionId", choices, "randomizedChoices"
+       FROM "Question" WHERE "assignmentId" = $1 AND "isDeleted" = false ORDER BY id"#,
+    )
     .bind(assignment_id)
     .fetch_all(conn)
     .await?

@@ -250,10 +250,7 @@ fn frozen_question(
     }
 
     // The frozen list itself, carrying isCorrect/feedback only when revealed.
-    let randomized_choices = frozen
-        .as_ref()
-        .filter(|f| !f.is_empty())
-        .map(|f| choices::sanitize(f, ctx.reveal));
+    let randomized_choices = choices::sanitize_frozen(frozen.as_deref(), ctx.reveal);
 
     AttemptQuestion {
         id: q.id,
@@ -467,11 +464,79 @@ mod tests {
         assert_eq!(q10["choices"][0], json!({"id": 3, "choice": "c"}));
         assert_eq!(
             q10["randomizedChoices"][0],
-            json!({"id": 3, "choice": "x", "isCorrect": true})
+            json!({"id": 3, "choice": "x", "isCorrect": true, "feedback": null})
         );
         assert!(!q10.to_string().contains("points"));
+        let text = serde_json::to_string(&qs[0]).unwrap();
+        assert!(text.contains(r#""totalPoints":2,"#), "{text}");
         let hidden = serde_json::to_value(&build("en", false, &[], &[])[0]).unwrap();
         assert!(!hidden.to_string().contains("isCorrect"));
+    }
+
+    #[test]
+    fn revealed_translated_choices_carry_feedback_but_choices_do_not() {
+        let rows = vec![tr(
+            11,
+            "fr",
+            Some(json!([
+                {"id": 1, "choice": "A", "isCorrect": true, "feedback": "oui", "points": 1},
+                {"id": 2, "choice": "B", "isCorrect": false}
+            ])),
+        )];
+        let qs = build("fr", true, &[], &rows);
+        let q11 = serde_json::to_value(&qs[1]).unwrap();
+        assert_eq!(
+            q11["translations"]["fr"]["translatedChoices"],
+            json!([
+                {"id": 1, "choice": "A", "isCorrect": true, "feedback": "oui"},
+                {"id": 2, "choice": "B", "isCorrect": false, "feedback": null}
+            ])
+        );
+        assert_eq!(
+            q11["choices"],
+            json!([{"id": 1, "choice": "A"}, {"id": 2, "choice": "B"}])
+        );
+        assert!(!q11.to_string().contains("points"));
+        let hidden = serde_json::to_value(&build("fr", false, &[], &rows)[1]).unwrap();
+        assert_eq!(
+            hidden["translations"]["fr"]["translatedChoices"],
+            json!([{"id": 1, "choice": "A"}, {"id": 2, "choice": "B"}])
+        );
+    }
+
+    #[test]
+    fn unusable_stored_lists_are_null() {
+        // A non-array translatedChoices is null and the authored choices show.
+        let rows = vec![
+            tr(10, "fr", Some(json!({"a": {"id": 1, "choice": "A"}}))),
+            tr(11, "fr", Some(json!("5"))),
+        ];
+        let qs = build("fr", false, &[], &rows);
+        for q in &qs {
+            let wire = serde_json::to_value(q).unwrap();
+            assert_eq!(wire["translations"]["fr"]["translatedChoices"], Value::Null);
+            assert_eq!(wire["choices"].as_array().unwrap().len(), 3);
+        }
+        // A frozen list with no usable entries is null, not [].
+        let lang = Lang::from_query(None);
+        let selections = vec![FrozenSelectionRow {
+            question_id: 10,
+            randomized_choices: Some(Value::String(r#"[1,"x",{"id":2}]"#.into())),
+            variant: None,
+        }];
+        let qs = build_questions(
+            &[source(10, abc())],
+            &selections,
+            &[],
+            &ViewContext {
+                assignment_id: 7,
+                lang: &lang,
+                reveal: true,
+                question_order: &[],
+            },
+        );
+        let wire = serde_json::to_value(&qs[0]).unwrap();
+        assert_eq!(wire["randomizedChoices"], Value::Null);
     }
 
     #[test]

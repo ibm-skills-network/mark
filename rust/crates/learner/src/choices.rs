@@ -51,10 +51,24 @@ pub fn parse_choices(value: Option<&Value>) -> Vec<Value> {
     }
 }
 
-/// Like `parse_choices`, but `None` for falsy input, so callers can tell
-/// "no stored translated choices" from "an empty list".
+/// Stored translated choices: an array, or a string that parses to one.
+/// Anything else (falsy, number, object, unparsable text, text that parses
+/// to a non-array) is `None`, served as `translatedChoices: null`.
 pub fn parse_optional_choices(value: Option<&Value>) -> Option<Vec<Value>> {
-    value.filter(|v| truthy(v)).map(|v| parse_choices(Some(v)))
+    match value? {
+        Value::Array(items) => Some(items.clone()),
+        Value::String(s) => match serde_json::from_str::<Value>(s).ok()? {
+            Value::Array(items) => Some(items),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// The frozen list served as `randomizedChoices`: `None` when nothing
+/// survives sanitising, so the wire value is `null`, never `[]`.
+pub fn sanitize_frozen(frozen: Option<&[Value]>, reveal: bool) -> Option<Vec<LearnerChoice>> {
+    Some(sanitize(frozen?, reveal)).filter(|list| !list.is_empty())
 }
 
 /// The frozen order stored on `AssignmentAttemptQuestionVariant`: a JSON
@@ -150,7 +164,8 @@ pub struct LearnerChoice {
     pub choice: String,
     #[serde(rename = "isCorrect", skip_serializing_if = "Option::is_none")]
     pub is_correct: Option<bool>,
-    /// Outer `None`: omitted. `Some(None)`: `null`.
+    /// Outer `None`: omitted (answers hidden). `Some(None)`: `null` (shown,
+    /// but the author gave no feedback).
     #[serde(skip_serializing_if = "Option::is_none")]
     #[allow(clippy::option_option)]
     pub feedback: Option<Option<String>>,
@@ -171,9 +186,11 @@ fn js_number_string(n: &serde_json::Number) -> String {
     }
 }
 
-/// Keep `{id, choice}`; add `isCorrect`/`feedback` only when `reveal` (the
-/// attempt is submitted and visibility allows). `points` never. Entries
-/// without a string or number `choice` are dropped.
+/// Keep `{id, choice}`; when `reveal` (the attempt is submitted and
+/// visibility allows) add `isCorrect` if stored as a boolean and always add
+/// `feedback` (the stored string, else `null`). `points` never. Entries
+/// without a string or number `choice` are dropped; a non-integer `id` is
+/// `null`.
 pub fn sanitize(choices: &[Value], reveal: bool) -> Vec<LearnerChoice> {
     choices
         .iter()
@@ -186,7 +203,10 @@ pub fn sanitize(choices: &[Value], reveal: bool) -> Vec<LearnerChoice> {
             };
             let id = c.get("id").and_then(integral_id);
             let (is_correct, feedback) = if reveal {
-                (c.get("isCorrect").and_then(Value::as_bool), feedback_of(c))
+                (
+                    c.get("isCorrect").and_then(Value::as_bool),
+                    Some(feedback_of(c)),
+                )
             } else {
                 (None, None)
             };
@@ -200,13 +220,9 @@ pub fn sanitize(choices: &[Value], reveal: bool) -> Vec<LearnerChoice> {
         .collect()
 }
 
-#[allow(clippy::option_option)] // absent vs null vs text
-fn feedback_of(c: &Map<String, Value>) -> Option<Option<String>> {
-    match c.get("feedback")? {
-        Value::Null => Some(None),
-        Value::String(s) => Some(Some(s.clone())),
-        _ => None,
-    }
+/// Stored feedback text; absent, null or non-string is `None`.
+fn feedback_of(c: &Map<String, Value>) -> Option<String> {
+    c.get("feedback").and_then(Value::as_str).map(str::to_owned)
 }
 
 fn integral_id(v: &Value) -> Option<i64> {
@@ -324,9 +340,82 @@ mod tests {
             json!([
                 {"id": 1, "choice": "a", "isCorrect": true, "feedback": "yes"},
                 {"id": null, "choice": "4", "isCorrect": false, "feedback": null},
-                {"id": null, "choice": "1.5"}
+                {"id": null, "choice": "1.5", "feedback": null}
             ])
         );
         assert!(!shown.to_string().contains("points"));
+    }
+
+    #[test]
+    fn revealed_feedback_is_always_present() {
+        let raw = vec![
+            json!({"id": 1, "choice": "a", "isCorrect": true}),
+            json!({"id": 2, "choice": "b", "isCorrect": "yes", "feedback": 7}),
+            json!({"id": 3, "choice": "c", "feedback": "why"}),
+        ];
+        let text = serde_json::to_string(&sanitize(&raw, true)).unwrap();
+        assert_eq!(
+            text,
+            r#"[{"id":1,"choice":"a","isCorrect":true,"feedback":null},{"id":2,"choice":"b","feedback":null},{"id":3,"choice":"c","feedback":"why"}]"#
+        );
+        let hidden = serde_json::to_string(&sanitize(&raw, false)).unwrap();
+        assert_eq!(
+            hidden,
+            r#"[{"id":1,"choice":"a"},{"id":2,"choice":"b"},{"id":3,"choice":"c"}]"#
+        );
+    }
+
+    #[test]
+    fn non_integer_ids_are_null() {
+        let raw = vec![
+            json!({"id": 1.5, "choice": "a"}),
+            json!({"id": 2.0, "choice": "b"}),
+            json!({"id": "3", "choice": "c"}),
+            json!({"id": true, "choice": "d"}),
+        ];
+        assert_eq!(
+            serde_json::to_value(sanitize(&raw, false)).unwrap(),
+            json!([
+                {"id": null, "choice": "a"},
+                {"id": 2, "choice": "b"},
+                {"id": null, "choice": "c"},
+                {"id": null, "choice": "d"}
+            ])
+        );
+    }
+
+    #[test]
+    fn frozen_list_that_sanitises_to_nothing_is_null() {
+        assert_eq!(sanitize_frozen(None, true), None);
+        assert_eq!(sanitize_frozen(Some(&[]), true), None);
+        let junk = vec![json!(1), json!("x"), json!({"id": 1})];
+        assert_eq!(sanitize_frozen(Some(&junk), false), None);
+        let ok = vec![json!({"id": 1, "choice": "a"})];
+        assert_eq!(sanitize_frozen(Some(&ok), false).map(|l| l.len()), Some(1));
+    }
+
+    #[test]
+    fn translated_choices_must_be_an_array() {
+        assert_eq!(parse_optional_choices(None), None);
+        assert_eq!(parse_optional_choices(Some(&json!(null))), None);
+        assert_eq!(parse_optional_choices(Some(&json!(5))), None);
+        assert_eq!(
+            parse_optional_choices(Some(&json!({"a": {"choice": "x"}}))),
+            None
+        );
+        assert_eq!(parse_optional_choices(Some(&json!(""))), None);
+        assert_eq!(parse_optional_choices(Some(&json!("not json"))), None);
+        assert_eq!(parse_optional_choices(Some(&json!("7"))), None);
+        assert_eq!(parse_optional_choices(Some(&json!("{\"a\":1}"))), None);
+        assert_eq!(parse_optional_choices(Some(&json!("\"[]\""))), None);
+        assert_eq!(parse_optional_choices(Some(&json!("[]"))), Some(vec![]));
+        assert_eq!(
+            parse_optional_choices(Some(&json!([{"choice": "x"}]))),
+            Some(vec![json!({"choice": "x"})])
+        );
+        assert_eq!(
+            parse_optional_choices(Some(&json!("[1]"))),
+            Some(vec![json!(1)])
+        );
     }
 }

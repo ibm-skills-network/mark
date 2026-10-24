@@ -11,7 +11,6 @@
 // arms log and return.
 #![allow(clippy::single_match_else)]
 
-use axum::http::StatusCode;
 use axum::routing::{get, post};
 use axum::Router;
 use sqlx::PgPool;
@@ -38,12 +37,11 @@ pub struct LearnerState {
     pub accept_operations: bool,
 }
 
+/// The standard 503 (with `Retry-After: 1`), so a dark deployment looks like
+/// a briefly unavailable one to the client.
 async fn writes_disabled() -> ApiError {
     tracing::warn!("write refused: accept_operations is off on this backend");
-    ApiError::plain(
-        StatusCode::SERVICE_UNAVAILABLE,
-        "Writes are not enabled on this backend",
-    )
+    ApiError::unavailable()
 }
 
 /// The learner routes, relative to `/api/v2`.
