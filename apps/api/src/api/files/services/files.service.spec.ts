@@ -36,6 +36,9 @@ describe("FilesService", () => {
         .fn()
         .mockResolvedValue({ type: "UPLOAD", responseType: "REPORT" }),
     },
+    questionVersion: {
+      findFirst: jest.fn().mockResolvedValue(null),
+    },
     fileUpload: {
       create: jest.fn(),
       findUnique: jest.fn(),
@@ -556,6 +559,7 @@ describe("FilesService", () => {
   describe("learner file type must fit the question", () => {
     const prisma = mockPrismaService as unknown as {
       question: { findFirst: jest.Mock };
+      questionVersion: { findFirst: jest.Mock };
     };
     const request = (fileName: string) => ({
       fileName,
@@ -623,6 +627,50 @@ describe("FilesService", () => {
           UserRole.LEARNER,
         ),
       ).rejects.toThrow("Invalid upload context");
+      expect(prisma.questionVersion.findFirst).toHaveBeenCalledWith({
+        where: {
+          questionId: 8645,
+          assignmentVersion: {
+            assignmentId: 2688,
+            assignmentAttempts: {
+              some: { userId: "learner@example.com", submitted: false },
+            },
+          },
+        },
+        select: { type: true, responseType: true },
+      });
+    });
+
+    it("accepts a question from the pinned version of the learner's open attempt after a republish", async () => {
+      prisma.question.findFirst.mockResolvedValueOnce(null);
+      prisma.questionVersion.findFirst.mockResolvedValueOnce({
+        type: "UPLOAD",
+        responseType: "SPREADSHEET",
+      });
+
+      await expect(
+        service.generateUploadUrl(
+          request("budget.xlsx"),
+          "learner@example.com",
+          UserRole.LEARNER,
+        ),
+      ).resolves.toMatchObject({ bucket: "learner-bucket" });
+    });
+
+    it("still applies the question's type list to a pinned-version question", async () => {
+      prisma.question.findFirst.mockResolvedValueOnce(null);
+      prisma.questionVersion.findFirst.mockResolvedValueOnce({
+        type: "UPLOAD",
+        responseType: "IMAGES",
+      });
+
+      await expect(
+        service.generateUploadUrl(
+          request("budget.xlsx"),
+          "learner@example.com",
+          UserRole.LEARNER,
+        ),
+      ).rejects.toThrow("This question doesn't accept .xlsx files");
     });
 
     it("leaves a question with no type list unrestricted", async () => {
