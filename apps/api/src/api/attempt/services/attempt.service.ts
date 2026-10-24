@@ -41,6 +41,8 @@ import {
   JobQueueName,
 } from "../../../job-queue/job-queue.constants";
 import { JobQueueService } from "../../../job-queue/job-queue.service";
+import { AttemptWorkerUserSession } from "../../../job-queue/job-queue.types";
+import { buildGradingActiveKey } from "../../../job-queue/grading-active-key";
 import { JobStateService } from "../../../job-queue/job-state.service";
 import { JobStateRecord } from "../../../job-queue/job-state.types";
 import { LearnerFacingGradingError } from "../../llm/features/grading/errors/learner-facing-grading.error";
@@ -63,6 +65,23 @@ import {
 } from "./grading-progress.service";
 import { AttemptClosedException } from "../../assignment/attempt/helper/submission-deadline.helper";
 
+/** Returned with a newly created learner grading job. */
+export const GRADING_JOB_CREATED_MESSAGE =
+  "Grading job created. Use the SSE endpoint to track progress.";
+
+/** Returned when a learner grading job for the attempt is already in flight. */
+export const GRADING_JOB_REUSED_MESSAGE =
+  "A grading job is already running for this attempt. Reusing existing job.";
+
+/**
+ * The session fields a learner grading job carries to the worker. A
+ * `UserSessionRequest` satisfies it, and so does a caller that holds only
+ * these fields.
+ */
+export interface GradingJobRequester {
+  userSession: AttemptWorkerUserSession;
+}
+
 @Injectable()
 export class AttemptServiceV2 {
   private readonly logger = new Logger(AttemptServiceV2.name);
@@ -79,19 +98,6 @@ export class AttemptServiceV2 {
     private readonly gradingProgressService?: GradingProgressService,
   ) {}
 
-  private buildGradingActiveKey(
-    userId: string,
-    assignmentId: number,
-    attemptId: number | null,
-  ): string {
-    return [
-      "grading",
-      userId,
-      String(assignmentId),
-      attemptId === null ? "author-preview" : String(attemptId),
-    ].join(":");
-  }
-
   /**
    * Create a grading job for author preview (no attemptId)
    */
@@ -106,7 +112,7 @@ export class AttemptServiceV2 {
     queueName: JobQueueName;
   }> {
     void _authCookie;
-    const activeKey = this.buildGradingActiveKey(
+    const activeKey = buildGradingActiveKey(
       request.userSession.userId,
       assignmentId,
       null,
@@ -211,16 +217,17 @@ export class AttemptServiceV2 {
     assignmentId: number,
     _updateDto: LearnerUpdateAssignmentAttemptRequestDto,
     _authCookie: string,
-    request: UserSessionRequest,
+    request: GradingJobRequester,
     tier: Exclude<AttemptTier, "inline">,
   ): Promise<{
     gradingJobId: string;
     message: string;
     queueName: JobQueueName;
+    reused: boolean;
   }> {
     void _updateDto;
     void _authCookie;
-    const activeKey = this.buildGradingActiveKey(
+    const activeKey = buildGradingActiveKey(
       request.userSession.userId,
       assignmentId,
       attemptId,
@@ -234,9 +241,9 @@ export class AttemptServiceV2 {
     if (existingJobId !== null) {
       return {
         gradingJobId: existingJobId,
-        message:
-          "A grading job is already running for this attempt. Reusing existing job.",
+        message: GRADING_JOB_REUSED_MESSAGE,
         queueName: attemptQueueForTier(tier),
+        reused: true,
       };
     }
 
@@ -264,8 +271,9 @@ export class AttemptServiceV2 {
 
     return {
       gradingJobId: gradingJob.id,
-      message: "Grading job created. Use the SSE endpoint to track progress.",
+      message: GRADING_JOB_CREATED_MESSAGE,
       queueName,
+      reused: false,
     };
   }
 
@@ -275,7 +283,7 @@ export class AttemptServiceV2 {
     assignmentId: number,
     updateDto: LearnerUpdateAssignmentAttemptRequestDto,
     authCookie: string,
-    request: UserSessionRequest,
+    request: GradingJobRequester,
     queueName: JobQueueName,
     submissionReceivedAt?: Date,
   ): Promise<void> {
@@ -810,7 +818,7 @@ export class AttemptServiceV2 {
     receivedAt: Date,
   ): Promise<{ inFlightGradingJobId: string | null }> {
     const inFlight = await this.jobStateService.findActiveJob(
-      this.buildGradingActiveKey(userId, assignmentId, attemptId),
+      buildGradingActiveKey(userId, assignmentId, attemptId),
     );
     await this.submissionService.assertLearnerAttemptOpenForSubmit(
       attemptId,
