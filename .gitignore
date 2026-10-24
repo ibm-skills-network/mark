@@ -129,3 +129,6 @@ artifacts/*
 !apps/api/maintenance/rich-text-normalization/test-schema.sql
 /STRANGLER_FIG
 STRANGELER_FIG.md
+
+# Working copy of the migration plan; the tracked version lives in docs/architecture.
+RustMigrationMasterPlan.md
