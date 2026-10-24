@@ -19,6 +19,8 @@ use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use base64::Engine;
 use http_body_util::BodyExt;
+use mark_learner::internal_client::InternalApi;
+use mark_learner::lti::LtiGateway;
 use mark_learner::{router, LearnerState, SubmitSettings};
 use mark_platform::{db, Config, Role};
 use serde_json::{json, Value};
@@ -28,6 +30,7 @@ use tower::ServiceExt;
 const USER: &str = "rust-submit-flow@example.com";
 const GROUP: &str = "rust-submit-flow-fixture";
 const NAME: &str = "rust submit flow fixture";
+const LTI_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(500);
 
 fn b64(s: &str) -> String {
     base64::engine::general_purpose::STANDARD.encode(s)
@@ -89,6 +92,8 @@ struct Fixture {
     late_attempt: i32,
     queued_attempt: i32,
     second_inline_attempt: i32,
+    timeout_attempt: i32,
+    fallback_attempt: i32,
     q_single: i32,
     q_multi: i32,
     q_tf: i32,
@@ -195,12 +200,26 @@ async fn setup(pool: &PgPool) -> Fixture {
     )
     .await;
     let second_inline_attempt = scalar_i32(pool, &attempt(v_inline, &order, "NULL")).await;
+    let timeout_attempt = scalar_i32(pool, &attempt(v_inline, &order, "NULL")).await;
+    // Pinned to the choice-only version, but serving a live TEXT question
+    // the version does not hold.
+    let fallback_attempt = scalar_i32(
+        pool,
+        &attempt(
+            v_inline,
+            &format!("{{{q_single},{q_multi},{q_tf},{q_text}}}"),
+            "NULL",
+        ),
+    )
+    .await;
     Fixture {
         assignment,
         inline_attempt,
         late_attempt,
         queued_attempt,
         second_inline_attempt,
+        timeout_attempt,
+        fallback_attempt,
         q_single,
         q_multi,
         q_tf,
@@ -235,8 +254,18 @@ async fn start_mocks(mocks: Mocks) -> (String, String) {
         .route(
             "/api/internal/grading/enqueue",
             post(|State(m): State<Mocks>, Json(body): Json<Value>| async move {
+                let drift = body["updateDto"]["language"] == "de";
                 m.enqueued.lock().unwrap().push(body);
-                Json(json!({"gradingJobId": "11111111-2222-3333-4444-555555555555", "reused": false}))
+                if drift {
+                    return (
+                        StatusCode::BAD_REQUEST,
+                        Json(json!({"message": ["language must be one of the following values: en"], "error": "Bad Request", "statusCode": 400})),
+                    );
+                }
+                (
+                    StatusCode::OK,
+                    Json(json!({"gradingJobId": "11111111-2222-3333-4444-555555555555", "reused": false})),
+                )
             }),
         )
         .with_state(mocks.clone());
@@ -251,13 +280,20 @@ async fn start_mocks(mocks: Mocks) -> (String, String) {
                         .get("cookie")
                         .map(|v| v.to_str().unwrap().to_owned())
                         .unwrap_or_default();
-                    let mut calls = m.lti_calls.lock().unwrap();
-                    calls.push((cookie, body));
-                    // The first passback fails, later ones succeed.
-                    if calls.len() == 1 {
-                        (StatusCode::BAD_GATEWAY, r#"{"message":"LMS unavailable"}"#)
-                    } else {
-                        (StatusCode::OK, "ok")
+                    let call = {
+                        let mut calls = m.lti_calls.lock().unwrap();
+                        calls.push((cookie, body));
+                        calls.len()
+                    };
+                    // The first passback fails, the third outlives the
+                    // client's timeout, the others succeed.
+                    match call {
+                        1 => (StatusCode::BAD_GATEWAY, r#"{"message":"LMS unavailable"}"#),
+                        3 => {
+                            tokio::time::sleep(LTI_TIMEOUT * 3).await;
+                            (StatusCode::OK, "late")
+                        }
+                        _ => (StatusCode::OK, "ok"),
                     }
                 },
             ),
@@ -283,6 +319,24 @@ async fn call(app: &Router, method: &str, uri: &str, body: Option<Value>) -> (St
     }
     let body = body.map_or_else(Body::empty, |b| Body::from(b.to_string()));
     let response = app.clone().oneshot(req.body(body).unwrap()).await.unwrap();
+    let status = response.status();
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    (status, String::from_utf8(bytes.to_vec()).unwrap())
+}
+
+/// A PATCH with a body sent as given, without a length header.
+async fn call_raw(app: &Router, uri: &str, body: String) -> (StatusCode, String) {
+    let session = format!(
+        r#"{{"userId":"{USER}","role":"learner","groupId":"{GROUP}","gradingCallbackRequired":true}}"#
+    );
+    let req = Request::builder()
+        .method("PATCH")
+        .uri(uri)
+        .header("user-session", session)
+        .header("content-type", "application/json")
+        .body(Body::from(body))
+        .unwrap();
+    let response = app.clone().oneshot(req).await.unwrap();
     let status = response.status();
     let bytes = response.into_body().collect().await.unwrap().to_bytes();
     (status, String::from_utf8(bytes.to_vec()).unwrap())
@@ -314,12 +368,11 @@ async fn submit_routes_end_to_end() {
         router(LearnerState {
             pool: pool.clone(),
             accept_operations: true,
-            submit: SubmitSettings::new(
-                Some((&internal_url, "secret".to_owned())),
-                Some(gateway_url),
-                vec!["learner".to_owned()],
-            )
-            .unwrap(),
+            submit: SubmitSettings {
+                internal: Some(InternalApi::new(&internal_url, "secret".to_owned()).unwrap()),
+                lti: LtiGateway::with_timeout(Some(gateway_url), LTI_TIMEOUT).unwrap(),
+                learner_buckets: Arc::new(vec!["learner".to_owned()]),
+            },
         }),
     );
     let a = f.assignment;
@@ -391,14 +444,14 @@ async fn submit_routes_end_to_end() {
         attempt,
         json!({"submitted": true, "grade": 0.6, "preferredLanguage": "en", "expires": true})
     );
-    let progress = row_json(
-        &pool,
-        &format!(r#"SELECT row_to_json(p) FROM (SELECT status, progress, "totalQuestions" FROM "GradingProgress" WHERE "attemptId" = {t}) p"#),
-    )
-    .await;
+    // No progress row is created for an inline grade.
     assert_eq!(
-        progress,
-        json!({"status": "COMPLETED", "progress": 100, "totalQuestions": 3})
+        scalar_i32(
+            &pool,
+            &format!(r#"SELECT count(*)::int FROM "GradingProgress" WHERE "attemptId" = {t}"#)
+        )
+        .await,
+        0
     );
 
     // The first passback failed and is scheduled for the legacy retry job.
@@ -465,7 +518,7 @@ async fn submit_routes_end_to_end() {
     .await;
     assert_eq!(
         notify,
-        json!({"notifyOnComplete": true, "notificationEmail": USER, "status": "COMPLETED"})
+        json!({"notifyOnComplete": true, "notificationEmail": USER, "status": "PENDING"})
     );
 
     let (status, body) = call(&app, "GET", &format!("{}/completed", base(t)), None).await;
@@ -592,6 +645,53 @@ async fn submit_routes_end_to_end() {
         r#"{"message":"Failed to process question response: tooManyChoicesSelected","error":"Bad Request","statusCode":400}"#
     );
 
+    // Bodies: not JSON, too large, and junk the reader skips without
+    // building it.
+    let (status, body) = call_raw(&app, &base(second), "{not json".into()).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        body,
+        r#"{"message":"Request body is not valid JSON","error":"Bad Request","statusCode":400}"#
+    );
+    let (status, body) = call_raw(&app, &base(second), " ".repeat(17 * 1024 * 1024)).await;
+    assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
+    assert_eq!(
+        body,
+        r#"{"message":"request entity too large","error":"Payload Too Large","statusCode":413}"#
+    );
+    let junk = "{\"a\":1},".repeat(256 * 1024);
+    let raw = format!(
+        r#"{{"submitted":true,"responsesForQuestions":[{{"id":{},"learnerFileResponse":[{{"filename":"a","key":"k","bucket":"learner","x":[{junk}0]}}]}}]}}"#,
+        f.q_single
+    );
+    assert!(raw.len() > 2 * 1024 * 1024);
+    let started = std::time::Instant::now();
+    let (status, body) = call_raw(&app, &base(second), raw).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        body,
+        r#"{"message":["responsesForQuestions.0.learnerFileResponse must be a list of uploaded file references"],"error":"Bad Request","statusCode":400}"#
+    );
+    let item = format!("{{\"id\":{}}},", f.q_single);
+    let items = item.repeat(3 * 1024 * 1024 / item.len());
+    let raw = format!(r#"{{"submitted":true,"responsesForQuestions":[{items}{{"id":1}}]}}"#);
+    assert!(raw.len() > 2 * 1024 * 1024);
+    let (status, body) = call_raw(&app, &base(second), raw).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(
+        body,
+        r#"{"message":["responsesForQuestions must contain no more than 200 elements"],"error":"Bad Request","statusCode":400}"#
+    );
+    assert!(
+        started.elapsed() < std::time::Duration::from_secs(10),
+        "junk bodies took {:?}",
+        started.elapsed()
+    );
+
+    // A progress row that exists is completed by the inline commit.
+    let (status, _) = call(&app, "POST", &format!("{}/notify", base(second)), None).await;
+    assert_eq!(status, StatusCode::CREATED);
+
     // An all-correct inline submit; the passback now succeeds with the best grade.
     let (status, body) = call(
         &app,
@@ -614,6 +714,82 @@ async fn submit_routes_end_to_end() {
     )
     .await;
     assert_eq!(sync, json!({"status": "SUCCESS", "grade": 1, "done": true}));
+    let progress = row_json(
+        &pool,
+        &format!(r#"SELECT row_to_json(p) FROM (SELECT status, progress, "currentStage", "completedAt" IS NOT NULL AS done FROM "GradingProgress" WHERE "attemptId" = {second}) p"#),
+    )
+    .await;
+    assert_eq!(
+        progress,
+        json!({"status": "COMPLETED", "progress": 100, "currentStage": "Grading complete!", "done": true})
+    );
+
+    // A passback that times out leaves the row IN_PROGRESS for the stale-row
+    // recovery: no error, no retry schedule, no notice.
+    let timeout = f.timeout_attempt;
+    let (status, body) = call(&app, "PATCH", &base(timeout), Some(submit.clone())).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let sync = row_json(
+        &pool,
+        &format!(r#"SELECT row_to_json(s) FROM (SELECT id, status, "retryCount", "lastError", "nextRetryAt", "learnerNotified" FROM "LtiGradeSync" WHERE "attemptId" = {timeout}) s"#),
+    )
+    .await;
+    assert_eq!(sync["status"], "IN_PROGRESS");
+    assert_eq!(sync["retryCount"], 0);
+    assert_eq!(sync["lastError"], Value::Null);
+    assert_eq!(sync["nextRetryAt"], Value::Null);
+    assert_eq!(sync["learnerNotified"], false);
+    let sync_id = sync["id"].as_i64().unwrap();
+    assert_eq!(
+        scalar_i32(
+            &pool,
+            &format!(r#"SELECT count(*)::int FROM "LtiSyncErrorLog" WHERE "syncId" = {sync_id}"#)
+        )
+        .await,
+        0
+    );
+    assert_eq!(
+        scalar_i32(
+            &pool,
+            &format!(r#"SELECT count(*)::int FROM "UserNotification" WHERE "userId" = '{USER}'"#)
+        )
+        .await,
+        1,
+        "only the first (failed) passback left a notice"
+    );
+
+    // A served question missing from the pinned version is graded from its
+    // live row; a TEXT one sends the attempt to the queue, not to a 400.
+    let fallback = f.fallback_attempt;
+    let fallback_submit = json!({"submitted": true, "responsesForQuestions": [
+        {"id": f.q_single, "learnerChoices": [b64("Paris")]}
+    ]});
+    // The queue's 400 reaches the learner as sent.
+    let mut drift = fallback_submit.clone();
+    drift["language"] = json!("de");
+    let (status, body) = call(&app, "PATCH", &base(fallback), Some(drift)).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert_eq!(
+        body,
+        r#"{"message":["language must be one of the following values: en"],"error":"Bad Request","statusCode":400}"#
+    );
+    let (status, body) = call(&app, "PATCH", &base(fallback), Some(fallback_submit)).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(body.contains("gradingJobId"), "{body}");
+    {
+        let enqueued = mocks.enqueued.lock().unwrap();
+        assert_eq!(enqueued.len(), 3);
+        assert_eq!(enqueued[2]["attemptId"], fallback);
+        assert_eq!(enqueued[2]["tier"], "standard");
+    }
+    assert_eq!(
+        row_json(
+            &pool,
+            &format!(r#"SELECT to_json(submitted) FROM "AssignmentAttempt" WHERE id = {fallback}"#),
+        )
+        .await,
+        json!(false)
+    );
 
     cleanup(&pool).await;
 }

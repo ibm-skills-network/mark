@@ -24,7 +24,7 @@ const MAX_LANGUAGE_LENGTH: usize = 16;
 const MAX_QUESTION_ID: f64 = 2_147_483_647.0;
 
 /// The keys a submitted answer may carry; others are stripped.
-const RESPONSE_KEYS: [&str; 7] = [
+pub(crate) const RESPONSE_KEYS: [&str; 7] = [
     "id",
     "learnerTextResponse",
     "learnerUrlResponse",
@@ -35,7 +35,7 @@ const RESPONSE_KEYS: [&str; 7] = [
 ];
 
 /// The only keys a submitted file reference may carry.
-const FILE_KEYS: [&str; 5] = ["filename", "key", "bucket", "fileType", "content"];
+pub(crate) const FILE_KEYS: [&str; 5] = ["filename", "key", "bucket", "fileType", "content"];
 
 /// The languages a learner may answer in (`languages.json`).
 pub const SUPPORTED_LANGUAGES: [&str; 23] = [

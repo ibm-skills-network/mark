@@ -173,6 +173,55 @@ describe("ApiService - Comprehensive Stress Tests", () => {
       });
     });
 
+    describe("dot segments", () => {
+      beforeEach(() => {
+        process.env.MARK_API_ENDPOINT = "http://mark-api:3000";
+        process.env.LTI_CREDENTIAL_MANAGER_ENDPOINT = "http://lti:4000";
+      });
+
+      it.each([
+        "/api/v2/assignments/1/../admin/assignments",
+        "/api/v2/assignments/1/attempts/./2",
+        "/api/v2/assignments/%2e%2e/admin",
+        "/api/v2/assignments/%2E./admin",
+        "/api/v2/assignments/.%2E/admin",
+        "/api/v2/a%2eb",
+        "/api/v2/assignments\\..\\admin",
+        "/api/v2/assignments/..",
+      ])("refuses %s before building a downstream URL", (originalUrl) => {
+        const request = {
+          originalUrl,
+          method: "GET",
+          user: { userId: "test-user" },
+        } as UserSessionRequest;
+        for (const target of [
+          DownstreamService.MARK_API,
+          DownstreamService.LTI_CREDENTIAL_MANAGER,
+        ]) {
+          expect(() => service.getForwardingDetails(target, request)).toThrow(
+            new BadRequestException("Invalid request path"),
+          );
+        }
+        expect(mockLogger.warn).toHaveBeenCalledWith(
+          "Refused forward of a path with a dot segment",
+          expect.objectContaining({ method: "GET" }),
+        );
+      });
+
+      it("allows dots inside segments and in the query", () => {
+        const request = {
+          originalUrl: "/api/v2/files/report.v1.pdf?next=../x&q=%2e",
+          user: { userId: "test-user" },
+        } as UserSessionRequest;
+        expect(
+          service.getForwardingDetails(DownstreamService.MARK_API, request)
+            .endpoint,
+        ).toBe(
+          "http://mark-api:3000/api/v2/files/report.v1.pdf?next=../x&q=%2e",
+        );
+      });
+    });
+
     it("should throw BadRequestException for invalid service", () => {
       const mockRequest = {
         originalUrl: "/api/v1/test",

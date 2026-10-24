@@ -236,7 +236,15 @@ paths:
                   "reused": false,
                   "message": "Grading job created. Use the SSE endpoint to track progress.",
                 }
-        "400": { $ref: "#/components/responses/BadRequest" }
+        "400":
+          description: |
+            The payload was refused. The caller validated it already, so
+            this means the two sides disagree on the contract: the caller
+            logs it as an error and passes the body through to the learner
+            unchanged.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "409":
           description: |

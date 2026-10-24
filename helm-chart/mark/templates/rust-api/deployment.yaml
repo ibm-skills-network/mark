@@ -83,13 +83,15 @@ spec:
                   optional: true
             {{- end }}
             {{- end }}
-            {{- if not (hasKey .config "GRADING_LTI_GATEWAY_URL") }}
-            - name: GRADING_LTI_GATEWAY_URL
+            {{- range $key := list "GRADING_LTI_GATEWAY_URL" "AI_FEATURES_DISABLED" "AI_GRADING_DISABLED" }}
+            {{- if not (hasKey $.Values.rustApi.config $key) }}
+            - name: {{ $key }}
               valueFrom:
                 configMapKeyRef:
                   name: {{ include "mark.api.name" $ }}-config
-                  key: GRADING_LTI_GATEWAY_URL
+                  key: {{ $key }}
                   optional: true
+            {{- end }}
             {{- end }}
           {{- end }}
       {{- with .nodeSelector }}

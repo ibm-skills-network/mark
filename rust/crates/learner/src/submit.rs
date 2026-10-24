@@ -4,8 +4,9 @@
 //!
 //! The request is checked here in the legacy order: access, body, closed or
 //! late attempt (with the grading job already in flight, if any), the
-//! payload against the served questions. Attempts whose pinned version holds
-//! only deterministic questions are graded and committed in the request;
+//! payload against the served questions. The body is read only after the
+//! access check, and never above `SUBMIT_BODY_LIMIT`. Attempts whose graded
+//! questions are all deterministic are graded and committed in the request;
 //! every other attempt is handed to the legacy API's internal enqueue
 //! endpoint and graded by the existing worker.
 
@@ -13,7 +14,7 @@ use std::collections::HashMap;
 
 use axum::body::Bytes;
 use axum::extract::rejection::PathRejection;
-use axum::extract::{Path, State};
+use axum::extract::{FromRequest, Path, Request, State};
 use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
@@ -36,9 +37,9 @@ use crate::question_source::{self, is_media_response_type};
 use crate::store::{
     self, AttemptRow, FrozenSelectionRow, GradingQuestionRow, QuestionTranslationRow,
 };
+use crate::submit_body;
 use crate::submit_request::{self, has_learner_response, SubmitRequest, SubmittedResponse};
 use crate::submit_result::{self, ResultResponse, ResultSettings};
-use crate::wire;
 use crate::LearnerState;
 
 pub const REUSED_JOB_MESSAGE: &str =
@@ -70,7 +71,7 @@ impl SubmitQueued {
 
 // ---------------------------------------------------------------- tiers
 
-/// Grading cost tier, from every question type in the pinned version.
+/// Grading cost tier, from the type of every question graded.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tier {
     Inline,
@@ -611,13 +612,14 @@ impl Loaded {
     }
 }
 
-async fn load(
+/// The access guard: the attempt, if the session's learner owns it and may
+/// write to it. Runs before the body is read.
+async fn authorize(
     state: &LearnerState,
     session: &UserSession,
     assignment_id: i32,
     attempt_id: i32,
-    body: &Value,
-) -> Result<(Loaded, SubmitRequest), ApiError> {
+) -> Result<AttemptRow, ApiError> {
     let mut tx = store::begin_read(&state.pool).await?;
     let attempt = access::attempt_item(
         &mut tx,
@@ -628,18 +630,79 @@ async fn load(
         Intent::Write,
     )
     .await?;
-    let request =
-        submit_request::parse(&wire::decode_request(body.clone())).map_err(|messages| {
-            info!(
+    tx.commit().await?;
+    Ok(attempt)
+}
+
+fn payload_too_large() -> ApiError {
+    ApiError::nest(StatusCode::PAYLOAD_TOO_LARGE, "request entity too large")
+}
+
+/// Read and validate the body, bounded by the route's body limit.
+async fn read_request(
+    request: Request,
+    session: &UserSession,
+    assignment_id: i32,
+    attempt_id: i32,
+) -> Result<SubmitRequest, ApiError> {
+    let bytes = Bytes::from_request(request, &())
+        .await
+        .map_err(|rejection| {
+            let too_large = rejection.status() == StatusCode::PAYLOAD_TOO_LARGE;
+            warn!(
                 assignment_id,
                 attempt_id,
                 user_id = session.log_user(),
-                denial_reason = "invalid_body",
-                count = messages.len(),
+                denial_reason = if too_large { "body_too_large" } else { "unreadable_body" },
+                error = %rejection,
                 "submit rejected"
             );
-            ApiError::validation(messages)
+            if too_large {
+                payload_too_large()
+            } else {
+                ApiError::nest(StatusCode::BAD_REQUEST, "Request body could not be read")
+            }
         })?;
+    let (body, replaced) = submit_body::read(&bytes).map_err(|err| {
+        warn!(
+            assignment_id,
+            attempt_id,
+            user_id = session.log_user(),
+            denial_reason = "unparsable_body",
+            error = %err,
+            "submit rejected"
+        );
+        ApiError::nest(StatusCode::BAD_REQUEST, "Request body is not valid JSON")
+    })?;
+    drop(bytes);
+    if replaced > 0 {
+        warn!(
+            assignment_id,
+            attempt_id,
+            replacements = replaced,
+            "replaced lone surrogate escapes in the submit body"
+        );
+    }
+    submit_request::parse(&body).map_err(|messages| {
+        info!(
+            assignment_id,
+            attempt_id,
+            user_id = session.log_user(),
+            denial_reason = "invalid_body",
+            count = messages.len(),
+            "submit rejected"
+        );
+        ApiError::validation(messages)
+    })
+}
+
+async fn load(
+    state: &LearnerState,
+    attempt: AttemptRow,
+    assignment_id: i32,
+    attempt_id: i32,
+) -> Result<Loaded, ApiError> {
+    let mut tx = store::begin_read(&state.pool).await?;
     let Some(settings) = store::submit_settings(&mut tx, assignment_id).await? else {
         return Err(ApiError::nest(
             StatusCode::NOT_FOUND,
@@ -650,7 +713,6 @@ async fn load(
         Some(version_id) => store::pinned_questions(&mut tx, version_id).await?,
         None => Vec::new(),
     };
-    let tier = classify_tier(pinned.iter().map(|r| r.question_type.as_str()));
     if attempt.assignment_version_id.is_some() && pinned.is_empty() {
         warn!(
             assignment_id,
@@ -671,7 +733,7 @@ async fn load(
         live,
         unresolved: Vec::new(),
         selections: Vec::new(),
-        tier,
+        tier: Tier::Standard,
     };
     let source_ids: Vec<i32> = loaded.source_rows().iter().map(|r| r.served_id()).collect();
     let served = served_ids(&loaded, &source_ids);
@@ -684,9 +746,34 @@ async fn load(
         .into_iter()
         .filter(|r| r.assignment_id == Some(assignment_id))
         .collect();
+    loaded.tier = attempt_tier(&loaded.pinned, &loaded.unresolved);
+    if !loaded.unresolved.is_empty() {
+        warn!(
+            assignment_id,
+            attempt_id,
+            fallback_questions = loaded.unresolved.len(),
+            tier = ?loaded.tier,
+            "served questions missing from the pinned version; grading their live rows"
+        );
+    }
     loaded.selections = store::frozen_selections(&mut tx, attempt_id).await?;
     tx.commit().await?;
-    Ok((loaded, request))
+    Ok(loaded)
+}
+
+/// The tier of what is graded: the pinned version's questions plus the live
+/// rows standing in for served questions missing from it. Without a pinned
+/// version the attempt is always queued.
+fn attempt_tier(pinned: &[GradingQuestionRow], fallbacks: &[GradingQuestionRow]) -> Tier {
+    if pinned.is_empty() {
+        return Tier::Standard;
+    }
+    classify_tier(
+        pinned
+            .iter()
+            .chain(fallbacks)
+            .map(|r| r.question_type.as_str()),
+    )
 }
 
 fn served_ids(loaded: &Loaded, source_ids: &[i32]) -> Vec<i32> {
@@ -735,22 +822,10 @@ pub async fn submit_attempt(
     session: UserSession,
     path: Result<Path<(String, String)>, PathRejection>,
     headers: HeaderMap,
-    body: Bytes,
+    request: Request,
 ) -> Result<Response, ApiError> {
     // The deadline is judged on arrival.
     let received_at = now_millis();
-    let body: Value = if body.is_empty() {
-        Value::Object(Map::new())
-    } else {
-        serde_json::from_slice(&body).map_err(|_| {
-            warn!(
-                user_id = session.log_user(),
-                denial_reason = "unparsable_body",
-                "submit rejected"
-            );
-            ApiError::nest(StatusCode::BAD_REQUEST, "Request body is not valid JSON")
-        })?
-    };
     session.require_role(&[Role::Learner])?;
     let (raw_assignment, raw_attempt) = raw_pair(path);
     let assignment_id = access::attempt_route_assignment_id(&raw_assignment, &session)?;
@@ -769,7 +844,10 @@ pub async fn submit_attempt(
         "submit requested"
     );
 
-    let (loaded, request) = load(&state, &session, assignment_id, attempt_id, &body).await?;
+    // Only the attempt's owner gets as far as sending a body.
+    let attempt = authorize(&state, &session, assignment_id, attempt_id).await?;
+    let request = read_request(request, &session, assignment_id, attempt_id).await?;
+    let loaded = load(&state, attempt, assignment_id, attempt_id).await?;
     // attempt_item has refused learner sessions without a user id.
     let user_id = session.non_empty_user_id().unwrap_or_default().to_owned();
     let attempt = &loaded.attempt;
@@ -932,7 +1010,7 @@ async fn enqueue(
             );
             Ok(Json(SubmitQueued::new(grading_job_id, reused)).into_response())
         }
-        Enqueued::Refused(body) => {
+        Enqueued::Refused { status, body } => {
             let code = body
                 .get("code")
                 .and_then(serde_json::Value::as_str)
@@ -943,10 +1021,11 @@ async fn enqueue(
                 attempt_id = attempt.id,
                 user_id = session.log_user(),
                 denial_reason = "enqueue_refused",
+                status = status.as_u16(),
                 code,
                 "submit rejected"
             );
-            Err(ApiError::raw(StatusCode::CONFLICT, body))
+            Err(ApiError::raw(status, body))
         }
     }
 }
@@ -1117,7 +1196,8 @@ fn invalid_grade(loaded: &Loaded, detail: &str) -> ApiError {
 }
 
 /// The commit: every response row, the attempt (only while still open), the
-/// prune of older rows and the completed progress row, in one transaction.
+/// prune of older rows and the progress row (if one exists) marked
+/// complete, in one transaction.
 async fn commit(
     state: &LearnerState,
     loaded: &Loaded,
@@ -1175,14 +1255,14 @@ async fn commit(
         ));
     }
     let pruned = store::prune_question_responses(&mut tx, attempt_id, &ids).await?;
-    let total = i32::try_from(graded.len()).unwrap_or(i32::MAX);
-    store::complete_grading_progress(&mut tx, attempt_id, total, now).await?;
+    let progress_rows = store::complete_grading_progress(&mut tx, attempt_id, now).await?;
     tx.commit().await?;
     info!(
         assignment_id = loaded.attempt.assignment_id,
         attempt_id,
         responses = ids.len(),
         pruned,
+        progress_rows,
         grade,
         "submit committed"
     );

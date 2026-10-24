@@ -31,7 +31,7 @@ pub const DEFAULT_BODY_LIMIT: usize = 2 * 1024 * 1024;
 /// Hard ceiling for any request body, enforced before routing. Only routes
 /// that raise their extractor limit (the learner submit carries every answer
 /// of an attempt) can get near it.
-pub const MAX_BODY_LIMIT: usize = 64 * 1024 * 1024;
+pub const MAX_BODY_LIMIT: usize = 16 * 1024 * 1024;
 
 #[derive(Debug, Clone, Copy, Default)]
 struct UuidRequestId;

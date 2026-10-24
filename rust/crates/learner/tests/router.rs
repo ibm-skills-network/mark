@@ -359,8 +359,10 @@ async fn submit_route_ids_and_roles_are_checked_before_the_database() {
 }
 
 #[tokio::test]
-async fn submit_body_must_be_json() {
-    let (status, _, body) = call_with_body(
+async fn submit_body_is_read_only_after_the_access_check() {
+    // Not JSON, but the attempt's ownership is checked first (and the
+    // database is unreachable).
+    let (status, _, _) = call_with_body(
         app(true),
         "PATCH",
         "/api/v2/assignments/5/attempts/9",
@@ -368,23 +370,46 @@ async fn submit_body_must_be_json() {
         "{not json",
     )
     .await;
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert!(body.contains("not valid JSON"), "{body}");
+    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
     let (status, _, _) = call_with_body(
         app(true),
         "PATCH",
         "/api/v2/assignments/5/attempts/9",
         None,
-        "{}",
+        "{not json",
     )
     .await;
     assert_eq!(status, StatusCode::UNAUTHORIZED);
 }
 
 #[tokio::test]
+async fn bodies_above_the_submit_limit_are_refused_before_routing() {
+    let app = mark_platform::http::with_middleware(app(true), std::time::Duration::from_secs(5));
+    let body = vec![b' '; 17 * 1024 * 1024];
+    let response = app
+        .oneshot(
+            Request::builder()
+                .method("PATCH")
+                .uri("/api/v2/assignments/5/attempts/9")
+                .header("user-session", LEARNER)
+                .header("content-type", "application/json")
+                .header("content-length", body.len())
+                .body(Body::from(body))
+                .expect("request"),
+        )
+        .await
+        .expect("response");
+    assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    assert_eq!(
+        mark_learner::SUBMIT_BODY_LIMIT,
+        mark_platform::http::MAX_BODY_LIMIT
+    );
+}
+
+#[tokio::test]
 async fn submit_accepts_bodies_above_the_default_limit() {
-    // 3 MB of answer text gets past the extractor (then the database is
-    // unreachable); the default 2 MB limit would have answered 413.
+    // 3 MB of answer text is within the submit limit (the database is
+    // unreachable, so the access check answers first).
     let text = "a".repeat(3 * 1024 * 1024);
     let body = format!(
         r#"{{"submitted":true,"responsesForQuestions":[{{"id":1,"learnerTextResponse":"{text}"}}]}}"#

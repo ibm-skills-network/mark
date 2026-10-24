@@ -9,6 +9,7 @@
 use base64::engine::general_purpose::STANDARD_NO_PAD;
 use base64::engine::{DecodePaddingMode, GeneralPurpose, GeneralPurposeConfig};
 use base64::Engine;
+use serde::de::IgnoredAny;
 use serde_json::{Map, Value};
 
 /// The request fields the legacy interceptor decodes (`TRANSFORM_FIELDS`).
@@ -113,15 +114,33 @@ fn decode_layers(value: &str) -> String {
     current
 }
 
+/// A decoded string: text, or the JSON text of an object or array the
+/// encoder stringified (left unparsed, so a caller can parse only what it
+/// needs).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Decoded {
+    Text(String),
+    Json(String),
+}
+
+/// Whether `text` is one JSON object or array, checked without building it.
+fn is_structured_json(text: &str) -> bool {
+    matches!(
+        text.trim_start_matches([' ', '\t', '\n', '\r'])
+            .as_bytes()
+            .first(),
+        Some(b'{' | b'[')
+    ) && serde_json::from_str::<IgnoredAny>(text).is_ok()
+}
+
 /// Text that decoded to a JSON object or array came from one the encoder
 /// stringified; anything else stays text.
-fn structured_or_text(text: String, allow_structured: bool) -> Value {
-    if allow_structured {
-        if let Ok(parsed @ (Value::Object(_) | Value::Array(_))) = serde_json::from_str(&text) {
-            return parsed;
-        }
+fn structured_or_text(text: String, allow_structured: bool) -> Decoded {
+    if allow_structured && is_structured_json(&text) {
+        Decoded::Json(text)
+    } else {
+        Decoded::Text(text)
     }
-    Value::String(text)
 }
 
 /// Node's lenient decoder for the legacy `comp:` prefix: characters outside
@@ -144,13 +163,10 @@ fn lenient_node_decode(input: &str) -> String {
     String::from_utf8_lossy(&bytes).into_owned()
 }
 
-/// `decodeValue`: strings only; other values pass through unchanged.
-pub fn decode_value(value: Value, allow_structured: bool) -> Value {
-    let Value::String(text) = value else {
-        return value;
-    };
+/// `decodeValue` for one string.
+pub fn decode_string(text: String, allow_structured: bool) -> Decoded {
     if text.is_empty() {
-        return Value::String(text);
+        return Decoded::Text(text);
     }
     if let Some(rest) = text.strip_prefix("comp:") {
         let decoded = lenient_node_decode(rest);
@@ -158,9 +174,20 @@ pub fn decode_value(value: Value, allow_structured: bool) -> Value {
     }
     let decoded = decode_layers(&text);
     if decoded == text {
-        return Value::String(text);
+        return Decoded::Text(text);
     }
     structured_or_text(decoded, allow_structured)
+}
+
+/// `decodeValue`: strings only; other values pass through unchanged.
+pub fn decode_value(value: Value, allow_structured: bool) -> Value {
+    let Value::String(text) = value else {
+        return value;
+    };
+    match decode_string(text, allow_structured) {
+        Decoded::Text(text) => Value::String(text),
+        Decoded::Json(json) => serde_json::from_str(&json).unwrap_or(Value::String(json)),
+    }
 }
 
 fn is_learner_file_path(path: &[String]) -> bool {
@@ -208,6 +235,9 @@ fn decode_any(value: Value, path: &[String]) -> Value {
 }
 
 /// Decode a request body the way the legacy interceptor does, at any depth.
+/// It builds the whole tree; the submit route reads its body with
+/// `submit_body::read` instead, which applies the same rules to only the
+/// fields it keeps.
 pub fn decode_request(body: Value) -> Value {
     decode_any(body, &[])
 }

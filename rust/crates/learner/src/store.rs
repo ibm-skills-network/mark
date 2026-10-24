@@ -1301,27 +1301,23 @@ pub async fn commit_attempt(
     .map(|r| r.rows_affected())
 }
 
-/// `GradingProgress` as the legacy grader leaves it once a grade is readable.
+/// `GradingProgress` as `markComplete` leaves it once a grade is readable.
+/// Only an existing row is updated; none is created. Returns the rows
+/// changed.
 pub async fn complete_grading_progress(
     conn: &mut PgConnection,
     attempt_id: i32,
-    total_questions: i32,
     now: NaiveDateTime,
-) -> Result<()> {
-    q(r#"INSERT INTO "GradingProgress"
-            ("attemptId", status, "currentQuestion", "totalQuestions", "currentStage", progress,
-             error, "completedAt", "createdAt", "updatedAt")
-       VALUES ($1, 'COMPLETED', 0, $2, 'Grading complete!', 100, NULL, $3, $3, $3)
-       ON CONFLICT ("attemptId") DO UPDATE SET
-            status = 'COMPLETED', "currentQuestion" = 0, "totalQuestions" = $2,
-            "currentStage" = 'Grading complete!', progress = 100, error = NULL,
-            "completedAt" = $3, "updatedAt" = $3"#)
+) -> Result<u64> {
+    q(r#"UPDATE "GradingProgress"
+       SET status = 'COMPLETED', progress = 100, "currentStage" = 'Grading complete!',
+           "completedAt" = $2, "updatedAt" = $2
+       WHERE "attemptId" = $1"#)
     .bind(attempt_id)
-    .bind(total_questions)
     .bind(now)
     .execute(conn)
     .await
-    .map(|_| ())
+    .map(|r| r.rows_affected())
 }
 
 /// Ask for an email when grading completes.
