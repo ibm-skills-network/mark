@@ -16,8 +16,18 @@ info:
       choice `points`, or `authorComment` text.
     - Correct-answer visibility is only consulted once an attempt is submitted.
     - `randomizedChoices` is a JSON array, never a JSON string.
-    - Attempt and time limits come from the base `Assignment` row, not the
-      published version. Everything else merges version -> base -> defaults.
+    - Attempt and time limits, `published` and `showAssignmentScore` come from
+      the base `Assignment` row, not the published version. Everything else
+      merges version -> base -> defaults.
+    - Route ids are parsed strictly and never fall back to the session's
+      assignment id. Ids above the signed 32-bit range are treated as not
+      found on the assignment routes and as invalid (403) on attempt routes.
+    - A session is usable only when `userId` and `groupId` are non-empty
+      strings; an absent `groupId` never matches a group link, and a learner
+      without `userId` is refused (403) before any query.
+    - Whole-number floats serialise as integers (`1`, not `1.0`).
+    - When `isCorrect`/`feedback` may be shown, `feedback` is always present
+      on those items (`null` when the author gave none).
     - `GET .../languages` requires assignment access like every other route.
     - `POST .../attempts` refuses unpublished assignments.
     - A repeated `lang` query parameter uses its first value.
@@ -162,11 +172,20 @@ components:
     LearnerAssignment:
       description: |
         Learner view of an assignment. Version-merged (version -> base ->
-        defaults) except the limit fields, which always come from the base row:
-        `numAttempts`, `attemptsBeforeCoolDown`, `retakeAttemptCoolDownMinutes`,
+        defaults) except the fields the server enforces from the base row,
+        which are read from the base row so the view never promises what
+        create or the attempt reads will not honour: `numAttempts`,
+        `attemptsBeforeCoolDown`, `retakeAttemptCoolDownMinutes`,
         `allotedTimeMinutes`, `attemptsPerTimeRange`, `attemptsTimeRangeHours`,
-        `numberOfQuestionsPerAttempt`. Text fields are translated when `lang`
-        has a stored translation; otherwise authored text.
+        `numberOfQuestionsPerAttempt`, `published`, `showAssignmentScore`.
+        Defaults when null: `attemptsBeforeCoolDown` 1,
+        `retakeAttemptCoolDownMinutes` 0 (no cooldown, same as enforcement),
+        `numAttempts` -1, `passingGrade` 50, `questionDisplay` ONE_PER_PAGE,
+        `graded` false, show* true except `showPassFailIndicator` false,
+        `requireAllQuestions` false, `optionalQuestionIds` [],
+        `published` false. `questionControls` is an object or null even when
+        stored as a JSON string. Text fields are translated when `lang` has a
+        stored translation; otherwise authored text.
       type: object
       required:
         - id
@@ -529,7 +548,7 @@ components:
       content:
         { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
     Unavailable:
-      description: Database unreachable or pool exhausted. The web client retries this; it never retries 500.
+      description: Database unreachable, pool exhausted, lock or statement timeout, serialisation failure or deadlock, or writes disabled on this backend. The web client retries this; it never retries 500.
       headers: { Retry-After: { $ref: "#/components/headers/RetryAfter" } }
       content:
         application/json:
