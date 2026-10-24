@@ -53,6 +53,9 @@ pub struct UserSession {
     pub role: Option<Role>,
     pub group_id: Option<String>,
     pub assignment_id: Option<i64>,
+    /// The launch expects the grade back in the LMS (`gradingCallbackRequired`,
+    /// read with JS truthiness; absent is false).
+    pub grading_callback_required: bool,
 }
 
 impl UserSession {
@@ -81,6 +84,9 @@ impl UserSession {
             role: role.as_deref().and_then(Role::parse),
             group_id: string("groupId")?,
             assignment_id,
+            grading_callback_required: map
+                .get("gradingCallbackRequired")
+                .is_some_and(crate::js::truthy),
         })
     }
 
@@ -185,6 +191,19 @@ mod tests {
         assert_eq!(s.role, Some(Role::Learner));
         assert_eq!(s.group_id.as_deref(), Some("g1"));
         assert_eq!(s.assignment_id, Some(42));
+    }
+
+    #[test]
+    fn grading_callback_flag() {
+        let on = UserSession::parse(br#"{"userId":"a","gradingCallbackRequired":true}"#).unwrap();
+        assert!(on.grading_callback_required);
+        for raw in [
+            &br#"{"userId":"a"}"#[..],
+            br#"{"userId":"a","gradingCallbackRequired":null}"#,
+            br#"{"userId":"a","gradingCallbackRequired":false}"#,
+        ] {
+            assert!(!UserSession::parse(raw).unwrap().grading_callback_required);
+        }
     }
 
     #[test]

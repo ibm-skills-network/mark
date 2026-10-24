@@ -6,6 +6,10 @@
 //!   `{"message", "error", "statusCode"}` (`error` is the reason phrase).
 //! * Bodies the legacy code builds by hand render as `{"statusCode", "message"}`
 //!   or `{"statusCode", "code", "message"}`.
+//! * DTO validation failures render as `{"message": [...], "error", "statusCode"}`.
+//! * Bodies the legacy code builds field by field (the 409 attempt-closed
+//!   body, the coded 400/422 submit refusals) are rendered from the exact
+//!   JSON object, in its key order.
 //! * Database connectivity failures render as 503 with `Retry-After: 1`; the
 //!   web client retries those and never retries a 500.
 //! * Anything else is a 500 whose detail goes to the log, never the body.
@@ -46,6 +50,10 @@ enum Shape {
     Plain,
     /// Hand-built body with a code: `{statusCode, code, message}`.
     Coded(ErrorCode),
+    /// `ValidationPipe` failure: `{message: [...], error, statusCode}`.
+    Validation(Vec<String>),
+    /// A body given verbatim.
+    Raw(Value),
 }
 
 /// An error a learner route answers with.
@@ -88,6 +96,32 @@ impl ApiError {
             status,
             message: message.into(),
             shape: Shape::Coded(code),
+            retry_after: false,
+        }
+    }
+
+    /// A `ValidationPipe` 400 with one message per failed constraint.
+    pub fn validation(messages: Vec<String>) -> Self {
+        Self {
+            status: StatusCode::BAD_REQUEST,
+            message: messages.first().cloned().unwrap_or_default(),
+            shape: Shape::Validation(messages),
+            retry_after: false,
+        }
+    }
+
+    /// A body built by hand, rendered exactly as given. `message` is taken
+    /// from its `message` field for logs.
+    pub fn raw(status: StatusCode, body: Value) -> Self {
+        let message = body
+            .get("message")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_owned();
+        Self {
+            status,
+            message,
+            shape: Shape::Raw(body),
             retry_after: false,
         }
     }
@@ -143,6 +177,18 @@ impl ApiError {
                 map.insert("code".into(), Value::from(c.as_str()));
                 map.insert("message".into(), Value::from(self.message.clone()));
             }
+            Shape::Validation(messages) => {
+                map.insert(
+                    "message".into(),
+                    Value::Array(messages.iter().cloned().map(Value::from).collect()),
+                );
+                map.insert(
+                    "error".into(),
+                    Value::from(self.status.canonical_reason().unwrap_or("Error")),
+                );
+                map.insert("statusCode".into(), code);
+            }
+            Shape::Raw(body) => return body.clone(),
         }
         Value::Object(map)
     }
@@ -261,6 +307,26 @@ mod tests {
             render(ApiError::plain(StatusCode::TOO_MANY_REQUESTS, "wait")).await;
         assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
         assert_eq!(body, r#"{"statusCode":429,"message":"wait"}"#);
+    }
+
+    #[tokio::test]
+    async fn validation_and_raw_shapes() {
+        let (status, _, body) =
+            render(ApiError::validation(vec!["a must be b".into(), "c".into()])).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(
+            body,
+            r#"{"message":["a must be b","c"],"error":"Bad Request","statusCode":400}"#
+        );
+        let raw = serde_json::json!({"statusCode": 409, "error": "Conflict", "code": "X", "message": "m", "attemptId": 7});
+        let err = ApiError::raw(StatusCode::CONFLICT, raw);
+        assert_eq!(err.message(), "m");
+        let (status, _, body) = render(err).await;
+        assert_eq!(status, StatusCode::CONFLICT);
+        assert_eq!(
+            body,
+            r#"{"statusCode":409,"error":"Conflict","code":"X","message":"m","attemptId":7}"#
+        );
     }
 
     #[tokio::test]

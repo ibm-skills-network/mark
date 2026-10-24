@@ -1,8 +1,9 @@
 //! Mark Rust API process.
 //!
-//! Serves health endpoints and the learner assignment-load routes under
-//! `/api/v2`. Learner writes are mounted behind the `accept_operations`
-//! control so a dark deployment cannot take writes.
+//! Serves health endpoints and the learner routes under `/api/v2`. Learner
+//! writes are mounted behind the `accept_operations` control so a dark
+//! deployment cannot take writes; the submit also needs the internal grading
+//! API (`MARK_INTERNAL_API_URL`, `JOB_QUEUE_SECRET`).
 
 use std::time::Duration;
 
@@ -31,9 +32,30 @@ async fn run(config: Config) -> anyhow::Result<()> {
     let health = HealthState::new(config.role, config.service_name.clone(), config.controls)
         .with_probe(DatabaseProbe::new(pool.clone(), Duration::from_secs(2)));
 
+    let grading = &config.grading;
+    if config.controls.accept_operations {
+        if !grading.internal_api_configured() {
+            warn!("MARK_INTERNAL_API_URL or JOB_QUEUE_SECRET is not set; learner submits will answer 503");
+        }
+        if grading.lti_gateway_url.is_none() {
+            warn!("GRADING_LTI_GATEWAY_URL is not set; LTI grade passback will be scheduled for retry, never sent");
+        }
+        if grading.learner_buckets().is_empty() {
+            warn!("no learner upload bucket is configured; submits with files will be refused");
+        }
+    }
+    let submit = mark_learner::SubmitSettings::new(
+        grading
+            .internal_api_url
+            .as_deref()
+            .zip(grading.job_queue_secret.clone()),
+        grading.lti_gateway_url.clone(),
+        grading.learner_buckets(),
+    )?;
     let learner = mark_learner::router(mark_learner::LearnerState {
         pool: pool.clone(),
         accept_operations: config.controls.accept_operations,
+        submit,
     });
     let router = http::with_middleware(
         Router::new()

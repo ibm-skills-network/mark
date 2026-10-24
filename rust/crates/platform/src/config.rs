@@ -94,6 +94,63 @@ pub struct Config {
     pub request_timeout: Duration,
     pub shutdown_grace: Duration,
     pub controls: ExecutionControls,
+    pub grading: GradingHandOff,
+}
+
+/// Where learner submits go once the API has accepted them: the legacy API's
+/// internal grading endpoints (queued tiers), the LTI gateway (grade
+/// passback), and the storage buckets learner uploads may name. Every value
+/// is optional so a read-only deployment starts without them; the submit
+/// route refuses to run when the internal API is not configured.
+#[derive(Clone, Default, PartialEq, Eq)]
+pub struct GradingHandOff {
+    /// `MARK_INTERNAL_API_URL`: base URL of the legacy API service, without
+    /// the `/api` prefix (e.g. `http://mark-api:3000`).
+    pub internal_api_url: Option<String>,
+    /// `JOB_QUEUE_SECRET`: sent as `x-job-queue-secret` to the internal API.
+    pub job_queue_secret: Option<String>,
+    /// `GRADING_LTI_GATEWAY_URL`: where grades are PUT for LTI launches.
+    pub lti_gateway_url: Option<String>,
+    /// `IBM_COS_LEARNER_BUCKET`.
+    pub learner_bucket: Option<String>,
+    /// `IBM_COS_LEARNER_BUCKET_PROD`.
+    pub learner_bucket_prod: Option<String>,
+}
+
+impl GradingHandOff {
+    /// Both values the queued hand-off needs are present.
+    pub fn internal_api_configured(&self) -> bool {
+        self.internal_api_url.is_some() && self.job_queue_secret.is_some()
+    }
+
+    /// The configured learner upload buckets, deduplicated.
+    pub fn learner_buckets(&self) -> Vec<String> {
+        let mut buckets: Vec<String> = Vec::new();
+        for bucket in [&self.learner_bucket, &self.learner_bucket_prod]
+            .into_iter()
+            .flatten()
+        {
+            if !buckets.contains(bucket) {
+                buckets.push(bucket.clone());
+            }
+        }
+        buckets
+    }
+}
+
+impl fmt::Debug for GradingHandOff {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("GradingHandOff")
+            .field("internal_api_url", &self.internal_api_url)
+            .field(
+                "job_queue_secret",
+                &self.job_queue_secret.as_ref().map(|_| "<redacted>"),
+            )
+            .field("lti_gateway_url", &self.lti_gateway_url)
+            .field("learner_bucket", &self.learner_bucket)
+            .field("learner_bucket_prod", &self.learner_bucket_prod)
+            .finish()
+    }
 }
 
 impl fmt::Debug for Config {
@@ -110,6 +167,7 @@ impl fmt::Debug for Config {
             .field("request_timeout", &self.request_timeout)
             .field("shutdown_grace", &self.shutdown_grace)
             .field("controls", &self.controls)
+            .field("grading", &self.grading)
             .finish()
     }
 }
@@ -183,6 +241,15 @@ impl Config {
             dispatch_external_effects: parse_bool(env, "MARK_RUST_DISPATCH_EXTERNAL_EFFECTS")?,
         };
 
+        let grading = GradingHandOff {
+            internal_api_url: http_url(env, "MARK_INTERNAL_API_URL")?
+                .map(|url| url.trim_end_matches('/').to_owned()),
+            job_queue_secret: env.get("JOB_QUEUE_SECRET"),
+            lti_gateway_url: http_url(env, "GRADING_LTI_GATEWAY_URL")?,
+            learner_bucket: env.get("IBM_COS_LEARNER_BUCKET"),
+            learner_bucket_prod: env.get("IBM_COS_LEARNER_BUCKET_PROD"),
+        };
+
         Ok(Self {
             role,
             service_name: env
@@ -201,7 +268,30 @@ impl Config {
             request_timeout: Duration::from_millis(parse_or(env, "REQUEST_TIMEOUT_MS", 30_000)?),
             shutdown_grace: Duration::from_millis(parse_or(env, "SHUTDOWN_GRACE_MS", 20_000)?),
             controls,
+            grading,
         })
+    }
+}
+
+/// An optional `http://` or `https://` URL. Anything else is a startup error
+/// rather than a request-time surprise.
+fn http_url(env: &impl Source, name: &'static str) -> Result<Option<String>, ConfigError> {
+    match env.get(name) {
+        None => Ok(None),
+        Some(raw) => {
+            let lower = raw.to_ascii_lowercase();
+            if (lower.starts_with("http://") || lower.starts_with("https://"))
+                && raw.len() > "https://".len()
+                && !raw.chars().any(char::is_whitespace)
+            {
+                Ok(Some(raw))
+            } else {
+                Err(ConfigError::Invalid {
+                    name,
+                    reason: "expected an http:// or https:// URL".to_owned(),
+                })
+            }
+        }
     }
 }
 
@@ -315,6 +405,39 @@ mod tests {
         let cfg = Config::load(Role::Api, &env).unwrap();
         assert_eq!(cfg.bind_addr.port(), 8080);
         assert_eq!(cfg.log_format, LogFormat::Json);
+    }
+
+    #[test]
+    fn grading_hand_off_is_optional_and_validated() {
+        let cfg = Config::load(Role::Api, &base()).unwrap();
+        assert_eq!(cfg.grading, GradingHandOff::default());
+        assert!(!cfg.grading.internal_api_configured());
+        assert!(cfg.grading.learner_buckets().is_empty());
+
+        let mut env = base();
+        env.insert("MARK_INTERNAL_API_URL", "http://mark-api:3000/");
+        env.insert("JOB_QUEUE_SECRET", "s3cr3t-value"); // pragma: allowlist secret
+        env.insert("GRADING_LTI_GATEWAY_URL", "https://lti.example/grade");
+        env.insert("IBM_COS_LEARNER_BUCKET", "learner");
+        env.insert("IBM_COS_LEARNER_BUCKET_PROD", "learner");
+        let cfg = Config::load(Role::Api, &env).unwrap();
+        assert_eq!(
+            cfg.grading.internal_api_url.as_deref(),
+            Some("http://mark-api:3000")
+        );
+        assert!(cfg.grading.internal_api_configured());
+        assert_eq!(cfg.grading.learner_buckets(), vec!["learner".to_owned()]);
+        let rendered = format!("{cfg:?}");
+        assert!(!rendered.contains("s3cr3t-value"), "{rendered}");
+
+        env.insert("MARK_INTERNAL_API_URL", "mark-api:3000");
+        assert!(matches!(
+            Config::load(Role::Api, &env),
+            Err(ConfigError::Invalid {
+                name: "MARK_INTERNAL_API_URL",
+                ..
+            })
+        ));
     }
 
     #[test]
