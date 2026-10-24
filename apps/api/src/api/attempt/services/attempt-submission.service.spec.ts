@@ -1359,6 +1359,54 @@ describe("AttemptSubmissionService - Grading Validation", () => {
       expect(serialized).not.toContain("the answer");
       expect(serialized).not.toContain("secret");
       expect(serialized).not.toContain("isCorrect");
+      expect(serialized).not.toContain('"answer"');
+      expect(serialized).not.toContain("questionVersions");
+      expect(serialized).not.toContain("questionVariants");
+      for (const question of result.questions) {
+        expect(JSON.stringify(question.choices)).not.toContain('"points"');
+        expect(JSON.stringify(question.randomizedChoices)).not.toContain(
+          '"points"',
+        );
+      }
+
+      // The contract's Attempt schema, exactly.
+      expect(Object.keys(result).sort()).toEqual(
+        [
+          "id",
+          "assignmentId",
+          "assignmentVersionId",
+          "userId",
+          "submitted",
+          "grade",
+          "expiresAt",
+          "createdAt",
+          "questionOrder",
+          "comments",
+          "preferredLanguage",
+          "serverNow",
+          "questions",
+          "questionResponses",
+          "passingGrade",
+          "showAssignmentScore",
+          "showSubmissionFeedback",
+          "showQuestionScore",
+          "showQuestions",
+          "correctAnswerVisibility",
+          "currentVersionId",
+          "versionMismatch",
+          "assignmentVersion",
+        ].sort(),
+      );
+      // A stored frozen order is served as a real array of sanitised choices.
+      const frozen = result.questions.find((question) => question.id === 101);
+      expect(Array.isArray(frozen?.randomizedChoices)).toBe(true);
+      expect(frozen?.randomizedChoices).toEqual([{ id: 0, choice: "A" }]);
+      // No frozen order means null, never a string.
+      const unfrozen = result.questions.find((question) => question.id === 202);
+      expect(unfrozen?.randomizedChoices).toBeNull();
+      expect(unfrozen?.translations).toEqual({});
+      // Unsubmitted: no grade even though the row carries one.
+      expect(result.grade).toBeNull();
     });
 
     const choiceQuestion = () => ({
@@ -1481,9 +1529,6 @@ describe("AttemptSubmissionService - Grading Validation", () => {
     });
 
     it("serves a region-coded language its own translation instead of the authored English", async () => {
-      const removeSensitiveSpy = jest
-        .spyOn(service as never, "removeSensitiveData")
-        .mockImplementation(() => undefined);
       mockTranslationService.getTranslationsForAttempt.mockResolvedValue(
         new Map([
           [
@@ -1511,8 +1556,6 @@ describe("AttemptSubmissionService - Grading Validation", () => {
         "问题一零一",
         "问题二零二",
       ]);
-
-      removeSensitiveSpy.mockRestore();
     });
 
     it("uses cached questions for translation-aware attempt reads", async () => {
@@ -1522,10 +1565,7 @@ describe("AttemptSubmissionService - Grading Validation", () => {
       );
       const translationBuildSpy = jest
         .spyOn(AttemptQuestionsMapper, "buildQuestionsWithTranslations")
-        .mockResolvedValue([{ id: 101 }, { id: 202 }]);
-      const removeSensitiveSpy = jest
-        .spyOn(service as never, "removeSensitiveData")
-        .mockImplementation(() => undefined);
+        .mockResolvedValue([{ id: 101 }, { id: 202 }] as never);
 
       const result = await service.getAssignmentAttempt(71, "fr");
 
@@ -1550,10 +1590,11 @@ describe("AttemptSubmissionService - Grading Validation", () => {
         "fr",
       );
       expect(translationBuildSpy).toHaveBeenCalled();
-      expect(result.questions).toEqual([{ id: 101 }, { id: 202 }]);
+      expect(result.questions.map((question) => question.id)).toEqual([
+        101, 202,
+      ]);
 
       translationBuildSpy.mockRestore();
-      removeSensitiveSpy.mockRestore();
     });
   });
 
@@ -2031,94 +2072,6 @@ describe("AttemptSubmissionService - Grading Validation", () => {
   });
 
   // ─── Change 4: authorComment bug fix ─────────────────────────────────────
-
-  describe("removeSensitiveData — authorComment always null (Change 4)", () => {
-    type QuestionLike = {
-      authorComment: string | null;
-      scoring?: { showRubricsToLearner?: boolean; rubrics?: unknown };
-      choices?: Array<{
-        points?: number;
-        isCorrect?: boolean;
-        feedback?: string;
-      }>;
-    };
-
-    const callRemoveSensitiveData = (
-      questions: QuestionLike[],
-      correctAnswerVisibility = "NEVER",
-      grade = 0,
-      passingGrade = 0,
-    ) =>
-      (
-        service as unknown as {
-          removeSensitiveData: (
-            questions: QuestionLike[],
-            assignment: { correctAnswerVisibility: string },
-            grade: number,
-            passingGrade: number,
-          ) => void;
-        }
-      ).removeSensitiveData(
-        questions,
-        { correctAnswerVisibility },
-        grade,
-        passingGrade,
-      );
-
-    it("sets authorComment to null for every question", () => {
-      const questions: QuestionLike[] = [
-        { authorComment: "Internal note only for graders" },
-        { authorComment: "Another internal note" },
-      ];
-
-      callRemoveSensitiveData(questions);
-
-      expect(questions[0].authorComment).toBeNull();
-      expect(questions[1].authorComment).toBeNull();
-    });
-
-    it("sets authorComment to null even when it was already null", () => {
-      const questions: QuestionLike[] = [{ authorComment: null }];
-
-      callRemoveSensitiveData(questions);
-
-      expect(questions[0].authorComment).toBeNull();
-    });
-
-    it("sets authorComment to null regardless of grade or passing threshold", () => {
-      const question: QuestionLike = { authorComment: "Should be hidden" };
-
-      // High grade — still must be null
-      callRemoveSensitiveData([question], "PASSING", 1, 0.5);
-      expect(question.authorComment).toBeNull();
-    });
-
-    it("does not expose rubrics when showRubricsToLearner is false", () => {
-      const question: QuestionLike = {
-        authorComment: "hidden",
-        scoring: {
-          showRubricsToLearner: false,
-          rubrics: { criterion: "fluency" },
-        },
-      };
-
-      callRemoveSensitiveData([question]);
-
-      expect(question.scoring?.rubrics).toBeUndefined();
-    });
-
-    it("preserves rubrics when showRubricsToLearner is true", () => {
-      const rubrics = { criterion: "fluency" };
-      const question: QuestionLike = {
-        authorComment: "hidden",
-        scoring: { showRubricsToLearner: true, rubrics },
-      };
-
-      callRemoveSensitiveData([question]);
-
-      expect(question.scoring?.rubrics).toBe(rubrics);
-    });
-  });
 
   describe("updateLearnerAttempt - submission validation", () => {
     it("throws ConflictException before grading when the attempt is already submitted", async () => {

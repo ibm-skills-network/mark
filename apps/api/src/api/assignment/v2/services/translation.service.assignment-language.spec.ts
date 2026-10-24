@@ -57,6 +57,24 @@ describe("TranslationService.applyTranslationsToAssignment", () => {
       translatedInstructions: "تعليمات",
       translatedGradingCriteriaOverview: "معايير",
     },
+    "zh-CN": {
+      translatedName: "简体名称",
+      translatedIntroduction: "简体介绍",
+      translatedInstructions: "简体说明",
+      translatedGradingCriteriaOverview: "简体标准",
+    },
+    "zh-TW": {
+      translatedName: "繁體名稱",
+      translatedIntroduction: "繁體介紹",
+      translatedInstructions: "繁體說明",
+      translatedGradingCriteriaOverview: "繁體標準",
+    },
+    pt: {
+      translatedName: "Nome",
+      translatedIntroduction: "Introdução",
+      translatedInstructions: "Instruções",
+      translatedGradingCriteriaOverview: "Critérios",
+    },
   };
 
   const makeAssignment = (id: number): LearnerGetAssignmentResponseDto =>
@@ -67,12 +85,20 @@ describe("TranslationService.applyTranslationsToAssignment", () => {
   const makeService = () => {
     const prisma = {
       assignmentTranslation: {
-        findUnique: jest.fn(
+        // Mirrors `startsWith` with `mode: "insensitive"`.
+        findMany: jest.fn(
           async (arguments_: {
-            where: { assignmentId_languageCode: { languageCode: string } };
+            where: { languageCode: { startsWith: string } };
           }) =>
-            rows[arguments_.where.assignmentId_languageCode.languageCode] ??
-            null,
+            Object.entries(rows)
+              .filter(([code]) =>
+                code
+                  .toLowerCase()
+                  .startsWith(
+                    arguments_.where.languageCode.startsWith.toLowerCase(),
+                  ),
+              )
+              .map(([languageCode, row]) => ({ languageCode, ...row })),
         ),
       },
     };
@@ -103,7 +129,7 @@ describe("TranslationService.applyTranslationsToAssignment", () => {
       await service.applyTranslationsToAssignment(assignment, language);
 
       expect(llmFacade.getLanguageCode).not.toHaveBeenCalled();
-      expect(prisma.assignmentTranslation.findUnique).not.toHaveBeenCalled();
+      expect(prisma.assignmentTranslation.findMany).not.toHaveBeenCalled();
       expect(assignment).toMatchObject(authored);
     },
   );
@@ -115,10 +141,11 @@ describe("TranslationService.applyTranslationsToAssignment", () => {
     await service.applyTranslationsToAssignment(assignment, "ar");
 
     expect(llmFacade.getLanguageCode).not.toHaveBeenCalled();
-    expect(prisma.assignmentTranslation.findUnique).toHaveBeenCalledWith(
+    expect(prisma.assignmentTranslation.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
-          assignmentId_languageCode: { assignmentId: 2934, languageCode: "ar" },
+          assignmentId: 2934,
+          languageCode: { startsWith: "ar", mode: "insensitive" },
         },
       }),
     );
@@ -128,6 +155,34 @@ describe("TranslationService.applyTranslationsToAssignment", () => {
       instructions: rows.ar.translatedInstructions,
       gradingCriteriaOverview: rows.ar.translatedGradingCriteriaOverview,
     });
+  });
+
+  it("matches a lower-case region code to the stored row case-insensitively", async () => {
+    const { service } = makeService();
+    const assignment = makeAssignment(20);
+
+    await service.applyTranslationsToAssignment(assignment, "zh-cn");
+
+    expect(assignment.name).toBe(rows["zh-CN"].translatedName);
+    expect(assignment.instructions).toBe(rows["zh-CN"].translatedInstructions);
+  });
+
+  it("falls back to the base language when the region has no row", async () => {
+    const { service } = makeService();
+    const assignment = makeAssignment(21);
+
+    await service.applyTranslationsToAssignment(assignment, "pt-br");
+
+    expect(assignment.name).toBe(rows.pt.translatedName);
+  });
+
+  it("falls back to a sibling region when neither exact nor base exists", async () => {
+    const { service } = makeService();
+    const assignment = makeAssignment(22);
+
+    await service.applyTranslationsToAssignment(assignment, "zh-hk");
+
+    expect(assignment.name).toBe(rows["zh-CN"].translatedName);
   });
 
   it("keeps the authored text when no row exists for the language", async () => {
@@ -149,7 +204,7 @@ describe("TranslationService.applyTranslationsToAssignment", () => {
       "en",
     ] as unknown as string);
 
-    expect(prisma.assignmentTranslation.findUnique).not.toHaveBeenCalled();
+    expect(prisma.assignmentTranslation.findMany).not.toHaveBeenCalled();
     expect(assignment).toMatchObject(authored);
   });
 });

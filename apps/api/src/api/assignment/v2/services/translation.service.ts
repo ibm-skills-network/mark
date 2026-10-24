@@ -30,6 +30,7 @@ import {
   QuestionDto,
   VariantDto,
 } from "../../dto/update.questions.request.dto";
+import { pickTranslation } from "src/api/attempt/common/utils/translation-language.util";
 import { AssignmentRepository } from "../repositories/assignment.repository";
 import { JobStatusServiceV2 } from "./job-status.service";
 import type { TranslateMetaTextPayload } from "src/job-queue/job-queue.types";
@@ -835,21 +836,28 @@ export class TranslationService implements OnModuleDestroy {
     // Stored "en" rows are machine paraphrases and are never served.
     if (languageCode.trim().toLowerCase().split("-")[0] === "en") return;
 
-    const assignmentTranslation =
-      await this.prisma.assignmentTranslation.findUnique({
-        where: {
-          assignmentId_languageCode: {
-            assignmentId: assignment.id,
-            languageCode: languageCode,
-          },
-        },
-        select: {
-          translatedName: true,
-          translatedIntroduction: true,
-          translatedInstructions: true,
-          translatedGradingCriteriaOverview: true,
-        },
-      });
+    // Same family matching as question translations, so `zh-cn` finds a
+    // stored `zh-CN` row and `pt-br` falls back to `pt`.
+    const family = languageCode.trim().toLowerCase().split("-")[0];
+    if (!family) return;
+
+    const candidates = await this.prisma.assignmentTranslation.findMany({
+      where: {
+        assignmentId: assignment.id,
+        languageCode: { startsWith: family, mode: "insensitive" },
+      },
+      select: {
+        languageCode: true,
+        translatedName: true,
+        translatedIntroduction: true,
+        translatedInstructions: true,
+        translatedGradingCriteriaOverview: true,
+      },
+    });
+
+    const byCode: Record<string, (typeof candidates)[number]> = {};
+    for (const row of candidates) byCode[row.languageCode] = row;
+    const assignmentTranslation = pickTranslation(byCode, languageCode);
 
     if (assignmentTranslation) {
       if (assignmentTranslation.translatedName)

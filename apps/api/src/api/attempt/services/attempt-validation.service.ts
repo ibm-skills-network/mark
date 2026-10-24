@@ -1,11 +1,15 @@
 import {
+  ForbiddenException,
   HttpException,
   HttpStatus,
   Injectable,
+  Logger,
   UnprocessableEntityException,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import {
+  ASSIGNMENT_NOT_PUBLISHED_CODE,
+  ASSIGNMENT_NOT_PUBLISHED_MESSAGE,
   ATTEMPT_IN_PROGRESS_CODE,
   ATTEMPT_MAX_REACHED_CODE,
   ATTEMPT_TIME_RANGE_EXCEEDED_CODE,
@@ -46,6 +50,8 @@ export function activeAttemptWhere(
 
 @Injectable()
 export class AttemptValidationService {
+  private readonly logger = new Logger(AttemptValidationService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly gradingKillSwitch: GradingKillSwitchService,
@@ -66,6 +72,19 @@ export class AttemptValidationService {
     userSession: UserSession,
     database: PrismaService | Prisma.TransactionClient = this.prisma,
   ): Promise<void> {
+    // The client hides "Begin" on unpublished assignments; the server must not
+    // rely on that. Resuming an existing attempt never reaches this check.
+    if (!assignment.published) {
+      this.logger.warn(
+        `validateNewAttempt: refused unpublished assignment=${assignment.id} user=${userSession.userId}`,
+      );
+      throw new ForbiddenException({
+        statusCode: HttpStatus.FORBIDDEN,
+        code: ASSIGNMENT_NOT_PUBLISHED_CODE,
+        message: ASSIGNMENT_NOT_PUBLISHED_MESSAGE,
+      });
+    }
+
     // Kill-switch: block starting an attempt on an AI-graded assignment while
     // grading is disabled. Non-AI assignments (e.g. MCQ-only) are unaffected.
     await this.gradingKillSwitch.assertGradingAllowed(
