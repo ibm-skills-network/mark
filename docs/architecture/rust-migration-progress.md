@@ -10,11 +10,11 @@ Plan: `rust-migration-master-plan.md`. Contracts: `contracts/`.
 | --- | --- | --- | --- |
 | Foundation (workspace, CI, images, chart, dark deploy) | Merged | #782, chart 1.4.16 | Verified on staging as `2.9.6-rust-rc1`; both services disabled by default. |
 | Learner answer-key leak (TS fix ahead of the port) | Merged | #781 | Learner reads no longer carry version rows; visibility applied after submission only. |
-| Learner load: contract | In progress | `contracts/learner-load.openapi.yaml` | Six routes, plain JSON, no base64, minimal explicit shapes. |
+| Learner load: contract | Done on branch | `contracts/learner-load.openapi.yaml` | Six routes, plain JSON, no base64, minimal explicit shapes. |
 | Learner load: Rust routes | In progress | `rust/crates/api` | Principal from `user-session`, access checks, four reads, two writes. |
-| Learner load: TypeScript parity | In progress | `apps/api` | Same contract from NestJS so the gateway can route either way. |
-| Learner load: web | In progress | `apps/web` | Stop base64 decoding for these calls; tolerate null text; array `randomizedChoices`. |
-| Learner load: gateway routing | In progress | `apps/api-gateway`, chart | Route families to rust-api by helm value. |
+| Learner load: TypeScript parity | Done on branch | `apps/api` | Same contract from NestJS. Found and fixed `@DataTransform` never applying (wrong metadata target). |
+| Learner load: web | Done on branch | `apps/web` | No decoding for these calls; null text tolerated; array `randomizedChoices`; unpublished message; languages fallback to `en`. |
+| Learner load: gateway routing | Done on branch | `apps/api-gateway`, chart 1.4.17 | `rustApi.routes` lists families (`learner-reads`, `learner-attempt-writes`); learners only; `x-mark-backend` header. |
 | Learner load: staging shadow reads | Not started | | Reads first, writes after ownership checks. |
 | Attempt autosave / submit / grading | Not started | | Next slice after learner load. |
 
@@ -28,6 +28,7 @@ Plan: `rust-migration-master-plan.md`. Contracts: `contracts/`.
 - 2026-10-24: the create-attempt advisory lock stays. `pg_advisory_xact_lock` is transaction-scoped, released at commit, and therefore safe behind pgbouncer in transaction mode; the CLAUDE.md ban is for session-level locks from ad-hoc psql. Keeping it also serialises NestJS and Rust creators against each other during coexistence. The earlier idea of a partial unique index does not work because "active" depends on `expiresAt` versus now.
 - 2026-10-24: reads first. Rust owns `GET assignment`, `GET languages`, `GET attempts`, `GET attempt` when routed; `POST attempts` and `POST abandon` are implemented but stay on TypeScript until the read routes have run a cycle on staging.
 - 2026-10-24: deploy image tags are release tags only (`X.Y.Z-rcN`), never branch or commit tags.
+- 2026-10-24: on GET attempt, `choices` are always `{id, choice}`; `isCorrect`/`feedback` appear only on `randomizedChoices` and `translatedChoices` items after submission when visibility allows. Matches legacy behaviour and the completed-attempt route.
 
 ## Open items
 

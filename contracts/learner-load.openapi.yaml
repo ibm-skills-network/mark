@@ -309,10 +309,10 @@ components:
         choice: { type: string }
         isCorrect:
           type: boolean
-          description: Present only when the attempt is submitted and visibility allows.
+          description: Only on `randomizedChoices` and `translatedChoices` items, only when the attempt is submitted and visibility allows, and only when stored as a boolean. Never on `choices`.
         feedback:
           type: [string, "null"]
-          description: Present only when the attempt is submitted and visibility allows.
+          description: Same rule as `isCorrect`.
       additionalProperties: false
 
     QuestionTranslation:
@@ -388,23 +388,28 @@ components:
             oneOf:
               [{ $ref: "#/components/schemas/ResponseType" }, { type: "null" }],
           }
-        choices: { type: array, items: { $ref: "#/components/schemas/Choice" } }
+        choices:
+          type: array
+          description: Always exactly `{id, choice}` per item.
+          items: { $ref: "#/components/schemas/Choice" }
         translations:
           type: object
           description: Keyed by stored non-English code in the requested family. Empty object when none.
           additionalProperties:
             { $ref: "#/components/schemas/QuestionTranslation" }
         authorComment: { type: "null" }
-        maxWords: { type: integer }
-        maxCharacters: { type: integer }
-        scoring: { $ref: "#/components/schemas/Scoring" }
+        maxWords: { type: integer, description: Omitted unless numeric. }
+        maxCharacters: { type: integer, description: Omitted unless numeric. }
+        scoring:
+          allOf: [{ $ref: "#/components/schemas/Scoring" }]
+          description: Omitted when the stored value is not an object.
         totalPoints: { type: number }
         assignmentId: { type: integer }
         gradingContextQuestionIds: { type: array, items: { type: integer } }
         isDeleted: { type: boolean }
         randomizedChoices:
           type: [array, "null"]
-          description: Frozen display order for this attempt, same sanitisation as `choices`. Null when choices were not randomized.
+          description: Frozen display order for this attempt. Null when the stored value is not a non-empty array. Carries `isCorrect`/`feedback` after submission when visibility allows.
           items: { $ref: "#/components/schemas/Choice" }
         videoPresentationConfig:
           { type: [object, "null"], additionalProperties: true }
