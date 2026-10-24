@@ -673,10 +673,24 @@ export class FilesService {
       throw new BadRequestException("Invalid upload context");
     }
 
-    const question = await this.prisma.question.findFirst({
-      where: { id: questionId, assignmentId, isDeleted: false },
-      select: { type: true, responseType: true },
-    });
+    const question =
+      (await this.prisma.question.findFirst({
+        where: { id: questionId, assignmentId, isDeleted: false },
+        select: { type: true, responseType: true },
+      })) ??
+      // A republish soft-deletes the old question rows, but an attempt opened
+      // before it still serves the pinned version's questions. Accept those
+      // for the learner's own open attempt so the attempt stays completable.
+      (await this.prisma.questionVersion.findFirst({
+        where: {
+          questionId,
+          assignmentVersion: {
+            assignmentId,
+            assignmentAttempts: { some: { userId, submitted: false } },
+          },
+        },
+        select: { type: true, responseType: true },
+      }));
     if (!question) {
       this.logger.warn("upload_rejected: question not in assignment", {
         denial_reason: "question_not_in_assignment",
