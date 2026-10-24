@@ -76,7 +76,8 @@ export class CompletedAttemptResponseDto {
   @ApiProperty({
     type: Boolean,
     nullable: true,
-    description: "Null unless the pass/fail indicator is on and a grade exists.",
+    description:
+      "Null unless the pass/fail indicator is on and a grade exists.",
   })
   passed: boolean | null;
   @ApiProperty({ type: Number }) passingGrade: number;

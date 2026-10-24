@@ -74,7 +74,8 @@ components:
           oneOf:
             - { type: string }
             - { type: array, items: { type: string } }
-        error: { type: string, description: Nest-style reason phrase, optional. }
+        error:
+          { type: string, description: Nest-style reason phrase, optional. }
         code:
           type: string
           description: Machine-readable code where the client branches on it.
@@ -84,7 +85,8 @@ components:
             - ATTEMPT_CLOSED_AT_TIME_LIMIT
             - UNSUPPORTED_RESPONSE_TYPE
             - INVALID_FILE_REFERENCE
-        attemptId: { type: integer, description: Only on the 409 attempt-closed bodies. }
+        attemptId:
+          { type: integer, description: Only on the 409 attempt-closed bodies. }
       additionalProperties: true
 
     CorrectAnswerVisibility:
@@ -92,11 +94,32 @@ components:
       enum: [NEVER, ALWAYS, ON_PASS]
     QuestionType:
       type: string
-      enum: [TEXT, SINGLE_CORRECT, MULTIPLE_CORRECT, TRUE_FALSE, URL, UPLOAD, LINK_FILE]
+      enum:
+        [
+          TEXT,
+          SINGLE_CORRECT,
+          MULTIPLE_CORRECT,
+          TRUE_FALSE,
+          URL,
+          UPLOAD,
+          LINK_FILE,
+        ]
     ResponseType:
       type: string
       enum:
-        [REPO, CODE, ESSAY, REPORT, PRESENTATION, VIDEO, AUDIO, IMAGES, SPREADSHEET, LIVE_RECORDING, OTHER]
+        [
+          REPO,
+          CODE,
+          ESSAY,
+          REPORT,
+          PRESENTATION,
+          VIDEO,
+          AUDIO,
+          IMAGES,
+          SPREADSHEET,
+          LIVE_RECORDING,
+          OTHER,
+        ]
 
     LearnerFileReference:
       description: A file the learner uploaded through `/v1/files`. No other keys are accepted.
@@ -129,7 +152,13 @@ components:
       type: object
       required: [id]
       properties:
-        id: { type: integer, minimum: 1, maximum: 2147483647, description: Question id. }
+        id:
+          {
+            type: integer,
+            minimum: 1,
+            maximum: 2147483647,
+            description: Question id.,
+          }
         learnerTextResponse:
           type: string
           maxLength: 200000
@@ -217,8 +246,16 @@ components:
         grade:
           type: [number, "null"]
           description: 0-1 fraction over the served questions. Null when `showAssignmentScore` is false.
-        totalPointsEarned: { type: [number, "null"], description: Null when `showAssignmentScore` is false. }
-        totalPossiblePoints: { type: [number, "null"], description: Null when `showAssignmentScore` is false. }
+        totalPointsEarned:
+          {
+            type: [number, "null"],
+            description: Null when `showAssignmentScore` is false.,
+          }
+        totalPossiblePoints:
+          {
+            type: [number, "null"],
+            description: Null when `showAssignmentScore` is false.,
+          }
         passed:
           type: [boolean, "null"]
           description: Null unless `showPassFailIndicator` is true and a grade exists. Computed even when the score is hidden.
@@ -227,7 +264,8 @@ components:
         showQuestions: { type: boolean }
         showQuestionScore: { type: boolean }
         showPassFailIndicator: { type: boolean }
-        correctAnswerVisibility: { $ref: "#/components/schemas/CorrectAnswerVisibility" }
+        correctAnswerVisibility:
+          { $ref: "#/components/schemas/CorrectAnswerVisibility" }
         feedbacksForQuestions:
           type: array
           items: { $ref: "#/components/schemas/SubmitQuestionFeedback" }
@@ -269,7 +307,17 @@ components:
 
     CompletedQuestion:
       type: object
-      required: [id, question, type, responseType, totalPoints, choices, scoring, response]
+      required:
+        [
+          id,
+          question,
+          type,
+          responseType,
+          totalPoints,
+          choices,
+          scoring,
+          response,
+        ]
       properties:
         id: { type: integer }
         question:
@@ -277,7 +325,8 @@ components:
           description: The served text (variant when one was picked), translated to the attempt's `preferredLanguage` when a stored translation exists.
         type: { $ref: "#/components/schemas/QuestionType" }
         responseType:
-          oneOf: [{ $ref: "#/components/schemas/ResponseType" }, { type: "null" }]
+          oneOf:
+            [{ $ref: "#/components/schemas/ResponseType" }, { type: "null" }]
         totalPoints: { type: number }
         choices:
           type: [array, "null"]
@@ -289,7 +338,11 @@ components:
           additionalProperties: true
         response:
           description: The newest stored response for this question, or null when there is none.
-          oneOf: [{ $ref: "#/components/schemas/CompletedResponse" }, { type: "null" }]
+          oneOf:
+            [
+              { $ref: "#/components/schemas/CompletedResponse" },
+              { type: "null" },
+            ]
       additionalProperties: false
 
     CompletedAttempt:
@@ -333,9 +386,21 @@ components:
             0-1 fraction. The stored grade, or the served-set ratio when a
             response was stored above its question's maximum. Null when
             `showAssignmentScore` is false.
-        totalPointsEarned: { type: [number, "null"], description: Null when `showAssignmentScore` is false. }
-        totalPossiblePoints: { type: [number, "null"], description: Over the served questions. Null when `showAssignmentScore` is false. }
-        passed: { type: [boolean, "null"], description: Null unless `showPassFailIndicator` is true and a grade exists. }
+        totalPointsEarned:
+          {
+            type: [number, "null"],
+            description: Null when `showAssignmentScore` is false.,
+          }
+        totalPossiblePoints:
+          {
+            type: [number, "null"],
+            description: Over the served questions. Null when `showAssignmentScore` is false.,
+          }
+        passed:
+          {
+            type: [boolean, "null"],
+            description: Null unless `showPassFailIndicator` is true and a grade exists.,
+          }
         passingGrade: { type: integer, description: Percent 0-100, default 50. }
         showAssignmentScore: { type: boolean }
         showSubmissionFeedback: { type: boolean }
@@ -370,11 +435,23 @@ components:
       required: [jobId, status, progress, percentage, done, timestamp]
       properties:
         jobId: { type: string, format: uuid }
-        status: { type: string, enum: [Pending, Processing, In Progress, Completed, Failed] }
+        status:
+          {
+            type: string,
+            enum: [Pending, Processing, In Progress, Completed, Failed],
+          }
         progress: { type: string, maxLength: 255 }
         percentage: { type: number, minimum: 0, maximum: 100 }
-        currentQuestion: { type: integer, description: Absent on the first frame after a reconnect. }
-        totalQuestions: { type: integer, description: Absent on the first frame after a reconnect. }
+        currentQuestion:
+          {
+            type: integer,
+            description: Absent on the first frame after a reconnect.,
+          }
+        totalQuestions:
+          {
+            type: integer,
+            description: Absent on the first frame after a reconnect.,
+          }
         result:
           type: string
           description: |
@@ -402,15 +479,36 @@ components:
       required: [success, message]
       properties:
         success: { type: boolean, const: true }
-        message: { type: string, description: "`You will receive an email at <session userId> when grading is complete`" }
+        message:
+          {
+            type: string,
+            description: "`You will receive an email at <session userId> when grading is complete`",
+          }
       additionalProperties: false
 
     GradeSyncStatus:
       type: object
-      required: [id, status, grade, retryCount, maxRetries, lastError, nextRetryAt, completedAt, createdAt, errorLogs, canRetry]
+      required:
+        [
+          id,
+          status,
+          grade,
+          retryCount,
+          maxRetries,
+          lastError,
+          nextRetryAt,
+          completedAt,
+          createdAt,
+          errorLogs,
+          canRetry,
+        ]
       properties:
         id: { type: integer }
-        status: { type: string, enum: [PENDING, IN_PROGRESS, SUCCESS, FAILED, SCHEDULED] }
+        status:
+          {
+            type: string,
+            enum: [PENDING, IN_PROGRESS, SUCCESS, FAILED, SCHEDULED],
+          }
         grade: { type: number }
         retryCount: { type: integer }
         maxRetries: { type: integer }
@@ -461,19 +559,26 @@ components:
   responses:
     Unauthorized:
       description: No usable `user-session` header.
-      content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+      content:
+        { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
     Forbidden:
       description: Role not allowed, no AssignmentGroup link, author on another assignment, or malformed id.
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
-          example: { statusCode: 403, message: Forbidden resource, error: Forbidden }
+          example:
+            { statusCode: 403, message: Forbidden resource, error: Forbidden }
     AttemptNotFound:
       description: Attempt missing, not owned by the learner, or (on `/completed`) not submitted. One body for all.
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
-          example: { statusCode: 404, message: Attempt not found or not owned by the user, error: Not Found }
+          example:
+            {
+              statusCode: 404,
+              message: Attempt not found or not owned by the user,
+              error: Not Found,
+            }
     Unavailable:
       description: Temporary outage (database, or the LLM on the translation route). Safe to retry.
       headers: { Retry-After: { $ref: "#/components/headers/RetryAfter" } }
@@ -521,7 +626,11 @@ paths:
         - $ref: "#/components/parameters/attemptId"
       requestBody:
         required: true
-        content: { application/json: { schema: { $ref: "#/components/schemas/SubmitRequest" } } }
+        content:
+          {
+            application/json:
+              { schema: { $ref: "#/components/schemas/SubmitRequest" } },
+          }
       responses:
         "200":
           description: Queued for grading, or graded inline.
@@ -557,7 +666,10 @@ paths:
                   value:
                     {
                       statusCode: 400,
-                      message: ["responsesForQuestions.0.learnerUrlResponse must be shorter than or equal to 2048 characters"],
+                      message:
+                        [
+                          "responsesForQuestions.0.learnerUrlResponse must be shorter than or equal to 2048 characters",
+                        ],
                       error: Bad Request,
                     }
         "401": { $ref: "#/components/responses/Unauthorized" }
@@ -605,7 +717,10 @@ paths:
                   message: All required questions must be answered before submitting (2 unanswered).,
                   error: Unprocessable Entity,
                 }
-        "500": { description: Enqueue failure or an unexpected error. Not retried by the client. }
+        "500":
+          {
+            description: Enqueue failure or an unexpected error. Not retried by the client.,
+          }
         "503": { $ref: "#/components/responses/Unavailable" }
 
   /assignments/{assignmentId}/attempts/{attemptId}/grading/{gradingJobId}/status-stream:
@@ -641,12 +756,20 @@ paths:
                   - { $ref: "#/components/schemas/HeartbeatFrame" }
         "400":
           description: The job belongs to another user or attempt.
-          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+          content:
+            {
+              application/json:
+                { schema: { $ref: "#/components/schemas/Error" } },
+            }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404":
           description: Unknown or expired job id.
-          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+          content:
+            {
+              application/json:
+                { schema: { $ref: "#/components/schemas/Error" } },
+            }
 
   /assignments/{assignmentId}/attempts/{attemptId}/completed:
     get:
@@ -675,11 +798,18 @@ paths:
         - $ref: "#/components/parameters/attemptId"
       responses:
         "200":
-          content: { application/json: { schema: { $ref: "#/components/schemas/CompletedAttempt" } } }
+          content:
+            {
+              application/json:
+                { schema: { $ref: "#/components/schemas/CompletedAttempt" } },
+            }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/AttemptNotFound" }
-        "500": { description: A served question's maximum points cannot be resolved. }
+        "500":
+          {
+            description: A served question's maximum points cannot be resolved.,
+          }
         "503": { $ref: "#/components/responses/Unavailable" }
 
   /assignments/{assignmentId}/attempts/{attemptId}/notify:
@@ -695,7 +825,11 @@ paths:
         - $ref: "#/components/parameters/attemptId"
       responses:
         "201":
-          content: { application/json: { schema: { $ref: "#/components/schemas/NotifySubscribed" } } }
+          content:
+            {
+              application/json:
+                { schema: { $ref: "#/components/schemas/NotifySubscribed" } },
+            }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/AttemptNotFound" }
@@ -715,7 +849,11 @@ paths:
       responses:
         "200":
           description: Sync status, or an empty body.
-          content: { application/json: { schema: { $ref: "#/components/schemas/GradeSyncStatus" } } }
+          content:
+            {
+              application/json:
+                { schema: { $ref: "#/components/schemas/GradeSyncStatus" } },
+            }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/AttemptNotFound" }
@@ -740,31 +878,53 @@ paths:
         - $ref: "#/components/parameters/questionId"
       requestBody:
         required: true
-        content: { application/json: { schema: { $ref: "#/components/schemas/TranslationRequest" } } }
+        content:
+          {
+            application/json:
+              { schema: { $ref: "#/components/schemas/TranslationRequest" } },
+          }
       responses:
         "201":
-          content: { application/json: { schema: { $ref: "#/components/schemas/TranslationResult" } } }
+          content:
+            {
+              application/json:
+                { schema: { $ref: "#/components/schemas/TranslationResult" } },
+            }
         "400":
           description: Missing or unsupported language code.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
-              example: { statusCode: 400, message: [Unsupported language], error: Bad Request }
+              example:
+                {
+                  statusCode: 400,
+                  message: [Unsupported language],
+                  error: Bad Request,
+                }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404":
           description: Assignment missing, or question not in the assignment or deleted.
-          content: { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+          content:
+            {
+              application/json:
+                { schema: { $ref: "#/components/schemas/Error" } },
+            }
         "429":
           description: More than 10 translation requests in 60 s.
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
-              example: { statusCode: 429, message: "ThrottlerException: Too Many Requests" }
+              example:
+                {
+                  statusCode: 429,
+                  message: "ThrottlerException: Too Many Requests",
+                }
         "503":
           description: The LLM failed or AI features are switched off. Retry after the header's delay.
           headers: { Retry-After: { $ref: "#/components/headers/RetryAfter" } }
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
-              example: { statusCode: 503, message: Service temporarily unavailable }
+              example:
+                { statusCode: 503, message: Service temporarily unavailable }

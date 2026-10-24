@@ -548,7 +548,9 @@ export function parseSubmitResult(raw: unknown): SubmitResult | undefined {
     showQuestionScore: value.showQuestionScore === true,
     showPassFailIndicator: value.showPassFailIndicator === true,
     correctAnswerVisibility:
-      visibility === "ALWAYS" || visibility === "ON_PASS" ? visibility : "NEVER",
+      visibility === "ALWAYS" || visibility === "ON_PASS"
+        ? visibility
+        : "NEVER",
     feedbacksForQuestions: feedbacks,
   };
 }

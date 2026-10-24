@@ -587,9 +587,7 @@ describe("AttemptSubmissionService.getLearnerAssignmentAttempt (completed attemp
       const result = await read();
 
       expect(result.grade).toBe(0.5);
-      expect(result.questions[0].choices?.[0]).not.toHaveProperty(
-        "isCorrect",
-      );
+      expect(result.questions[0].choices?.[0]).not.toHaveProperty("isCorrect");
     });
 
     it("ON_PASS still reveals when the score itself is hidden", async () => {

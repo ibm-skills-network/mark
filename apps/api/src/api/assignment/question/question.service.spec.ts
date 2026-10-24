@@ -1,7 +1,4 @@
-import {
-  NotFoundException,
-  ServiceUnavailableException,
-} from "@nestjs/common";
+import { NotFoundException, ServiceUnavailableException } from "@nestjs/common";
 import { Prisma, QuestionType } from "@prisma/client";
 import { LlmFacadeService } from "src/api/llm/llm-facade.service";
 import { PrismaService } from "src/database/prisma.service";
@@ -270,11 +267,13 @@ describe("QuestionService.generateTranslationIfNotExists", () => {
   });
 
   it("serves the row a concurrent request stored first", async () => {
-    prisma.translation.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({
-      translatedText: "Gagnant",
-      untranslatedText: "What is 2 + 2?",
-      translatedChoices: [{ id: 0, choice: "quatre" }],
-    });
+    prisma.translation.findFirst
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        translatedText: "Gagnant",
+        untranslatedText: "What is 2 + 2?",
+        translatedChoices: [{ id: 0, choice: "quatre" }],
+      });
     prisma.translation.create.mockRejectedValue(
       new Prisma.PrismaClientKnownRequestError("Unique constraint failed", {
         code: "P2002",

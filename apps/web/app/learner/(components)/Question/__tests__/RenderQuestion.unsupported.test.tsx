@@ -76,7 +76,10 @@ describe("RenderQuestion for recording and presentation questions", () => {
 
   it("sends a code question to the plain uploader", () => {
     render(
-      <RenderQuestion questionType="CODE" question={question("CODE", "CODE")} />,
+      <RenderQuestion
+        questionType="CODE"
+        question={question("CODE", "CODE")}
+      />,
     );
 
     expect(screen.getByText("uploader")).toBeTruthy();

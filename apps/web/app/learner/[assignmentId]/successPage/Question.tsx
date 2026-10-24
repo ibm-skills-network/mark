@@ -744,16 +744,16 @@ const Question: FC<Props> = ({
                     </div>
 
                     {isSelected && choiceObj.feedback && (
-                        <div className="mt-1 text-sm italic">
-                          <span
-                            className={
-                              isCorrect ? "text-green-700" : "text-red-700"
-                            }
-                          >
-                            {choiceObj.feedback}
-                          </span>
-                        </div>
-                      )}
+                      <div className="mt-1 text-sm italic">
+                        <span
+                          className={
+                            isCorrect ? "text-green-700" : "text-red-700"
+                          }
+                        >
+                          {choiceObj.feedback}
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex-shrink-0 ml-2">

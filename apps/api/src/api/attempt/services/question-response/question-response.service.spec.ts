@@ -177,12 +177,10 @@ describe("QuestionResponseService", () => {
       id: 289110,
       questionVariants: [],
     });
-    jest
-      .spyOn(service as any, "getAssignmentContext")
-      .mockResolvedValue({
-        assignmentInstructions: "",
-        questionAnswerContext: [],
-      });
+    jest.spyOn(service as any, "getAssignmentContext").mockResolvedValue({
+      assignmentInstructions: "",
+      questionAnswerContext: [],
+    });
 
     const { question } = await getLearnerQuestion(pinnedCache());
 
@@ -214,12 +212,10 @@ describe("QuestionResponseService", () => {
         },
       ],
     });
-    jest
-      .spyOn(service as any, "getAssignmentContext")
-      .mockResolvedValue({
-        assignmentInstructions: "",
-        questionAnswerContext: [],
-      });
+    jest.spyOn(service as any, "getAssignmentContext").mockResolvedValue({
+      assignmentInstructions: "",
+      questionAnswerContext: [],
+    });
 
     const { question } = await getLearnerQuestion(pinnedCache());
 
@@ -240,12 +236,10 @@ describe("QuestionResponseService", () => {
       ...pinnedQuestion,
       question: "Live wording",
     });
-    jest
-      .spyOn(service as any, "getAssignmentContext")
-      .mockResolvedValue({
-        assignmentInstructions: "",
-        questionAnswerContext: [],
-      });
+    jest.spyOn(service as any, "getAssignmentContext").mockResolvedValue({
+      assignmentInstructions: "",
+      questionAnswerContext: [],
+    });
 
     const { question } = await getLearnerQuestion({
       questions: new Map(),
