@@ -15,7 +15,7 @@ Plan: `rust-migration-master-plan.md`. Contracts: `contracts/`.
 | Learner load: TypeScript parity | Done on branch | `apps/api` | Same contract from NestJS. Found and fixed `@DataTransform` never applying (wrong metadata target). |
 | Learner load: web | Done on branch | `apps/web` | No decoding for these calls; null text tolerated; array `randomizedChoices`; unpublished message; languages fallback to `en`. |
 | Learner load: gateway routing | Done on branch | `apps/api-gateway`, chart 1.4.17 | `rustApi.routes` lists families (`learner-reads`, `learner-attempt-writes`); learners only; `x-mark-backend` header. |
-| Learner load: staging shadow reads | Not started | | Reads first, writes after ownership checks. |
+| Learner load: staging shadow reads | Verified 2026-10-24 | staging `2.10.0-rc2`, chart 1.4.17, `routes: [learner-reads]` | All eight learner reads on two assignments byte-identical to TypeScript (ignoring `serverNow`); 1,648 benchmark requests, zero errors; zero pgbouncer errors after the transaction-pinning fix. |
 | Attempt autosave / submit / grading | Not started | | Next slice after learner load. |
 
 ## Decisions log
@@ -43,6 +43,19 @@ An independent divergence review of the two implementations found 24 items. Fixe
 - TypeScript: P2028/P2034 map to 503; `Prisma.DbNull` for unusable frozen choices; deterministic `ORDER BY id` on the pools the seeded shuffle consumes.
 
 Accepted differences: Express adds ETag/304 and helmet headers and `charset=utf-8`; Rust does not. Author responses never reach Rust (gateway routes learners only). Choice shuffle distribution differs (legacy sort-random is biased) but not any single response's bytes.
+
+## Staging measurements, 2026-10-24 (rc2, same network path, same database)
+
+Single-request p50 latency measured from inside the gateway pod:
+
+| Route | TypeScript | Rust |
+| --- | --- | --- |
+| GET assignment | 303 ms | 48 ms |
+| GET languages | 105 ms | 29 ms |
+| GET attempts | 109 ms | 35 ms |
+| GET attempt | 373 ms | 71 ms |
+
+At ten concurrent clients TypeScript roughly doubles (608 ms p50 on GET assignment, 16 req/s) while Rust reaches 101 ms p50 at 92 req/s with no errors. Idle footprint: TypeScript api 398 MiB and 70 millicores; Rust api 2 MiB and 2 millicores. Rust requests are 128 MiB / 100m with limits 256 MiB / 500m. The rc1 build without transaction pinning failed a third of concurrent requests with pgbouncer unnamed-statement errors; rc2 failed none.
 
 ## Operating notes for the learner-load slice
 
