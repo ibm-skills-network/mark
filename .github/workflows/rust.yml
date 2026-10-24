@@ -1,9 +1,11 @@
 name: Rust
 
 on:
+  # Same convention as build-images.yml: PRs cover feature branches, and only
+  # master pushes and tags publish images.
   push:
     branches:
-      - "*"
+      - master
     tags:
       - "*"
     paths:
