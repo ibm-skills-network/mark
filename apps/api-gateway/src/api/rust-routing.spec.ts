@@ -67,6 +67,24 @@ describe("rust routing", () => {
         "/api/v2/assignments/12/attempts/345/abandon",
         "learner-attempt-writes",
       ],
+      ["PATCH", "/api/v2/assignments/12/attempts/345", "learner-submit"],
+      ["patch", "/api/v2/assignments/12/attempts/345?x=1", "learner-submit"],
+      [
+        "GET",
+        "/api/v2/assignments/12/attempts/345/completed",
+        "learner-submit",
+      ],
+      [
+        "GET",
+        "/api/v2/assignments/12/attempts/345/submission-status",
+        "learner-submit",
+      ],
+      ["POST", "/api/v2/assignments/12/attempts/345/notify", "learner-submit"],
+      [
+        "GET",
+        "/api/v2/assignments/12/attempts/345/grade-sync-status",
+        "learner-submit",
+      ],
     ])("%s %s -> %s", (method, url, family) => {
       expect(matchFamily(method, url, ALL)).toBe(family);
     });
@@ -82,12 +100,43 @@ describe("rust routing", () => {
       ["GET", "//evil.com/api/v2/assignments/12"],
       ["PUT", "/api/v2/assignments/12"],
       ["DELETE", "/api/v2/assignments/12/attempts/345"],
-      ["PATCH", "/api/v2/assignments/12/attempts/345"],
+      ["PATCH", "/api/v2/assignments/12"],
+      ["PATCH", "/api/v2/assignments/12/attempts"],
+      ["PATCH", "/api/v2/assignments/12/attempts/345/"],
+      ["PATCH", "/api/v2/assignments/12/attempts/345/abandon"],
+      ["PATCH", "/api/v2/assignments/12/attempts/345/completed"],
+      ["PATCH", "/api/v2/assignments/12/attempts/x345"],
+      ["PUT", "/api/v2/assignments/12/attempts/345"],
+      ["POST", "/api/v2/assignments/12/attempts/345/completed"],
+      ["GET", "/api/v2/assignments/12/attempts/345/completed/extra"],
+      ["GET", "/api/v2/assignments/12/attempts/345/notify"],
+      ["POST", "/api/v2/assignments/12/attempts/345/submission-status"],
+      ["PATCH", "/api/v2/assignments/12/attempts/345/grade-sync-status"],
+      [
+        "GET",
+        "/api/v2/assignments/12/attempts/345/grading/0b6d0f3c-9a0e-4a5c-9d0e-1f2a3b4c5d6e/status-stream",
+      ],
+      ["POST", "/api/v2/assignments/12/questions/7/translations"],
+      ["GET", "/api/v2/assignments/12/attempts/345/feedback"],
       ["POST", "/api/v2/assignments/12"],
       ["POST", "/api/v2/assignments/12/attempts/345/submit"],
       ["HEAD", "/api/v2/assignments/12"],
     ])("%s %s does not match", (method, url) => {
       expect(matchFamily(method, url, ALL)).toBeUndefined();
+    });
+
+    it("keeps the submit routes off rust unless learner-submit is enabled", () => {
+      const others = new Set(["learner-reads", "learner-attempt-writes"]);
+      expect(
+        matchFamily("PATCH", "/api/v2/assignments/12/attempts/345", others),
+      ).toBeUndefined();
+      expect(
+        matchFamily(
+          "GET",
+          "/api/v2/assignments/12/attempts/345/completed",
+          others,
+        ),
+      ).toBeUndefined();
     });
 
     it("only matches enabled families", () => {
@@ -128,6 +177,27 @@ describe("rust routing", () => {
         ).toEqual({ service: "legacy", family: "learner-reads" });
       },
     );
+
+    it.each([UserRole.AUTHOR, UserRole.ADMIN])(
+      "keeps %s submits on legacy",
+      (role) => {
+        expect(
+          resolveDownstream(
+            makeRequest("PATCH", "/api/v2/assignments/12/attempts/345", role),
+            config,
+          ),
+        ).toEqual({ service: "legacy", family: "learner-submit" });
+      },
+    );
+
+    it("routes a learner submit to rust", () => {
+      expect(
+        resolveDownstream(
+          makeRequest("PATCH", "/api/v2/assignments/12/attempts/345"),
+          config,
+        ),
+      ).toEqual({ service: "rust", family: "learner-submit" });
+    });
 
     it("keeps requests without a session on legacy", () => {
       const request = { method: "GET", originalUrl: "/api/v2/assignments/12" };
@@ -402,6 +472,34 @@ describe("rust routing", () => {
         expect.objectContaining({ "user-session": expect.any(String) }),
       );
       expect(response.setHeader).toHaveBeenCalledWith(BACKEND_HEADER, "rust");
+    });
+
+    it("keeps the grading status stream on the legacy API with every family enabled", async () => {
+      process.env.MARK_API_ENDPOINT = "http://mark-api:3000";
+      process.env.MARK_RUST_API_ENDPOINT = "http://mark-rust-api";
+      process.env.MARK_RUST_ROUTES = [...ALL].join(",");
+      const service = new ApiService(
+        {} as MessagingService,
+        makeLogger() as unknown as Logger,
+      );
+      const controller = new ApiController(service);
+      const sse = jest.spyOn(service, "forwardSSERequest").mockResolvedValue();
+      const url =
+        "/api/v2/assignments/12/attempts/345/grading/0b6d0f3c-9a0e-4a5c-9d0e-1f2a3b4c5d6e/status-stream";
+      const request = makeRequest("GET", url, UserRole.LEARNER, {
+        accept: "text/event-stream",
+      });
+      const response = { setHeader: jest.fn() };
+      await controller.handleGradingStatusStream(
+        request,
+        response as unknown as Response,
+      );
+      expect(sse).toHaveBeenCalledWith(
+        request,
+        response,
+        `http://mark-api:3000${url}`,
+        expect.any(Object),
+      );
     });
 
     it("marks admin API responses as legacy", async () => {

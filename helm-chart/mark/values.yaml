@@ -135,7 +135,7 @@ jobs:
 # Rust API configurations
 rustApi:
   enabled: false
-  # Gateway route families sent to the Rust API (learner-reads, learner-attempt-writes); empty routes nothing.
+  # Gateway route families sent to the Rust API (learner-reads, learner-attempt-writes, learner-submit); empty routes nothing.
   routes: []
   replicaCount: 1
   # Defaults to api.markDBName; DATABASE_URL is built from the postgres values unless secrets.DATABASE_URL is set.
@@ -188,6 +188,8 @@ rustApi:
     MARK_RUST_ACCEPT_OPERATIONS: "false"
     MARK_RUST_CONSUME_WORK: "false"
     MARK_RUST_DISPATCH_EXTERNAL_EFFECTS: "false"
+    # Defaults (when api.enabled): MARK_INTERNAL_API_URL = the mark-api Service; JOB_QUEUE_SECRET and
+    # IBM_COS_LEARNER_BUCKET(_PROD) from the mark-api Secret; GRADING_LTI_GATEWAY_URL from the mark-api ConfigMap.
   secrets:
     DATABASE_URL: ""
 
