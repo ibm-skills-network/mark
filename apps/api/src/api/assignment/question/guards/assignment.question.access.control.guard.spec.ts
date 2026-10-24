@@ -1,4 +1,8 @@
-import { ExecutionContext, ForbiddenException } from "@nestjs/common";
+import {
+  ExecutionContext,
+  ForbiddenException,
+  NotFoundException,
+} from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Test, type TestingModule } from "@nestjs/testing";
@@ -84,6 +88,21 @@ describe("AssignmentQuestionAccessControlGuard — hostile input", () => {
       guard.canActivate(buildContext({ assignmentId: "456", id: "7" })),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it("treats a deleted question as not in the assignment", async () => {
+    prisma.$transaction.mockResolvedValue([
+      { id: 123 },
+      { assignmentId: 123, groupId: "group-1" },
+      null,
+    ]);
+
+    await expect(
+      guard.canActivate(buildContext({ assignmentId: "123", id: "7" })),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(prisma.question.findFirst).toHaveBeenCalledWith({
+      where: { id: 7, assignmentId: 123, isDeleted: false },
+    });
   });
 
   it("rejects missing :assignmentId with ForbiddenException BEFORE touching Prisma", async () => {

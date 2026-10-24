@@ -14,7 +14,6 @@ import { QuestionDto } from "src/api/assignment/dto/update.questions.request.dto
 import { ScoringType } from "src/api/assignment/question/dto/create.update.question.request.dto";
 import { hashSafetyIdentifier } from "src/api/llm/core/utils/safety-identifier.util";
 import { ImageGradingService } from "src/api/llm/features/grading/services/image-grading.service";
-import { SourceProcessingError } from "src/api/llm/features/grading/errors/source-processing.error";
 import { UnsupportedImageFormatError } from "src/api/llm/features/grading/errors/unsupported-image-format.error";
 import {
   ImageAnalysisResult,
@@ -120,16 +119,14 @@ export class ImageGradingStrategy extends AbstractGradingStrategy<
         throw new BadRequestException("Image filename is required");
       }
 
-      const imageData = rawImage.imageData ?? rawImage.content;
-      const imageKey = rawImage.imageKey ?? rawImage.key;
-      const imageBucket = rawImage.imageBucket ?? rawImage.bucket;
-
+      // Images are read back from storage; inline data or a URL from the
+      // client is never graded.
       const learnerImage: LearnerImageUpload = {
         filename: rawImage.filename,
-        imageUrl: rawImage.imageUrl || "",
-        imageData: imageData && imageData !== "InCos" ? imageData : "",
-        imageBucket: imageBucket,
-        imageKey: imageKey,
+        imageUrl: "",
+        imageData: "",
+        imageBucket: rawImage.bucket,
+        imageKey: rawImage.key,
         mimeType:
           rawImage.mimeType ||
           rawImage.fileType ||
@@ -355,25 +352,18 @@ export class ImageGradingStrategy extends AbstractGradingStrategy<
     );
   }
   private validateSingleImage(image: RawImageUpload): void {
-    const imageData = image.imageData ?? image.content;
-    const imageKey = image.imageKey ?? image.key;
-    const imageBucket = image.imageBucket ?? image.bucket;
-
-    const hasDirectContent = Boolean(
-      (imageData && imageData !== "InCos") || image.imageUrl,
-    );
-    const hasCOSReference = Boolean(imageKey && imageBucket);
-
-    if (!hasDirectContent && !hasCOSReference) {
+    // Images are graded from storage only, so each one needs its
+    // coordinates; inline data and URLs from the client are not accepted.
+    if (!image.key || !image.bucket) {
       throw new BadRequestException(
-        `Invalid image metadata for ${image.filename}: provide either content/imageUrl or key+bucket`,
+        `Invalid image metadata for ${image.filename}: key and bucket are required`,
       );
     }
 
-    // A wrong file type or an oversized image is the learner's to fix, so
-    // both throw typed learner-facing errors (see the sniff below for why a
-    // BadRequestException is wrong here): the attempt shows "Unable to grade"
-    // with the fix instead of "Grading failed".
+    // A wrong file type is the learner's to fix, so it throws the typed
+    // learner-facing error: the attempt shows "Unable to grade" with the fix
+    // instead of "Grading failed". The bytes themselves are sniffed at grade
+    // time, after the download.
     if (!this.isValidImageFormat(image.filename)) {
       throw new UnsupportedImageFormatError({
         filename: image.filename,
@@ -381,196 +371,6 @@ export class ImageGradingStrategy extends AbstractGradingStrategy<
         reason: "file extension is not a gradable image",
       });
     }
-
-    if (
-      imageData &&
-      imageData !== "InCos" &&
-      this.isBase64TooLarge(imageData)
-    ) {
-      throw new SourceProcessingError("extraction_failed", "file", {
-        code: "file_too_large",
-        source: { kind: "file", fileName: image.filename },
-      });
-    }
-
-    // For inline base64 (Path-A) images, sniff the real magic bytes so an
-    // unsupported format that the vision model can neither grade nor convert
-    // (HEIC, SVG, or unrecognizable data) is rejected with a fast 400 at
-    // submission time rather than burning a grading job on a deterministic
-    // failure. COS/key-only entries have no inline bytes here and are sniffed
-    // later, at grade time.
-    if (imageData && imageData !== "InCos") {
-      const detectedFormat = this.sniffRejectedFormat(imageData);
-      if (detectedFormat) {
-        // Throw the typed learner-facing error, not a BadRequestException.
-        // validateResponse also runs at grade time (inside
-        // gradeQuestionNoSave); a BadRequestException there is not a
-        // LearnerFacingGradingError, so it gets wrapped and retried instead of
-        // failing terminally with the learner message. Every boundary
-        // (autosave 400, gradeQuestionNoSave passthrough, worker terminal
-        // no-retry) already translates this typed error correctly.
-        throw new UnsupportedImageFormatError({
-          filename: image.filename,
-          detectedFormat,
-          reason: "unsupported format detected at submission",
-        });
-      }
-    }
-  }
-
-  // Inspects the leading bytes of an inline base64 data URL and returns the
-  // detected MIME type only when it is one the grading pipeline must reject
-  // (heic/svg/unrecognized). Convertible formats (bmp/tiff/avif) and the
-  // directly-gradable raster formats (jpeg/png/gif/webp) return undefined so
-  // they pass validation and are handled downstream. Mirrors the magic-byte
-  // logic in ImageGradingService; the duplication is intentional — this is the
-  // submission-layer guard and stays decoupled from the grading service.
-  private sniffRejectedFormat(imageData: string): string | undefined {
-    const markerIndex = imageData.indexOf(";base64,");
-    // Only data URLs carry the marker and decodable bytes. Anything else
-    // (raw key references, opaque placeholders) is left for the grade-time
-    // detector — there is nothing to sniff here.
-    if (markerIndex === -1) {
-      return undefined;
-    }
-
-    // The signature fits well within the first chunk; decode a small prefix
-    // rather than the whole payload.
-    const base64Prefix = imageData.slice(markerIndex + 8, markerIndex + 8 + 96);
-    let header: Buffer;
-    try {
-      header = Buffer.from(base64Prefix, "base64");
-    } catch {
-      // Undecodable base64 is itself an unrecognized format.
-      return "unknown";
-    }
-
-    if (header.length < 4) {
-      return "unknown";
-    }
-
-    const detected = this.detectMimeFromBytes(header);
-
-    // Directly-gradable or convertible formats pass; only the reject set and
-    // unrecognized data are surfaced.
-    const passes =
-      detected === "image/jpeg" ||
-      detected === "image/png" ||
-      detected === "image/gif" ||
-      detected === "image/webp" ||
-      detected === "image/bmp" ||
-      detected === "image/tiff" ||
-      detected === "image/avif";
-    if (passes) {
-      return undefined;
-    }
-
-    return detected ?? "unknown";
-  }
-
-  // Magic-byte sniffing over a decoded header buffer. Recognizes the raster
-  // formats the grading pipeline can pass through (jpeg/png/gif/webp) or
-  // convert (bmp/tiff/avif), plus the ones it must reject (heic/svg).
-  private detectMimeFromBytes(buffer: Buffer): string | null {
-    if (buffer.length < 4) return null;
-
-    const firstBytes = buffer.subarray(0, 12);
-
-    if (firstBytes[0] === 0xff && firstBytes[1] === 0xd8) {
-      return "image/jpeg";
-    }
-
-    if (
-      firstBytes[0] === 0x89 &&
-      firstBytes[1] === 0x50 &&
-      firstBytes[2] === 0x4e &&
-      firstBytes[3] === 0x47
-    ) {
-      return "image/png";
-    }
-
-    if (
-      firstBytes[0] === 0x47 &&
-      firstBytes[1] === 0x49 &&
-      firstBytes[2] === 0x46
-    ) {
-      return "image/gif";
-    }
-
-    // WEBP is a RIFF container — check before BMP/TIFF.
-    if (
-      firstBytes[0] === 0x52 &&
-      firstBytes[1] === 0x49 &&
-      firstBytes[2] === 0x46 &&
-      firstBytes[3] === 0x46 &&
-      firstBytes[8] === 0x57 &&
-      firstBytes[9] === 0x45 &&
-      firstBytes[10] === 0x42 &&
-      firstBytes[11] === 0x50
-    ) {
-      return "image/webp";
-    }
-
-    if (firstBytes[0] === 0x42 && firstBytes[1] === 0x4d) {
-      return "image/bmp";
-    }
-
-    // TIFF: little-endian "II*\0" or big-endian "MM\0*".
-    if (
-      (firstBytes[0] === 0x49 &&
-        firstBytes[1] === 0x49 &&
-        firstBytes[2] === 0x2a &&
-        firstBytes[3] === 0x00) ||
-      (firstBytes[0] === 0x4d &&
-        firstBytes[1] === 0x4d &&
-        firstBytes[2] === 0x00 &&
-        firstBytes[3] === 0x2a)
-    ) {
-      return "image/tiff";
-    }
-
-    // ISO-BMFF (HEIC/AVIF): "ftyp" box at offset 4, brand at offset 8.
-    if (
-      firstBytes[4] === 0x66 &&
-      firstBytes[5] === 0x74 &&
-      firstBytes[6] === 0x79 &&
-      firstBytes[7] === 0x70
-    ) {
-      const brand = buffer.subarray(8, 12).toString("ascii").toLowerCase();
-      if (
-        brand.includes("heic") ||
-        brand.includes("heix") ||
-        brand.includes("hevc") ||
-        brand.includes("mif1") ||
-        brand.includes("msf1")
-      ) {
-        return "image/heic";
-      }
-      if (brand.includes("avif") || brand.includes("avis")) {
-        return "image/avif";
-      }
-    }
-
-    // SVG: leading whitespace, an optional XML prolog, then an "<svg" tag.
-    if (this.looksLikeSvg(buffer)) {
-      return "image/svg+xml";
-    }
-
-    return null;
-  }
-
-  private looksLikeSvg(buffer: Buffer): boolean {
-    const head = buffer
-      .subarray(0, 512)
-      .toString("utf8")
-      .replace(/^\uFEFF/, "")
-      .trimStart();
-    const withoutProlog = head.startsWith("<?xml")
-      ? head.slice(head.indexOf("?>") + 2).trimStart()
-      : head;
-    return (
-      /^<svg[\s>]/i.test(withoutProlog) || withoutProlog.startsWith("<svg")
-    );
   }
 
   private extractTextualResponse(
@@ -636,11 +436,5 @@ export class ImageGradingStrategy extends AbstractGradingStrategy<
       }
     }
     return total;
-  }
-
-  private isBase64TooLarge(base64Data: string): boolean {
-    const maxSizeMB = 20;
-    const sizeInBytes = Math.floor((base64Data.length * 3) / 4);
-    return sizeInBytes > maxSizeMB * 1024 * 1024;
   }
 }

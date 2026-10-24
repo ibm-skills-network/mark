@@ -25,7 +25,6 @@ import { AttemptControllerV2 } from "./attempt.controller";
 import { ChoiceGradingStrategy } from "./common/strategies/choice-grading.strategy";
 import { FileGradingStrategy } from "./common/strategies/file-grading.strategy";
 import { ImageGradingStrategy } from "./common/strategies/image-grading.strategy";
-import { PresentationGradingStrategy } from "./common/strategies/presentation-grading.strategy";
 import { TextGradingStrategy } from "./common/strategies/text-grading.strategy";
 import { TrueFalseGradingStrategy } from "./common/strategies/true-false-grading.strategy";
 import { UrlGradingStrategy } from "./common/strategies/url-grading.strategy";
@@ -74,7 +73,6 @@ import { TranslationService } from "./services/translation/translation.service";
     TextGradingStrategy,
     FileGradingStrategy,
     UrlGradingStrategy,
-    PresentationGradingStrategy,
     ChoiceGradingStrategy,
     TrueFalseGradingStrategy,
     {

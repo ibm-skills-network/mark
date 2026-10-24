@@ -22,7 +22,6 @@ import {
   ArchiveEntryContent,
   LearnerFileUpload,
 } from "../common/interfaces/attempt.interface";
-import { normalizeLearnerFileContent } from "../common/utils/learner-file-content.util";
 import { provenanceArtifactKey } from "../common/utils/provenance-artifact.util";
 
 import { MAX_EVIDENCE_BLOCKS_PER_SUBMISSION } from "../../llm/features/grading/constants";
@@ -297,39 +296,6 @@ export class FileContentExtractionService {
     private readonly pdfStructureExtractor: PdfStructureExtractorService,
   ) {}
 
-  private isJupyterNotebookJsonContent(content: string): boolean {
-    if (!content?.trim()) return false;
-
-    try {
-      const parsed = JSON.parse(content) as Partial<JupyterNotebook>;
-      return Array.isArray(parsed?.cells);
-    } catch {
-      return false;
-    }
-  }
-
-  /**
-   * Inline content is read as text below. Stored responses and request
-   * bodies can carry a JSON file's content already parsed into an object;
-   * serialize it back so the file is extracted instead of failing on it.
-   */
-  private withTextContent(file: LearnerFileUpload): LearnerFileUpload {
-    const raw: unknown = file.content;
-    if (typeof raw === "string" || raw === undefined || raw === null) {
-      return file;
-    }
-
-    const { content, originalType } = normalizeLearnerFileContent(raw);
-    this.logger.warn("file_extraction.non_string_content", {
-      filename: file.filename,
-      questionId: file.questionId,
-      recordId: file.recordId,
-      contentType: originalType,
-      serializedLength: content?.length ?? 0,
-    });
-    return { ...file, content: content ?? "" };
-  }
-
   async extractContentFromFiles(
     learnerFiles: LearnerFileUpload[],
     options?: {
@@ -348,10 +314,7 @@ export class FileContentExtractionService {
           );
           const startTime = Date.now();
 
-          const result = await this.extractSingleFileContent(
-            this.withTextContent(file),
-            options,
-          );
+          const result = await this.extractSingleFileContent(file, options);
 
           const duration = Date.now() - startTime;
           this.logger.debug(
@@ -437,119 +400,6 @@ export class FileContentExtractionService {
       .update(value)
       .digest("hex")
       .substring(0, 16);
-  }
-
-  /**
-   * Shadow instrumentation for the trust branch: grading is about to use the
-   * client-supplied file content verbatim. Emit structured telemetry, and —
-   * when the same submission also carries storage coordinates — re-extract the
-   * file server-side, log any checksum/length divergence, and persist a
-   * canonical extraction artifact.
-   *
-   * Depends only on storage + extraction primitives (the COS download, the
-   * shared buffer-extraction routine, and the artifact store), never on any
-   * grading context, so this seam can move to a dedicated worker unchanged.
-   *
-   * Fully fault-tolerant: any internal failure is logged and swallowed. It
-   * never throws and never mutates the extraction result.
-   */
-  private async recordClientContentUse(
-    file: LearnerFileUpload,
-    clientContent: string,
-    shadowEnabled: boolean,
-  ): Promise<void> {
-    if (!shadowEnabled) return;
-
-    try {
-      const clientSha16 = this.provenanceSha16(clientContent);
-
-      // Steady-state measurement telemetry: info, not warn (warn is reserved
-      // for actual anomalies like a real divergence).
-      this.logger.log(
-        `provenance.trust.client.content ${JSON.stringify({
-          questionId: file.questionId,
-          recordId: file.recordId,
-          filename: file.filename,
-          fileType: file.fileType,
-          contentLength: clientContent.length,
-          contentSha16: clientSha16,
-          hasCosCoordinates: Boolean(file.bucket && file.key),
-          hasGithubUrl: Boolean(file.githubUrl),
-        })}`,
-      );
-
-      // Only when the submission also carries storage coordinates can we
-      // re-extract the file server-side and measure divergence. Without them
-      // the telemetry above is all we can capture — and we never persist the
-      // client-supplied content (the divergence artifact persists SERVER text
-      // only, so attacker-controlled text never lands in storage).
-      if (!file.bucket || !file.key) return;
-
-      let serverContent: string;
-      let fileContent: Buffer;
-      let extracted: Awaited<ReturnType<typeof this.extractTextFromBuffer>>;
-      try {
-        fileContent = await this.downloadFileFromCOS(
-          file.bucket,
-          file.key,
-          file.buffer,
-        );
-        extracted = await this.extractTextFromBuffer(
-          fileContent,
-          file.filename,
-          file.fileType,
-        );
-        // Normalize the server text with the SAME pipeline grading applies to
-        // the client content (sanitizeAndTruncate). Hashing raw server text
-        // against sanitized client text produced systematic false divergence
-        // (CRLF / whitespace / truncation), wasting the measurement.
-        serverContent = this.sanitizeAndTruncate(extracted.text);
-      } catch (error) {
-        this.logShadowFailure(file, "reextract", error);
-        return;
-      }
-
-      const serverSha16 = this.provenanceSha16(serverContent);
-      const diverged = clientSha16 !== serverSha16;
-
-      const divergenceLine = `provenance.divergence ${JSON.stringify({
-        questionId: file.questionId,
-        recordId: file.recordId,
-        filename: file.filename,
-        diverged,
-        clientSha16,
-        serverSha16,
-        clientLength: clientContent.length,
-        serverLength: serverContent.length,
-      })}`;
-      // A real divergence is a recoverable anomaly worth a warn; the expected
-      // matching case is routine measurement and logs at info.
-      if (diverged) {
-        this.logger.warn(divergenceLine);
-      } else {
-        this.logger.log(divergenceLine);
-      }
-
-      this.persistProvenanceArtifact(file, {
-        schemaVersion: 1,
-        provenance: "server",
-        recordId: file.recordId,
-        questionId: file.questionId,
-        filename: file.filename,
-        fileType: file.fileType,
-        sha16: serverSha16,
-        contentLength: serverContent.length,
-        byteLength: fileContent.length,
-        metrics: extracted.additionalMetadata ?? null,
-        content: serverContent,
-        clientSha16,
-        clientLength: clientContent.length,
-        diverged,
-        extractedAt: new Date().toISOString(),
-      });
-    } catch (error) {
-      this.logShadowFailure(file, "telemetry", error);
-    }
   }
 
   /**
@@ -734,23 +584,21 @@ export class FileContentExtractionService {
       provenanceShadow?: boolean;
     },
   ): Promise<ExtractedFileContent> {
-    const inlineContent =
-      file.content && file.content !== "InCos" ? file.content : "";
-    const header =
-      file.buffer?.subarray(0, 8) ?? Buffer.from(inlineContent.slice(0, 8));
+    // Files are read from the server-side buffer or from storage. Content
+    // carried in the file object itself is never trusted or graded.
+    const header = file.buffer?.subarray(0, 8) ?? Buffer.alloc(0);
     if (isCompiledArtifact(header, file.filename)) {
-      if (!file.buffer && !inlineContent && !(file.bucket && file.key)) {
+      if (!file.buffer && !(file.bucket && file.key)) {
         throw new BadRequestException(
           "Binary artifact has no uploaded content or storage reference",
         );
       }
       // Known compiled uploads need only object metadata, not a download of
       // executable bytes. Keep them present for artifact-based rubrics.
-      const size =
-        !file.buffer && file.bucket && file.key
-          ? ((await this.s3Service.getObjectMetadata(file.bucket, file.key))
-              .ContentLength ?? 0)
-          : (file.buffer?.length ?? Buffer.byteLength(inlineContent));
+      const size = file.buffer
+        ? file.buffer.length
+        : ((await this.s3Service.getObjectMetadata(file.bucket, file.key))
+            .ContentLength ?? 0);
       const artifact = describeBinaryArtifact(file.filename, size);
       return {
         filename: file.filename,
@@ -878,59 +726,6 @@ export class FileContentExtractionService {
           `Structured extraction failed for ${file.filename}, falling back to simple extraction: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
-    }
-
-    if (
-      file.content &&
-      file.content !== "InCos" &&
-      file.content.trim().length > 0
-    ) {
-      const isIpynbFile = file.filename.toLowerCase().endsWith(".ipynb");
-      const hasNotebookJson = this.isJupyterNotebookJsonContent(file.content);
-
-      if (isIpynbFile && hasNotebookJson) {
-        this.logger.debug(
-          `Using existing notebook JSON content for ${file.filename}; parsing notebook cells/outputs`,
-        );
-
-        const extractedNotebook = await this.extractJupyterNotebook(
-          Buffer.from(file.content, "utf8"),
-          file.filename,
-        );
-
-        const notebookContent = this.sanitizeAndTruncate(
-          extractedNotebook.text,
-        );
-        await this.recordClientContentUse(file, notebookContent, shadowEnabled);
-
-        return {
-          filename: file.filename,
-          content: notebookContent,
-          fileType: file.fileType,
-          extractedText: extractedNotebook.extractedText,
-          structuredContent: extractedNotebook.structuredContent,
-          metadata: {
-            size: file.content.length,
-            encoding: extractedNotebook.encoding,
-            mimeType: file.fileType,
-            ...extractedNotebook.additionalMetadata,
-          },
-        };
-      }
-
-      this.logger.debug(`Using existing content for ${file.filename}`);
-      const trustedContent = this.sanitizeAndTruncate(file.content);
-      await this.recordClientContentUse(file, trustedContent, shadowEnabled);
-
-      return {
-        filename: file.filename,
-        content: trustedContent,
-        fileType: file.fileType,
-        metadata: {
-          size: file.content.length,
-          mimeType: file.fileType,
-        },
-      };
     }
 
     const fileContent = await this.downloadFileFromCOS(

@@ -6,7 +6,10 @@ import {
   Logger,
   NotFoundException,
 } from "@nestjs/common";
-import { UserRole } from "src/auth/interfaces/user.session.interface";
+import {
+  UserRole,
+  UserSession,
+} from "src/auth/interfaces/user.session.interface";
 import { PrismaService } from "src/database/prisma.service";
 import { CreateFolderDto } from "../dto/create-folder.dto";
 import {
@@ -28,7 +31,7 @@ import {
 } from "../dto/upload.dto";
 import { FileProcessingBudgetService } from "./file-processing-budget.service";
 import { fileExtension, learnerUploadExtensions } from "./learner-upload-types";
-import { sanitizeUploadPath } from "./path-sanitizer";
+import { sanitizeUploadFileName, sanitizeUploadPath } from "./path-sanitizer";
 import { S3Service } from "./s3.service";
 import { generateStorageKeyId } from "./storage-key";
 
@@ -183,7 +186,8 @@ export class FilesService {
     uploadType: UploadType;
     maxAllowedBytes: number;
   } {
-    const { fileName, fileType, fileSize, uploadType } = uploadRequest;
+    const { fileType, fileSize, uploadType } = uploadRequest;
+    const fileName = sanitizeUploadFileName(uploadRequest.fileName);
 
     // `context` reaches us as untyped JSON on both upload paths, so null,
     // arrays and primitives all get here. A destructuring default only covers
@@ -281,6 +285,84 @@ export class FilesService {
       uploadType,
       maxAllowedBytes,
     };
+  }
+
+  /**
+   * A learner upload is written under the assignment named in its context,
+   * so that assignment must be the one the session was launched into.
+   * Admins are exempt. Throws 403.
+   */
+  assertUploadContextMatchesSession(
+    uploadRequest: Pick<UploadRequestDto, "uploadType" | "context">,
+    session: Pick<UserSession, "assignmentId" | "role" | "userId">,
+  ): void {
+    if (
+      session.role === UserRole.ADMIN ||
+      (uploadRequest.uploadType !== UploadType.LEARNER &&
+        uploadRequest.uploadType !== UploadType.LEARNER_PROD)
+    ) {
+      return;
+    }
+    const contextAssignmentId: unknown = isPlainObject(uploadRequest.context)
+      ? uploadRequest.context.assignmentId
+      : undefined;
+    if (
+      typeof session.assignmentId !== "number" ||
+      contextAssignmentId !== session.assignmentId
+    ) {
+      this.logger.warn("upload_rejected: context assignment not in session", {
+        denial_reason: "context_assignment_mismatch",
+        user_id: session.userId,
+        assignment_id: session.assignmentId,
+        upload_type: uploadRequest.uploadType,
+      });
+      throw new ForbiddenException();
+    }
+  }
+
+  /**
+   * Who may delete which stored object. A learner may delete only their own
+   * answer uploads for the session's assignment (or their own chat
+   * attachments); an author only author or their own chat files; an admin
+   * anything. Anything else is a bare 404 so the response never says whether
+   * the object exists.
+   */
+  assertDeleteAllowed(
+    uploadType: string,
+    key: string,
+    session: Pick<UserSession, "assignmentId" | "role" | "userId">,
+  ): void {
+    if (session.role === UserRole.ADMIN) {
+      return;
+    }
+    const ownChatPrefix = `chatbot/${session.userId}/`;
+    let allowed = false;
+    if (session.userId && typeof key === "string" && key.length > 0) {
+      if (session.role === UserRole.LEARNER) {
+        const isLearnerType =
+          uploadType === UploadType.LEARNER ||
+          uploadType === UploadType.LEARNER_PROD;
+        allowed =
+          (isLearnerType &&
+            typeof session.assignmentId === "number" &&
+            key.startsWith(`${session.assignmentId}/${session.userId}/`)) ||
+          (uploadType === UploadType.CHATBOT && key.startsWith(ownChatPrefix));
+      } else if (session.role === UserRole.AUTHOR) {
+        allowed =
+          uploadType === UploadType.AUTHOR ||
+          (uploadType === UploadType.CHATBOT && key.startsWith(ownChatPrefix));
+      }
+    }
+    if (!allowed) {
+      this.logger.warn("delete_rejected: key not owned by caller", {
+        denial_reason: "delete_not_owned",
+        user_id: session.userId,
+        assignment_id: session.assignmentId,
+        role: session.role,
+        upload_type: uploadType,
+      });
+      throw new NotFoundException();
+    }
   }
 
   private assertRoleAllowedForUploadType(

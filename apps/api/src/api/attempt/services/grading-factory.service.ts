@@ -12,9 +12,7 @@ import {
 /** The minimal slice of an uploaded file that routing decisions read. */
 export interface SubmittedFileForRouting {
   filename?: string;
-  githubUrl?: string;
 }
-import { PresentationGradingStrategy } from "../common/strategies/presentation-grading.strategy";
 import { TextGradingStrategy } from "../common/strategies/text-grading.strategy";
 import { TrueFalseGradingStrategy } from "../common/strategies/true-false-grading.strategy";
 import { UrlGradingStrategy } from "../common/strategies/url-grading.strategy";
@@ -28,7 +26,6 @@ export class GradingFactoryService {
     private readonly textGradingStrategy: TextGradingStrategy,
     private readonly fileGradingStrategy: FileGradingStrategy,
     private readonly urlGradingStrategy: UrlGradingStrategy,
-    private readonly presentationGradingStrategy: PresentationGradingStrategy,
     private readonly choiceGradingStrategy: ChoiceGradingStrategy,
     private readonly trueFalseGradingStrategy: TrueFalseGradingStrategy,
     private readonly imageGradingStrategy: ImageGradingStrategy,
@@ -59,12 +56,9 @@ export class GradingFactoryService {
       }
 
       case QuestionType.UPLOAD: {
+        // Media response types (presentation, recording) are refused before
+        // grading and never reach a strategy.
         if (
-          responseType === "LIVE_RECORDING" ||
-          responseType === "PRESENTATION"
-        ) {
-          return this.presentationGradingStrategy;
-        } else if (
           responseType === "IMAGES" ||
           this.isImageOnlySubmission(learnerFiles)
         ) {
@@ -108,9 +102,6 @@ export class GradingFactoryService {
       return false;
     }
     return learnerFiles.every((file) => {
-      if (file.githubUrl) {
-        return false;
-      }
       const extension = file.filename?.split(".").pop()?.toLowerCase() ?? "";
       return GRADABLE_IMAGE_EXTENSIONS.has(extension);
     });

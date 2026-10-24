@@ -123,20 +123,6 @@ export class AttemptControllerV1 {
     );
   }
 
-  @Get(":attemptId/completed")
-  @Roles(UserRole.LEARNER, UserRole.AUTHOR)
-  @UseGuards(AssignmentAttemptAccessControlGuard)
-  @ApiOperation({ summary: "Get an assignment attempt for an assignment." })
-  @ApiResponse({ status: 200, type: GetAssignmentAttemptResponseDto })
-  @ApiResponse({ status: 403 })
-  getLearnerAssignmentAttempt(
-    @Param("attemptId") assignmentAttemptId: number,
-  ): Promise<GetAssignmentAttemptResponseDto> {
-    return this.attemptService.getLearnerAssignmentAttempt(
-      Number(assignmentAttemptId),
-    );
-  }
-
   @Patch(":attemptId")
   @Roles(UserRole.LEARNER, UserRole.AUTHOR)
   @UseGuards(AssignmentAttemptAccessControlGuard)

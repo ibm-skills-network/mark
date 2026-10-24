@@ -1,5 +1,7 @@
 import {
   BadRequestException,
+  ForbiddenException,
+  NotFoundException,
   ServiceUnavailableException,
 } from "@nestjs/common";
 import { UserRole } from "src/auth/interfaces/user.session.interface";
@@ -590,6 +592,149 @@ describe("FilesService", () => {
         UserRole.AUTHOR,
       );
       expect(prisma.question.findFirst).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("upload file names", () => {
+    it("keys an upload by the file's base name only", async () => {
+      (mockS3Service.getBucketName as jest.Mock).mockReturnValue(
+        "learner-bucket",
+      );
+      (mockS3Service.getSignedUrl as jest.Mock).mockResolvedValue("https://u");
+
+      const result = await service.generateUploadUrl(
+        {
+          fileName: "../../other-user/evil\u0007.txt",
+          fileType: "text/plain",
+          fileSize: 10,
+          uploadType: UploadType.LEARNER,
+          context: { assignmentId: 42, questionId: 7 },
+        },
+        "user-123",
+        UserRole.LEARNER,
+      );
+
+      expect(result.key).toMatch(/^42\/user-123\/7\/[^/]+-evil\.txt$/);
+      expect(result.fileName).toBe("evil.txt");
+    });
+
+    it("rejects a name that is too long", () => {
+      (mockS3Service.getBucketName as jest.Mock).mockReturnValue(
+        "learner-bucket",
+      );
+      expect(() =>
+        service.resolveUploadTarget(
+          {
+            fileName: `${"x".repeat(300)}.txt`,
+            fileType: "text/plain",
+            fileSize: 10,
+            uploadType: UploadType.LEARNER,
+            context: { assignmentId: 42, questionId: 7 },
+          },
+          "user-123",
+          UserRole.LEARNER,
+        ),
+      ).toThrow(BadRequestException);
+    });
+  });
+
+  describe("upload context must match the session", () => {
+    const session = {
+      userId: "learner@example.com",
+      role: UserRole.LEARNER,
+      assignmentId: 42,
+    };
+
+    it("allows a learner upload for the session's assignment", () => {
+      expect(() =>
+        service.assertUploadContextMatchesSession(
+          {
+            uploadType: UploadType.LEARNER,
+            context: { assignmentId: 42, questionId: 7 },
+          },
+          session,
+        ),
+      ).not.toThrow();
+    });
+
+    it.each([
+      ["another assignment", { assignmentId: 43, questionId: 7 }],
+      ["no assignment", { questionId: 7 }],
+      ["no context", undefined],
+    ])("forbids a learner upload naming %s", (_label, context) => {
+      expect(() =>
+        service.assertUploadContextMatchesSession(
+          { uploadType: UploadType.LEARNER_PROD, context },
+          session,
+        ),
+      ).toThrow(ForbiddenException);
+    });
+
+    it("does not apply to author uploads or admins", () => {
+      expect(() =>
+        service.assertUploadContextMatchesSession(
+          { uploadType: UploadType.AUTHOR, context: { assignmentId: 1 } },
+          { ...session, role: UserRole.AUTHOR },
+        ),
+      ).not.toThrow();
+      expect(() =>
+        service.assertUploadContextMatchesSession(
+          { uploadType: UploadType.LEARNER, context: { assignmentId: 1 } },
+          { ...session, role: UserRole.ADMIN },
+        ),
+      ).not.toThrow();
+    });
+  });
+
+  describe("who may delete", () => {
+    const learner = {
+      userId: "learner@example.com",
+      role: UserRole.LEARNER,
+      assignmentId: 42,
+    };
+
+    it.each([
+      ["learner", "42/learner@example.com/7/a.pdf"],
+      ["learner-prod", "42/learner@example.com/7/a.pdf"],
+      ["chatbot", "chatbot/learner@example.com/a.png"],
+    ])("lets a learner delete their own %s upload", (uploadType, key) => {
+      expect(() =>
+        service.assertDeleteAllowed(uploadType, key, learner),
+      ).not.toThrow();
+    });
+
+    it.each([
+      ["another learner's upload", "learner", "42/other@example.com/7/a.pdf"],
+      [
+        "another assignment's upload",
+        "learner",
+        "41/learner@example.com/7/a.pdf",
+      ],
+      ["an author file", "author", "authors/someone/a.pdf"],
+      ["a debug file", "debug", "debug/1/a.log"],
+      [
+        "another user's chat file",
+        "chatbot",
+        "chatbot/other@example.com/a.png",
+      ],
+    ])("404s a learner deleting %s", (_label, uploadType, key) => {
+      expect(() =>
+        service.assertDeleteAllowed(uploadType, key, learner),
+      ).toThrow(NotFoundException);
+    });
+
+    it("keeps authors to author files and their own chat files", () => {
+      const author = { ...learner, role: UserRole.AUTHOR };
+      expect(() =>
+        service.assertDeleteAllowed("author", "authors/x/a.pdf", author),
+      ).not.toThrow();
+      expect(() =>
+        service.assertDeleteAllowed(
+          "learner",
+          "42/learner@example.com/7/a.pdf",
+          author,
+        ),
+      ).toThrow(NotFoundException);
     });
   });
 });

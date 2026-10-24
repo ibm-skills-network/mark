@@ -24,6 +24,11 @@ describe("learner load routes", () => {
     ["POST attempts", AttemptControllerV2.prototype, "createAssignmentAttempt"],
     ["GET attempt", AttemptControllerV2.prototype, "getAssignmentAttempt"],
     ["POST abandon", AttemptControllerV2.prototype, "abandonAssignmentAttempt"],
+    [
+      "GET completed attempt",
+      AttemptControllerV2.prototype,
+      "getLearnerAssignmentAttempt",
+    ],
   ];
 
   it.each(plainJsonRoutes)(
@@ -39,7 +44,7 @@ describe("learner load routes", () => {
     expect(
       Reflect.getMetadata(
         TRANSFORM_METADATA_KEY,
-        handlerOf(AttemptControllerV2.prototype, "getLearnerAssignmentAttempt"),
+        handlerOf(AttemptControllerV2.prototype, "submitFeedback"),
       ),
     ).toBeUndefined();
   });

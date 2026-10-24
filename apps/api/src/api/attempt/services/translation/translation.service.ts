@@ -18,6 +18,7 @@ import {
   findQuestionTranslation,
 } from "../../common/utils/translation-language.util";
 import { TranslatedContent } from "../../common/utils/attempt-questions-mapper.util";
+import { applyVariantToQuestion } from "../../common/utils/grading-question-source.util";
 import {
   buildTranslationCacheKey,
   type JobScopedCache,
@@ -75,10 +76,21 @@ export class TranslationService {
 
       let question: QuestionDto;
 
-      question = await (variantMapping &&
-      variantMapping.questionVariant !== null
-        ? this.getQuestionFromVariant(variantMapping, cache)
-        : this.questionService.findOne(questionId, undefined, cache));
+      // Same source as grading: the attempt's pinned question when it has
+      // one, else the live row.
+      const pinnedQuestion = cache?.pinnedQuestions?.get(questionId);
+      if (variantMapping && variantMapping.questionVariant !== null) {
+        question = pinnedQuestion
+          ? applyVariantToQuestion(
+              pinnedQuestion,
+              variantMapping.questionVariant,
+            )
+          : await this.getQuestionFromVariant(variantMapping, cache);
+      } else {
+        question =
+          pinnedQuestion ??
+          (await this.questionService.findOne(questionId, undefined, cache));
+      }
 
       question = await this.applyTranslationToQuestion(
         question,
@@ -263,22 +275,16 @@ export class TranslationService {
       cache,
     );
 
-    return {
-      id: baseQuestion.id,
-      question: variant.variantContent,
-      type: baseQuestion.type,
-      assignmentId: baseQuestion.assignmentId,
-      maxWords: variant.maxWords ?? baseQuestion.maxWords,
-      maxCharacters: variant.maxCharacters ?? baseQuestion.maxCharacters,
-      scoring: (this.parseJsonField(variant.scoring) ??
-        this.parseJsonField(baseQuestion.scoring)) as ScoringDto,
-      choices: (this.parseJsonField(variant.choices) ??
-        this.parseJsonField(baseQuestion.choices)) as Choice[],
-      answer: variant.answer ?? baseQuestion.answer,
-      alreadyInBackend: true,
-      totalPoints: baseQuestion.totalPoints,
-      gradingContextQuestionIds: baseQuestion.gradingContextQuestionIds ?? [],
-    };
+    return applyVariantToQuestion(
+      {
+        ...baseQuestion,
+        scoring: this.parseJsonField(baseQuestion.scoring) as ScoringDto,
+        choices: this.parseJsonField(baseQuestion.choices) as Choice[],
+        gradingContextQuestionIds: baseQuestion.gradingContextQuestionIds ?? [],
+        alreadyInBackend: true,
+      },
+      variant,
+    );
   }
 
   /**

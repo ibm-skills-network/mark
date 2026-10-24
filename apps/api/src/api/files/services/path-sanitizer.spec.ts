@@ -1,5 +1,5 @@
 import { BadRequestException } from "@nestjs/common";
-import { sanitizeUploadPath } from "./path-sanitizer";
+import { sanitizeUploadFileName, sanitizeUploadPath } from "./path-sanitizer";
 
 describe("sanitizeUploadPath", () => {
   describe("accepts valid input", () => {
@@ -81,5 +81,31 @@ describe("sanitizeUploadPath", () => {
         expect((e as Error).message).toBe("Invalid upload path");
       }
     });
+  });
+});
+
+describe("sanitizeUploadFileName", () => {
+  it.each([
+    ["report.pdf", "report.pdf"],
+    ["../../etc/passwd", "passwd"],
+    ["C:\\Users\\me\\essay.docx", "essay.docx"],
+    ["dir/sub/notes.md", "notes.md"],
+    ["bad\u0000name\u001F.txt", "badname.txt"],
+    ["tab\tand\nnewline.py", "tabandnewline.py"],
+    ["  spaced.txt  ", "spaced.txt"],
+  ])("reduces %j to %j", (input, expected) => {
+    expect(sanitizeUploadFileName(input)).toBe(expected);
+  });
+
+  it.each([
+    ["an empty name", ""],
+    ["a trailing separator", "folder/"],
+    ["only control characters", "\u0001\u0002"],
+    ["a dot segment", "a/.."],
+    ["a name over 255 characters", `${"x".repeat(252)}.pdf`],
+    ["a non-string", 42],
+  ])("rejects %s with a generic 400", (_label, input) => {
+    expect(() => sanitizeUploadFileName(input)).toThrow(BadRequestException);
+    expect(() => sanitizeUploadFileName(input)).toThrow("Invalid file name");
   });
 });

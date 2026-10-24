@@ -2,9 +2,8 @@ import { Module } from "@nestjs/common";
 import { GithubCredentialCheckService } from "./github-credential-check.service";
 
 /**
- * Holds the credential self-check on its own so both the GitHub routes and the
- * health endpoint can read the same singleton without the health module pulling
- * in the GitHub controller.
+ * The GitHub OAuth credential self-check read by the health endpoint. No route
+ * uses the OAuth credentials any more.
  */
 @Module({
   providers: [GithubCredentialCheckService],

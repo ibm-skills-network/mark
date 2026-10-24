@@ -4,7 +4,6 @@ import { CreateQuestionResponseAttemptRequestDto } from "src/api/assignment/atte
 import { QuestionDto } from "src/api/assignment/dto/update.questions.request.dto";
 import { ImageGradingService } from "src/api/llm/features/grading/services/image-grading.service";
 import { issueFromQuestionError } from "src/api/llm/features/grading/errors/grading-failure.mapper";
-import { SourceProcessingError } from "src/api/llm/features/grading/errors/source-processing.error";
 import { UnsupportedImageFormatError } from "src/api/llm/features/grading/errors/unsupported-image-format.error";
 import { Logger } from "winston";
 import { GRADING_AUDIT_SERVICE } from "../../../attempt.constants";
@@ -107,8 +106,9 @@ describe("ImageGradingStrategy - Type Safety Tests", () => {
         learnerFileResponse: [
           {
             filename: "test.jpg",
-            imageData: "base64data",
-            mimeType: "image/jpeg",
+            key: "1/learner/2/abc-test.jpg",
+            bucket: "learner-bucket",
+            fileType: "image/jpeg",
           },
         ],
         language: "en",
@@ -123,13 +123,13 @@ describe("ImageGradingStrategy - Type Safety Tests", () => {
         learnerFileResponse: [
           {
             filename: "test1.jpg",
-            imageData: "base64data1",
-            mimeType: "image/jpeg",
+            key: "1/learner/2/abc-test1.jpg",
+            bucket: "learner-bucket",
           },
           {
             filename: "test2.png",
-            imageData: "base64data2",
-            mimeType: "image/png",
+            key: "1/learner/2/abc-test2.png",
+            bucket: "learner-bucket",
           },
         ],
         language: "en",
@@ -137,6 +137,23 @@ describe("ImageGradingStrategy - Type Safety Tests", () => {
 
       const result = await strategy.validateResponse(mockQuestion, requestDto);
       expect(result).toBe(true);
+    });
+
+    it("should reject inline image data without storage coordinates", async () => {
+      const requestDto = {
+        learnerFileResponse: [
+          {
+            filename: "test.jpg",
+            imageData: "data:image/jpeg;base64,/9j/4AAQ",
+            imageUrl: "https://example.com/test.jpg",
+          },
+        ],
+        language: "en",
+      } as any as CreateQuestionResponseAttemptRequestDto;
+
+      await expect(
+        strategy.validateResponse(mockQuestion, requestDto),
+      ).rejects.toThrow("key and bucket are required");
     });
   });
 
@@ -200,10 +217,11 @@ describe("ImageGradingStrategy - Type Safety Tests", () => {
 
       const result = await strategy.extractLearnerResponse(requestDto);
       expect(result).toHaveLength(1);
+      // Inline data and URLs from the client are never graded.
       expect(result[0]).toMatchObject({
         filename: "test.jpg",
-        imageData: "base64data",
-        imageUrl: "https://example.com/test.jpg",
+        imageData: "",
+        imageUrl: "",
       });
     });
 
@@ -229,7 +247,7 @@ describe("ImageGradingStrategy - Type Safety Tests", () => {
       expect(result[1].filename).toBe("test2.png");
     });
 
-    it("should handle legacy field names (content, key, bucket)", async () => {
+    it("reads storage coordinates from key and bucket and drops content", async () => {
       const requestDto = {
         learnerFileResponse: [
           {
@@ -246,7 +264,7 @@ describe("ImageGradingStrategy - Type Safety Tests", () => {
       expect(result).toHaveLength(1);
       expect(result[0]).toMatchObject({
         filename: "test.jpg",
-        imageData: "base64data",
+        imageData: "",
         imageKey: "some-key",
         imageBucket: "some-bucket",
       });
@@ -315,7 +333,7 @@ describe("ImageGradingStrategy - Type Safety Tests", () => {
     });
   });
 
-  describe("validateResponse - base64 magic-byte sniffing", () => {
+  describe("validateResponse - stored images only", () => {
     const mockQuestion: QuestionDto = {
       id: 1,
       question: "Upload an image",
@@ -325,24 +343,14 @@ describe("ImageGradingStrategy - Type Safety Tests", () => {
       gradingContextQuestionIds: [],
     } as any;
 
-    // Helper: build an inline data URL from raw magic bytes so the strategy's
-    // sniffer sees real signature bytes after the `;base64,` marker.
-    const dataUrl = (mime: string, bytes: number[]): string =>
-      `data:${mime};base64,${Buffer.from(bytes).toString("base64")}`;
-
-    const PNG_SIGNATURE = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
-    // ISO-BMFF box: 12-byte "ftypheic" prefix (size + "ftyp" + "heic" brand).
-    const HEIC_PREFIX = [
-      0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x68, 0x65, 0x69, 0x63,
-    ];
-    const TIFF_SIGNATURE = [0x49, 0x49, 0x2a, 0x00];
-
-    it("accepts a base64 PNG data URL", async () => {
+    it("accepts a stored image reference", async () => {
       const requestDto = {
         learnerFileResponse: [
           {
-            filename: "diagram.png",
-            imageData: dataUrl("image/png", PNG_SIGNATURE),
+            filename: "stored.png",
+            content: "InCos",
+            key: "1/learner/2/abc-stored.png",
+            bucket: "learner-bucket",
           },
         ],
         language: "en",
@@ -353,30 +361,22 @@ describe("ImageGradingStrategy - Type Safety Tests", () => {
       ).resolves.toBe(true);
     });
 
-    it("rejects a base64 HEIC data URL with the typed learner-facing error", async () => {
+    it("rejects an inline data URL even when it carries a valid image", async () => {
       const requestDto = {
         learnerFileResponse: [
           {
-            filename: "photo.png",
-            imageData: dataUrl("image/png", HEIC_PREFIX),
+            filename: "diagram.png",
+            imageData: `data:image/png;base64,${Buffer.from([
+              0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+            ]).toString("base64")}`,
           },
         ],
         language: "en",
       } as any as CreateQuestionResponseAttemptRequestDto;
 
-      // Must be the typed learner-facing error (not a BadRequestException) so
-      // the grade-time path (validateResponse runs inside gradeQuestionNoSave)
-      // fails terminally with the learner message instead of being wrapped and
-      // retried. The learner-facing copy lives on `.learnerMessage`; `.message`
-      // carries the operator detail (detected format + reason).
       await expect(
         strategy.validateResponse(mockQuestion, requestDto),
-      ).rejects.toBeInstanceOf(UnsupportedImageFormatError);
-      await expect(
-        strategy.validateResponse(mockQuestion, requestDto),
-      ).rejects.toMatchObject({
-        learnerMessage: expect.stringMatching(/not a supported image format/i),
-      });
+      ).rejects.toThrow("key and bucket are required");
     });
 
     it("reports a non-image file as unsupported, not as a grading failure", async () => {
@@ -406,62 +406,6 @@ describe("ImageGradingStrategy - Type Safety Tests", () => {
           detectedType: "ipynb",
         },
       });
-    });
-
-    it("reports an oversized inline image as too large", async () => {
-      const requestDto = {
-        learnerFileResponse: [
-          {
-            filename: "huge.png",
-            imageData: `data:image/png;base64,${"A".repeat(28 * 1024 * 1024)}`,
-          },
-        ],
-        language: "en",
-      } as any as CreateQuestionResponseAttemptRequestDto;
-
-      const error: unknown = await strategy
-        .validateResponse(mockQuestion, requestDto)
-        .catch((caught: unknown) => caught);
-
-      expect(error).toBeInstanceOf(SourceProcessingError);
-      expect(issueFromQuestionError(error, 8645)).toMatchObject({
-        code: "file_too_large",
-        source: { kind: "file", fileName: "huge.png" },
-      });
-    });
-
-    it("accepts a base64 TIFF data URL (convertible downstream)", async () => {
-      const requestDto = {
-        learnerFileResponse: [
-          {
-            filename: "scan.tiff",
-            imageData: dataUrl("image/tiff", TIFF_SIGNATURE),
-          },
-        ],
-        language: "en",
-      } as any as CreateQuestionResponseAttemptRequestDto;
-
-      await expect(
-        strategy.validateResponse(mockQuestion, requestDto),
-      ).resolves.toBe(true);
-    });
-
-    it("skips the byte check for an InCos placeholder (no inline base64)", async () => {
-      const requestDto = {
-        learnerFileResponse: [
-          {
-            filename: "stored.png",
-            imageData: "InCos",
-            imageKey: "cos/key",
-            imageBucket: "bucket",
-          },
-        ],
-        language: "en",
-      } as any as CreateQuestionResponseAttemptRequestDto;
-
-      await expect(
-        strategy.validateResponse(mockQuestion, requestDto),
-      ).resolves.toBe(true);
     });
   });
 
