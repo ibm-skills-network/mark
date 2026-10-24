@@ -221,7 +221,7 @@ export class QuestionController {
   // Access first, so only requests that may translate count against the
   // per-user limit. Every miss is a paid LLM call.
   @UseGuards(AssignmentQuestionAccessControlGuard, UserThrottlerGuard)
-  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Throttle({ default: { limit: 60, ttl: 60_000 } })
   @ApiOperation({ summary: "Request a translation for a question" })
   @ApiBody({ type: QuestionTranslationRequestDto })
   @ApiResponse({ status: 201, type: Object })

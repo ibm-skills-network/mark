@@ -40,9 +40,9 @@ describe("POST /assignments/:assignmentId/questions/:id/translations", () => {
       ]);
     });
 
-    it("allows 10 requests per user per 60 s", () => {
+    it("allows 60 requests per user per 60 s", () => {
       expect(Reflect.getMetadata(`${THROTTLER_LIMIT}default`, handler)).toBe(
-        10,
+        60,
       );
       expect(Reflect.getMetadata(`${THROTTLER_TTL}default`, handler)).toBe(
         60_000,

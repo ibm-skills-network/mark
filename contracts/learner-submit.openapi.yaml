@@ -964,8 +964,9 @@ paths:
       description: |
         Roles author, learner. Access: group link; authors only on their
         launch assignment; the question must belong to the assignment and
-        not be deleted. Limited to 10 requests per user per 60 s (counted
-        after the access check).
+        not be deleted. Limited to 60 requests per user per 60 s (counted
+        after the access check), enough for a language toggle across every
+        question of one assignment.
 
         Serves the stored question-level translation (`variantId` null) when
         its source text still matches the question; otherwise replaces it
