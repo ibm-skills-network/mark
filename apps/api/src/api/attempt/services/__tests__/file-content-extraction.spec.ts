@@ -3,11 +3,32 @@ import { createHash } from "crypto";
 import { Logger } from "@nestjs/common";
 import { S3Service } from "src/api/files/services/s3.service";
 import { OversizedSubmissionError } from "../../../llm/features/grading/errors/oversized-submission.error";
-import { FileContentExtractionService } from "../file-content-extraction";
+import { LearnerFileUpload } from "../../common/interfaces/attempt.interface";
+import {
+  ExtractedFileContent,
+  FileContentExtractionService,
+} from "../file-content-extraction";
 import { PdfStructureExtractorService } from "../pdf-structure-extractor.service";
 import * as gradingConstants from "../../../llm/features/grading/constants";
 
-const mockS3Service = {} as S3Service;
+const UNCONFIGURED_BUCKET = "someone-elses-bucket";
+const mockS3Service = {
+  isConfiguredUploadBucket: (bucket: string) => bucket !== UNCONFIGURED_BUCKET,
+} as unknown as S3Service;
+
+/** The private members these specs drive directly. */
+interface ExtractionInternals {
+  downloadFileFromCOS(
+    bucket: string | undefined,
+    key: string | undefined,
+    preloadedBuffer?: Buffer,
+  ): Promise<Buffer>;
+  extractSingleFileContent(
+    file: LearnerFileUpload,
+  ): Promise<ExtractedFileContent>;
+}
+const internalsOf = (service: FileContentExtractionService) =>
+  service as unknown as ExtractionInternals;
 const mockPdfExtractor = {} as PdfStructureExtractorService;
 
 function createService(): FileContentExtractionService {
@@ -245,10 +266,10 @@ describe("FileContentExtractionService - content sent with the file is never gra
 
   it("parses a notebook from its stored bytes, not from inline content", async () => {
     const download = jest
-      .spyOn(service as any, "downloadFileFromCOS")
+      .spyOn(internalsOf(service), "downloadFileFromCOS")
       .mockResolvedValue(Buffer.from(JSON.stringify(notebook)));
 
-    const result = await (service as any).extractSingleFileContent({
+    const result = await internalsOf(service).extractSingleFileContent({
       filename: "analysis.ipynb",
       content: "Notebook summary prepared on client side",
       fileType: "application/x-ipynb+json",
@@ -266,6 +287,28 @@ describe("FileContentExtractionService - content sent with the file is never gra
     );
     expect(result.content).toContain('print("hello")');
     expect(result.content).not.toContain("prepared on client side");
+  });
+
+  it.each([
+    [
+      "an unconfigured bucket",
+      UNCONFIGURED_BUCKET,
+      "1/l@example.com/3/a.ipynb",
+    ],
+    ["a traversal key", "learner-bucket", "1/l@example.com/3/../../x/a.ipynb"],
+    ["a key with a backslash", "learner-bucket", "1\\..\\x.ipynb"],
+  ])("never reads storage for %s", async (_label, bucket, key) => {
+    const download = jest.spyOn(internalsOf(service), "downloadFileFromCOS");
+
+    await expect(
+      internalsOf(service).extractSingleFileContent({
+        filename: "analysis.ipynb",
+        fileType: "application/x-ipynb+json",
+        bucket,
+        key,
+      }),
+    ).rejects.toThrow("Invalid file reference");
+    expect(download).not.toHaveBeenCalled();
   });
 
   it("does not grade a file that has only inline content", async () => {
@@ -1100,7 +1143,11 @@ function buildProvenanceService(): {
     if (uploadType === "learner-prod") return ALLOWED_LEARNER_PROD_BUCKET;
     throw new Error(`unexpected upload type ${uploadType}`);
   });
-  (service as any).s3Service = { putObject, getBucketName };
+  (service as unknown as { s3Service: unknown }).s3Service = {
+    putObject,
+    getBucketName,
+    isConfiguredUploadBucket: () => true,
+  };
   const warn = jest.fn();
   const debug = jest.fn();
   const log = jest.fn();
@@ -1946,6 +1993,7 @@ it("accepts a requested binary using storage metadata without downloading its co
   const storage = {
     getObjectMetadata: jest.fn().mockResolvedValue({ ContentLength: 4096 }),
     getObject: jest.fn(),
+    isConfiguredUploadBucket: jest.fn().mockReturnValue(true),
   };
   const service = new FileContentExtractionService(
     storage as any,

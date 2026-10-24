@@ -811,9 +811,189 @@ describe("AttemptSubmissionService.getLearnerAssignmentAttempt (completed attemp
 
       expect(mockPrisma.question.findMany).toHaveBeenCalledWith({
         where: { id: { in: [202] } },
-        select: { id: true, totalPoints: true },
+        select: { id: true, totalPoints: true, responseType: true },
       });
       expect(result.totalPossiblePoints).toBe(10);
+    });
+
+    it.each(["PRESENTATION", "VIDEO", "AUDIO", "LIVE_RECORDING"])(
+      "leaves a served %s question out of both totals, as the submit does",
+      async (responseType) => {
+        mockAttemptAccessCacheService.getQuestionDtosForAttemptAccess.mockResolvedValue(
+          [choiceQuestion, { ...textQuestion, responseType }],
+        );
+        mockPrisma.assignmentAttempt.findFirst.mockResolvedValue({
+          ...baseAttempt(),
+          grade: 1,
+          questionResponses: [
+            response({ id: 1, questionId: 101, points: 5 }),
+            // A historical graded media response must not count either.
+            response({ id: 2, questionId: 202, points: 3 }),
+          ],
+        });
+
+        const result = await read();
+
+        expect(result.totalPossiblePoints).toBe(5);
+        expect(result.totalPointsEarned).toBe(5);
+        expect(result.grade).toBe(1);
+      },
+    );
+
+    it("leaves out a served media question that is only in the archived rows", async () => {
+      mockAttemptAccessCacheService.getQuestionDtosForAttemptAccess.mockResolvedValue(
+        [choiceQuestion],
+      );
+      mockPrisma.question.findMany.mockResolvedValue([
+        { id: 202, totalPoints: 5, responseType: "VIDEO" },
+      ]);
+      mockPrisma.assignmentAttempt.findFirst.mockResolvedValue({
+        ...baseAttempt(),
+        questionResponses: [
+          response({ id: 1, questionId: 101, points: 5 }),
+          response({ id: 2, questionId: 202, points: 2, metadata: null }),
+        ],
+      });
+
+      const result = await read();
+
+      expect(result.totalPossiblePoints).toBe(5);
+      expect(result.totalPointsEarned).toBe(5);
+    });
+  });
+
+  describe("multiple-correct feedback", () => {
+    const multipleCorrectQuestion = {
+      ...choiceQuestion,
+      type: "MULTIPLE_CORRECT",
+      choices: [
+        { id: 0, choice: "Two", isCorrect: true, points: 1 },
+        { id: 1, choice: "Three", isCorrect: true, points: 1 },
+        { id: 2, choice: "Four", isCorrect: false, points: 0 },
+      ],
+    };
+    const storedFeedback = (feedback: string, perfectScore: boolean) => ({
+      ...baseAttempt(),
+      questionResponses: [
+        response({
+          id: 1,
+          questionId: 101,
+          learnerResponse: JSON.stringify(["Four"]),
+          points: 0,
+          feedback: [{ choice: "Four", feedback }],
+          metadata: { perfectScore, correctChoices: ["Two", "Three"] },
+        }),
+      ],
+    });
+    const feedbackOf = async () =>
+      JSON.stringify((await read()).questions[0].response?.feedback);
+
+    beforeEach(() => {
+      mockAttemptAccessCacheService.getQuestionDtosForAttemptAccess.mockResolvedValue(
+        [multipleCorrectQuestion, textQuestion],
+      );
+    });
+
+    it("names the correct options when the answer key is revealed", async () => {
+      mockPrisma.assignmentAttempt.findFirst.mockResolvedValue(
+        storedFeedback("**Incorrect selection:** Four.", false),
+      );
+
+      expect(await feedbackOf()).toContain(
+        "The correct option(s) were: **Two, Three**.",
+      );
+    });
+
+    it("does not name them when the learner got every option right", async () => {
+      mockPrisma.assignmentAttempt.findFirst.mockResolvedValue(
+        storedFeedback("**You selected all correct options!**", true),
+      );
+
+      expect(await feedbackOf()).not.toContain("correct option(s)");
+    });
+
+    it("keeps them out, even from older stored feedback, while the key is hidden", async () => {
+      mockPrisma.assignment.findUnique.mockResolvedValue(
+        baseAssignment({
+          currentVersion: { correctAnswerVisibility: "NEVER" },
+        }),
+      );
+      mockPrisma.assignmentAttempt.findFirst.mockResolvedValue(
+        storedFeedback(
+          "**Incorrect selection:** Four.\nThe correct option(s) were: **Two, Three**.",
+          false,
+        ),
+      );
+
+      const feedback = await feedbackOf();
+      expect(feedback).toContain("Incorrect selection");
+      expect(feedback).not.toContain("Two, Three");
+    });
+
+    it("does not repeat the sentence an older stored feedback already has", async () => {
+      mockPrisma.assignmentAttempt.findFirst.mockResolvedValue(
+        storedFeedback(
+          "**Incorrect selection:** Four.\nThe correct option(s) were: **Two, Three**.",
+          false,
+        ),
+      );
+
+      const feedback = await feedbackOf();
+      expect(feedback.split("The correct option(s) were").length).toBe(2);
+    });
+  });
+
+  describe("true/false feedback", () => {
+    const trueFalseQuestion = {
+      ...choiceQuestion,
+      type: "TRUE_FALSE",
+      choices: [
+        { id: 0, choice: "True", isCorrect: true, points: 5 },
+        { id: 1, choice: "False", isCorrect: false, points: 0 },
+      ],
+    };
+    const withStoredFeedback = (feedback: string) =>
+      mockPrisma.assignmentAttempt.findFirst.mockResolvedValue({
+        ...baseAttempt(),
+        questionResponses: [
+          response({
+            id: 1,
+            questionId: 101,
+            learnerResponse: JSON.stringify(false),
+            points: 0,
+            feedback: [{ choice: false, feedback }],
+            metadata: { isCorrect: false, correctAnswer: true },
+          }),
+        ],
+      });
+    const feedbackOf = async () =>
+      (await read()).questions[0].response?.feedback;
+
+    beforeEach(() => {
+      mockAttemptAccessCacheService.getQuestionDtosForAttemptAccess.mockResolvedValue(
+        [trueFalseQuestion, textQuestion],
+      );
+    });
+
+    it("names the correct answer when the key is revealed", async () => {
+      withStoredFeedback("Incorrect.");
+
+      expect(await feedbackOf()).toEqual([
+        { choice: false, feedback: "Incorrect. The correct answer is True." },
+      ]);
+    });
+
+    it("strips it from a legacy row while the key is hidden", async () => {
+      mockPrisma.assignment.findUnique.mockResolvedValue(
+        baseAssignment({
+          currentVersion: { correctAnswerVisibility: "NEVER" },
+        }),
+      );
+      withStoredFeedback("Incorrect. The correct answer is True.");
+
+      expect(await feedbackOf()).toEqual([
+        { choice: false, feedback: "Incorrect." },
+      ]);
     });
   });
 });

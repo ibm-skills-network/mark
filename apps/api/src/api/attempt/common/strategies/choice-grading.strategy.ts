@@ -461,6 +461,9 @@ export class ChoiceGradingStrategy extends AbstractGradingStrategy<string[]> {
 
     const perfectScore: boolean = allCorrectSelected && noIncorrectSelected;
 
+    // Which options were correct is part of the answer key, so it is never
+    // written into stored feedback; it is added when the result is read and
+    // the assignment reveals answers (see correct-options-feedback.util).
     const feedbackMessage = `
       ${feedbackDetails.join(".\n")}.
       ${
@@ -469,15 +472,7 @@ export class ChoiceGradingStrategy extends AbstractGradingStrategy<string[]> {
               "allCorrectSelected",
               context.language,
             )
-          : this.localizationService.getLocalizedString(
-              "correctOptions",
-              context.language,
-              {
-                correctOptions: correctChoices
-                  .map((choice) => choice.choice)
-                  .join(", "),
-              },
-            )
+          : ""
       }
     `;
 

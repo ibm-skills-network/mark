@@ -14,11 +14,13 @@ import {
   MaxLength,
   Min,
   registerDecorator,
+  ValidateBy,
   ValidateNested,
   ValidationOptions,
 } from "class-validator";
 import { MAX_LEARNER_URL_LENGTH } from "src/api/attempt/common/utils/learner-url.util";
 import { QuestionDto } from "src/api/assignment/dto/update.questions.request.dto";
+import { resolveSupportedLanguage } from "src/api/assignment/question/dto/question-translation.request.dto";
 import type { LearnerFileUploadWithImages } from "../question-response/create.question.response.attempt.request.dto";
 import type { LearnerPresentationResponse } from "./types";
 
@@ -227,8 +229,18 @@ export class LearnerUpdateAssignmentAttemptRequestDto {
   })
   @IsString()
   @IsOptional()
+  @MaxLength(16)
+  @ValidateBy({
+    name: "isSupportedLanguageCode",
+    validator: {
+      validate: (value: unknown) =>
+        resolveSupportedLanguage(value) !== undefined,
+      defaultMessage: () => "Unsupported language",
+    },
+  })
   @ApiProperty({
-    description: "The language the user prefers",
+    description:
+      "The language the learner works in; a code from the supported language list.",
     required: false,
   })
   language?: string;

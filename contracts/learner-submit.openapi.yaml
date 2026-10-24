@@ -26,7 +26,12 @@ info:
       unanswered served questions count as 0.
     - Questions with response type PRESENTATION, VIDEO, AUDIO or
       LIVE_RECORDING are no longer graded: they are left out of the grade
-      and of `requireAllQuestions`, and a non-empty answer to one is refused.
+      (submit and completed read alike) and of `requireAllQuestions`, and a
+      non-empty answer to one is refused. An attempt whose served questions
+      are all of these types cannot be submitted (422 NO_GRADABLE_QUESTIONS).
+    - Feedback on a MULTIPLE_CORRECT or TRUE_FALSE question names the correct
+      options or answer only when the answer key is revealed
+      (`correctAnswerVisibility`).
     - Uploaded files must be the learner's own uploads for that question.
     - The GitHub file picker and its `/v1/github/*` routes no longer exist.
 
@@ -85,6 +90,7 @@ components:
             - ATTEMPT_CLOSED_AT_TIME_LIMIT
             - UNSUPPORTED_RESPONSE_TYPE
             - INVALID_FILE_REFERENCE
+            - NO_GRADABLE_QUESTIONS
         attemptId:
           { type: integer, description: Only on the 409 attempt-closed bodies. }
       additionalProperties: true
@@ -131,7 +137,10 @@ components:
           type: string
           minLength: 1
           maxLength: 1024
-          description: Must start with `<assignmentId>/<userId>/<questionId>/`, else 400 INVALID_FILE_REFERENCE at grading.
+          description: |
+            Must start with `<assignmentId>/<userId>/<questionId>/` and have
+            no empty, `.` or `..` segments, backslashes or control
+            characters, else 400 INVALID_FILE_REFERENCE.
         bucket:
           type: string
           minLength: 1
@@ -189,7 +198,12 @@ components:
           items: { $ref: "#/components/schemas/SubmittedResponse" }
         language:
           type: string
-          description: Language the learner answered in; stored as the attempt's `preferredLanguage` (default `en`).
+          maxLength: 16
+          description: |
+            Language the learner answered in; stored as the attempt's
+            `preferredLanguage` (default `en`). Must be a code from the
+            supported language list (matched case-insensitively, same list as
+            `TranslationRequest`), else 400 `["Unsupported language"]`.
       description: |
         Other top-level keys are stripped. `authorQuestions` and
         `authorAssignmentDetails` are read only for authors (preview), which
@@ -214,7 +228,15 @@ components:
           description: Points earned. Null when `showQuestionScore` is false.
         feedback:
           type: [array, "null"]
-          description: Grading feedback entries. Null when `showSubmissionFeedback` is false.
+          description: |
+            Grading feedback entries. Null when `showSubmissionFeedback` is
+            false. When the learner did not get a MULTIPLE_CORRECT question
+            fully right, the last entry ends with "The correct option(s)
+            were: ..."; for a wrong TRUE_FALSE answer, "Incorrect." is
+            followed by "The correct answer is True/False." Both are in the
+            submit's language and only appear when the answer key is
+            revealed: ALWAYS, or ON_PASS with this submit's grade at or above
+            the passing grade.
           items: { type: object, additionalProperties: true }
       additionalProperties: false
 
@@ -268,7 +290,35 @@ components:
           { $ref: "#/components/schemas/CorrectAnswerVisibility" }
         feedbacksForQuestions:
           type: array
+          description: One entry per graded question. Empty when `showQuestions` is false.
           items: { $ref: "#/components/schemas/SubmitQuestionFeedback" }
+      additionalProperties: false
+
+    SubmissionStatus:
+      type: object
+      required:
+        [
+          id,
+          submitted,
+          closedAtTimeLimit,
+          acceptingSubmissions,
+          expiresAt,
+          serverNow,
+        ]
+      properties:
+        id: { type: integer }
+        submitted: { type: boolean }
+        closedAtTimeLimit:
+          type: boolean
+          description: True when the attempt was submitted by being closed at its time limit.
+        acceptingSubmissions:
+          type: boolean
+          description: Not submitted and not past `expiresAt` + 30 s grace, judged on `serverNow`.
+        expiresAt: { type: [string, "null"], format: date-time }
+        serverNow:
+          type: string
+          format: date-time
+          description: The server clock when this response was built.
       additionalProperties: false
 
     CompletedChoice:
@@ -301,7 +351,15 @@ components:
           description: Never above the question's `totalPoints`. Null when `showQuestionScore` is false.
         feedback:
           type: [array, "null"]
-          description: Feedback entries (`feedback`, optional `highlighting`, `annotatedPdfUrl`, `structuredFeedback`). Null when `showSubmissionFeedback` is false.
+          description: |
+            Feedback entries (`feedback`, optional `highlighting`,
+            `annotatedPdfUrl`, `structuredFeedback`). Null when
+            `showSubmissionFeedback` is false. For a MULTIPLE_CORRECT question
+            not answered fully right, the last entry ends with "The correct
+            option(s) were: ..."; for a wrong TRUE_FALSE answer, with "The
+            correct answer is True/False." Either appears only when choices
+            carry `isCorrect`; while they do not, the sentence is removed even
+            from older stored feedback.
           items: { type: object, additionalProperties: true }
       additionalProperties: false
 
@@ -394,7 +452,8 @@ components:
         totalPossiblePoints:
           {
             type: [number, "null"],
-            description: Over the served questions. Null when `showAssignmentScore` is false.,
+            description: Over the served questions,
+            media response types excluded (as on submit). Null when `showAssignmentScore` is false.,
           }
         passed:
           {
@@ -604,9 +663,12 @@ paths:
            ATTEMPT_CLOSED_AT_TIME_LIMIT when it was closed at its limit.
            Past `expiresAt` + 30 s grace -> the attempt is closed at 0, then
            409 ATTEMPT_CLOSED_AT_TIME_LIMIT.
-        3. AI grading disabled and the assignment has an AI-graded question
+        3. The payload is checked against the grading rules below before
+           anything is written or queued, so every 400/422 they describe
+           comes back on this request (and is checked again at grading).
+        4. AI grading disabled and the assignment has an AI-graded question
            -> 409 AI_TEMPORARILY_DISABLED; nothing is written.
-        4. Attempts whose pinned version holds only SINGLE_CORRECT,
+        5. Attempts whose pinned version holds only SINGLE_CORRECT,
            MULTIPLE_CORRECT and TRUE_FALSE questions are graded inline
            (200 `SubmitResult`); all others are queued (200 `SubmitQueued`,
            then follow the SSE route).
@@ -618,9 +680,12 @@ paths:
         choices, answer and scoring). A served question without a response is
         graded as empty (0 points, "no response" feedback). Media response
         types are excluded; a non-empty answer to one -> 400
-        UNSUPPORTED_RESPONSE_TYPE. `requireAllQuestions` -> 422 when a
-        required served question is unanswered. File references outside the
-        learner's prefix or buckets -> 400 INVALID_FILE_REFERENCE.
+        UNSUPPORTED_RESPONSE_TYPE. When every served question is of a media
+        type there is nothing to grade -> 422 NO_GRADABLE_QUESTIONS; no grade
+        is written and nothing is sent to the LMS. `requireAllQuestions` ->
+        422 when a required served question is unanswered. File references
+        outside the learner's prefix or buckets, or malformed keys -> 400
+        INVALID_FILE_REFERENCE. An unsupported `language` -> 400.
       parameters:
         - $ref: "#/components/parameters/assignmentId"
         - $ref: "#/components/parameters/attemptId"
@@ -707,21 +772,55 @@ paths:
                       message: This activity is temporarily out of service. Please try again later.,
                     }
         "422":
-          description: Required questions unanswered, or a source that cannot be processed (inline path).
+          description: Nothing gradable was served, required questions unanswered, or a source that cannot be processed (inline path).
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
-              example:
-                {
-                  statusCode: 422,
-                  message: All required questions must be answered before submitting (2 unanswered).,
-                  error: Unprocessable Entity,
-                }
+              examples:
+                noGradableQuestions:
+                  value:
+                    {
+                      statusCode: 422,
+                      code: NO_GRADABLE_QUESTIONS,
+                      message: This assignment has no questions that can be graded.,
+                      error: Unprocessable Entity,
+                    }
+                requiredUnanswered:
+                  value:
+                    {
+                      statusCode: 422,
+                      message: All required questions must be answered before submitting (2 unanswered).,
+                      error: Unprocessable Entity,
+                    }
         "500":
           {
             description: Enqueue failure or an unexpected error. Not retried by the client.,
           }
         "503": { $ref: "#/components/responses/Unavailable" }
+
+  /assignments/{assignmentId}/attempts/{attemptId}/submission-status:
+    get:
+      operationId: getSubmissionStatus
+      summary: Whether the attempt still accepts a submit
+      description: |
+        Role learner. Access: the attempt guard (ownership and group link);
+        the read is also scoped to the route assignment and the session's
+        user. Called on every question mount and when the tab regains focus,
+        so `serverNow` is read fresh on each request. Plain JSON, never
+        base64-encoded.
+      parameters:
+        - $ref: "#/components/parameters/assignmentId"
+        - $ref: "#/components/parameters/attemptId"
+      responses:
+        "200":
+          content:
+            {
+              application/json:
+                { schema: { $ref: "#/components/schemas/SubmissionStatus" } },
+            }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/AttemptNotFound" }
 
   /assignments/{assignmentId}/attempts/{attemptId}/grading/{gradingJobId}/status-stream:
     get:

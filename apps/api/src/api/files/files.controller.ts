@@ -891,9 +891,18 @@ export class FilesController {
   }
 
   @Post("folder")
+  @Roles(UserRole.AUTHOR, UserRole.ADMIN)
   @UseGuards(AuthGuard)
-  async createFolder(@Body() createFolderDto: CreateFolderDto) {
-    return this.filesService.createFolder(createFolderDto);
+  async createFolder(
+    @Body() createFolderDto: CreateFolderDto,
+    @Req() request: UserSessionRequest,
+  ) {
+    this.logger.info("files.createFolder", {
+      userId: request.userSession.userId,
+      role: request.userSession.role,
+      uploadType: sanitizeForLog(createFolderDto.uploadType),
+    });
+    return this.filesService.createFolder(createFolderDto, request.userSession);
   }
 
   @Get("download")
@@ -911,24 +920,71 @@ export class FilesController {
   }
 
   @Get("empty-folders")
+  @Roles(UserRole.AUTHOR, UserRole.ADMIN)
   @UseGuards(AuthGuard)
   async listEmptyFolders(
     @Query("uploadType") uploadType: string,
+    @Req() request: UserSessionRequest,
     @Query("groupId") groupId?: string,
   ) {
     if (!uploadType) {
       throw new BadRequestException("Missing required parameter: uploadType");
     }
-    return this.filesService.listEmptyFolders(uploadType, groupId);
+    this.logger.info("files.listEmptyFolders", {
+      userId: request.userSession.userId,
+      role: request.userSession.role,
+      uploadType: sanitizeForLog(uploadType),
+    });
+    return this.filesService.listEmptyFolders(
+      uploadType,
+      request.userSession,
+      groupId,
+    );
   }
 
   @Get()
+  @Roles(UserRole.AUTHOR, UserRole.ADMIN)
   @UseGuards(AuthGuard)
-  async listFiles(@Query("uploadType") uploadType: string) {
+  async listFiles(
+    @Query("uploadType") uploadType: string,
+    @Req() request: UserSessionRequest,
+  ) {
     if (!uploadType) {
       throw new BadRequestException("Missing required parameter: uploadType");
     }
-    return this.filesService.listFiles(uploadType);
+    this.logger.info("files.listFiles", {
+      userId: request.userSession.userId,
+      role: request.userSession.role,
+      uploadType: sanitizeForLog(uploadType),
+    });
+    return this.filesService.listFiles(uploadType, request.userSession);
+  }
+
+  // Registered before `DELETE :fileId`, which would otherwise capture it.
+  @Delete("folder")
+  @Roles(UserRole.AUTHOR, UserRole.ADMIN)
+  @UseGuards(AuthGuard)
+  async deleteFolder(
+    @Query("folderPath") folderPath: string,
+    @Query("uploadType") uploadType: string,
+    @Req() request: UserSessionRequest,
+  ) {
+    if (!uploadType) {
+      throw new BadRequestException("Missing required parameter: uploadType");
+    }
+    if (!folderPath) {
+      throw new BadRequestException("Missing required parameter: folderPath");
+    }
+    this.logger.info("files.deleteFolder", {
+      userId: request.userSession.userId,
+      role: request.userSession.role,
+      uploadType: sanitizeForLog(uploadType),
+    });
+    return this.filesService.deleteFolder(
+      uploadType,
+      folderPath,
+      request.userSession,
+    );
   }
 
   @Delete(":fileId")
@@ -962,31 +1018,34 @@ export class FilesController {
     );
   }
 
-  @Delete("folder")
-  @UseGuards(AuthGuard)
-  async deleteFolder(
-    @Query("folderPath") folderPath: string,
-    @Query("uploadType") uploadType: string,
-  ) {
-    if (!uploadType) {
-      throw new BadRequestException("Missing required parameter: uploadType");
-    }
-    if (!folderPath) {
-      throw new BadRequestException("Missing required parameter: folderPath");
-    }
-    return this.filesService.deleteFolder(uploadType, folderPath);
-  }
-
   @Put("move")
+  @Roles(UserRole.AUTHOR, UserRole.ADMIN)
   @UseGuards(AuthGuard)
-  async moveFile(@Body() moveFileDto: MoveFileDto) {
-    return this.filesService.moveFile(moveFileDto);
+  async moveFile(
+    @Body() moveFileDto: MoveFileDto,
+    @Req() request: UserSessionRequest,
+  ) {
+    this.logger.info("files.moveFile", {
+      userId: request.userSession.userId,
+      role: request.userSession.role,
+      uploadType: sanitizeForLog(moveFileDto.uploadType),
+    });
+    return this.filesService.moveFile(moveFileDto, request.userSession);
   }
 
   @Put("rename")
+  @Roles(UserRole.AUTHOR, UserRole.ADMIN)
   @UseGuards(AuthGuard)
-  async renameFile(@Body() renameFileDto: RenameFileDto) {
-    return this.filesService.renameFile(renameFileDto);
+  async renameFile(
+    @Body() renameFileDto: RenameFileDto,
+    @Req() request: UserSessionRequest,
+  ) {
+    this.logger.info("files.renameFile", {
+      userId: request.userSession.userId,
+      role: request.userSession.role,
+      uploadType: sanitizeForLog(renameFileDto.uploadType),
+    });
+    return this.filesService.renameFile(renameFileDto, request.userSession);
   }
 
   @Get("bucket-info")

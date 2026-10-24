@@ -18,12 +18,23 @@ import { LocalizationService } from "../../common/utils/localization.service";
 import { GradingFactoryService } from "../grading-factory.service";
 import { GradingRateLimiterService } from "../grading-rate-limiter.service";
 import { QuestionDto } from "../../../assignment/dto/update.questions.request.dto";
+import { questionDtoFromVersion } from "../../common/utils/grading-question-source.util";
 import { CreateQuestionResponseAttemptRequestDto } from "../../../assignment/attempt/dto/question-response/create.question.response.attempt.request.dto";
 import { CreateQuestionResponseAttemptResponseDto } from "../../../assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
 import {
   GradedItem,
   QuestionResponseService,
 } from "./question-response.service";
+
+/** The private grading-context loader some specs stub or call directly. */
+interface GradingContextSource {
+  getAssignmentContext(...arguments_: unknown[]): Promise<{
+    assignmentInstructions: string;
+    questionAnswerContext: { question: string; answer: string }[];
+  }>;
+}
+const asContextSource = (service: QuestionResponseService) =>
+  service as unknown as GradingContextSource;
 
 const mockRateLimiter = {
   schedule: jest.fn(async (_name: string, op: () => Promise<any>) => op()),
@@ -177,10 +188,12 @@ describe("QuestionResponseService", () => {
       id: 289110,
       questionVariants: [],
     });
-    jest.spyOn(service as any, "getAssignmentContext").mockResolvedValue({
-      assignmentInstructions: "",
-      questionAnswerContext: [],
-    });
+    jest
+      .spyOn(asContextSource(service), "getAssignmentContext")
+      .mockResolvedValue({
+        assignmentInstructions: "",
+        questionAnswerContext: [],
+      });
 
     const { question } = await getLearnerQuestion(pinnedCache());
 
@@ -212,10 +225,12 @@ describe("QuestionResponseService", () => {
         },
       ],
     });
-    jest.spyOn(service as any, "getAssignmentContext").mockResolvedValue({
-      assignmentInstructions: "",
-      questionAnswerContext: [],
-    });
+    jest
+      .spyOn(asContextSource(service), "getAssignmentContext")
+      .mockResolvedValue({
+        assignmentInstructions: "",
+        questionAnswerContext: [],
+      });
 
     const { question } = await getLearnerQuestion(pinnedCache());
 
@@ -236,10 +251,12 @@ describe("QuestionResponseService", () => {
       ...pinnedQuestion,
       question: "Live wording",
     });
-    jest.spyOn(service as any, "getAssignmentContext").mockResolvedValue({
-      assignmentInstructions: "",
-      questionAnswerContext: [],
-    });
+    jest
+      .spyOn(asContextSource(service), "getAssignmentContext")
+      .mockResolvedValue({
+        assignmentInstructions: "",
+        questionAnswerContext: [],
+      });
 
     const { question } = await getLearnerQuestion({
       questions: new Map(),
@@ -252,6 +269,67 @@ describe("QuestionResponseService", () => {
       undefined,
       expect.anything(),
     );
+  });
+
+  it("does not look up a translation for a pinned question with no source question id", async () => {
+    mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+      id: 289110,
+      questionVariants: [],
+    });
+    jest
+      .spyOn(asContextSource(service), "getAssignmentContext")
+      .mockResolvedValue({
+        assignmentInstructions: "",
+        questionAnswerContext: [],
+      });
+    const findMany = jest.fn();
+    const versionOnly = questionDtoFromVersion(
+      {
+        id: 10383,
+        assignmentVersionId: 9,
+        authorComment: null,
+        questionId: null,
+        totalPoints: 2,
+        type: QuestionType.TEXT,
+        responseType: null,
+        question: "Version wording",
+        maxWords: null,
+        scoring: null,
+        choices: null,
+        randomizedChoices: null,
+        answer: null,
+        gradingContextQuestionIds: [],
+        maxCharacters: null,
+        videoPresentationConfig: null,
+        liveRecordingConfig: null,
+        displayOrder: null,
+        createdAt: new Date(0),
+      },
+      2991,
+    );
+
+    const { question } = await (
+      service as unknown as {
+        getLearnerQuestion: (
+          ...arguments_: unknown[]
+        ) => Promise<{ question: QuestionDto }>;
+      }
+    ).getLearnerQuestion(
+      10383,
+      289110,
+      2991,
+      undefined,
+      { ...mockPrisma, translation: { findMany } },
+      {
+        questions: new Map(),
+        translations: new Map(),
+        pinnedQuestions: new Map([[10383, versionOnly]]),
+      },
+      "fr",
+    );
+
+    expect(question.question).toBe("Version wording");
+    expect(findMany).not.toHaveBeenCalled();
   });
 });
 
@@ -916,7 +994,7 @@ describe("QuestionResponseService — getAssignmentContext with in-memory respon
       ]),
     };
 
-    const ctx = await (service as any).getAssignmentContext(
+    const ctx = await asContextSource(service).getAssignmentContext(
       5,
       20,
       10,
@@ -1100,7 +1178,12 @@ describe("QuestionResponseService — gradeQuestionNoSave error handling", () =>
       type: QuestionType.UPLOAD,
       responseType: "REPORT",
     };
-    const gradeFiles = (files: Record<string, unknown>[]) =>
+    const originalAuthorBucket = process.env.IBM_COS_AUTHOR_BUCKET;
+    const gradeFilesAs = (
+      role: UserRole,
+      userId: string | undefined,
+      files: Record<string, unknown>[],
+    ) =>
       (
         service as unknown as {
           gradeQuestionNoSave: (...args: unknown[]) => Promise<unknown>;
@@ -1111,13 +1194,16 @@ describe("QuestionResponseService — gradeQuestionNoSave error handling", () =>
         assignmentContext,
         5, // assignmentId
         "en",
-        UserRole.LEARNER,
+        role,
         10, // assignmentAttemptId
-        "learner@example.com",
+        userId,
       );
+    const gradeFiles = (files: Record<string, unknown>[]) =>
+      gradeFilesAs(UserRole.LEARNER, "learner@example.com", files);
 
     beforeEach(() => {
       process.env.IBM_COS_LEARNER_BUCKET = "learner-bucket";
+      process.env.IBM_COS_AUTHOR_BUCKET = "author-bucket";
       mockStrategy.gradeResponse.mockResolvedValue({
         totalPoints: 5,
         feedback: [],
@@ -1130,6 +1216,70 @@ describe("QuestionResponseService — gradeQuestionNoSave error handling", () =>
       } else {
         process.env.IBM_COS_LEARNER_BUCKET = originalBucket;
       }
+      if (originalAuthorBucket === undefined) {
+        delete process.env.IBM_COS_AUTHOR_BUCKET;
+      } else {
+        process.env.IBM_COS_AUTHOR_BUCKET = originalAuthorBucket;
+      }
+    });
+
+    it("grades an author's own preview upload", async () => {
+      await expect(
+        gradeFilesAs(UserRole.AUTHOR, "author@example.com", [
+          {
+            filename: "report.pdf",
+            bucket: "author-bucket",
+            key: "authors/author@example.com/abc-report.pdf",
+          },
+        ]),
+      ).resolves.toBeDefined();
+      expect(mockStrategy.gradeResponse).toHaveBeenCalled();
+    });
+
+    it.each([
+      [
+        "a learner's upload",
+        { bucket: "learner-bucket", key: "5/learner@example.com/7/a.pdf" },
+      ],
+      [
+        "another author's file",
+        { bucket: "author-bucket", key: "authors/other@example.com/a.pdf" },
+      ],
+      [
+        "a traversal out of the author's prefix",
+        {
+          bucket: "author-bucket",
+          key: "authors/author@example.com/../other@example.com/a.pdf",
+        },
+      ],
+      [
+        "an arbitrary bucket",
+        { bucket: "billing-exports", key: "authors/author@example.com/a.csv" },
+      ],
+    ])("refuses %s in author preview", async (_label, file) => {
+      const error: unknown = await gradeFilesAs(
+        UserRole.AUTHOR,
+        "author@example.com",
+        [{ filename: "a.pdf", ...file }],
+      ).catch((caught: unknown) => caught);
+
+      expect(error).toBeInstanceOf(BadRequestException);
+      expect((error as BadRequestException).getResponse()).toMatchObject({
+        code: "INVALID_FILE_REFERENCE",
+      });
+      expect(mockGradingFactoryService.getStrategy).not.toHaveBeenCalled();
+    });
+
+    it("refuses preview files when the author is unknown", async () => {
+      await expect(
+        gradeFilesAs(UserRole.AUTHOR, undefined, [
+          {
+            filename: "a.pdf",
+            bucket: "author-bucket",
+            key: "authors/author@example.com/a.pdf",
+          },
+        ]),
+      ).rejects.toBeInstanceOf(BadRequestException);
     });
 
     it("grades the learner's own upload for the question", async () => {

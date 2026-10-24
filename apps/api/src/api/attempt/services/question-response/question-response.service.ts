@@ -59,8 +59,12 @@ import {
   findQuestionTranslation,
 } from "../../common/utils/translation-language.util";
 import { LocalizationService } from "../../common/utils/localization.service";
-import { applyVariantToQuestion } from "../../common/utils/grading-question-source.util";
 import {
+  applyVariantToQuestion,
+  isVersionOnlyQuestion,
+} from "../../common/utils/grading-question-source.util";
+import {
+  findAuthorFileReferenceDenial,
   findLearnerFileReferenceDenial,
   InvalidLearnerFileReferenceException,
 } from "../../common/utils/learner-file-reference.util";
@@ -1065,6 +1069,13 @@ export class QuestionResponseService {
         questionId,
         userId,
       );
+    } else {
+      this.assertAuthorPreviewFilesInScope(
+        requestDto.learnerFileResponse,
+        assignmentId,
+        questionId,
+        userId,
+      );
     }
 
     const gradingContext: GradingContext = {
@@ -1263,6 +1274,35 @@ export class QuestionResponseService {
       this.logger.warn("grading.file_reference.rejected", {
         assignment_id: assignmentId,
         attempt_id: assignmentAttemptId,
+        user_id: userId,
+        question_id: questionId,
+        denial_reason: denial,
+      });
+      throw new InvalidLearnerFileReferenceException();
+    }
+  }
+
+  /**
+   * Author preview grades files by the coordinates in the request too, so
+   * they must be the author's own uploads: the author bucket and a key under
+   * `authors/<userId>/`. Anything else could read an arbitrary object.
+   */
+  private assertAuthorPreviewFilesInScope(
+    files: CreateQuestionResponseAttemptRequestDto["learnerFileResponse"],
+    assignmentId: number,
+    questionId: number,
+    userId: string | undefined,
+  ): void {
+    if (!Array.isArray(files) || files.length === 0) {
+      return;
+    }
+    const denial = findAuthorFileReferenceDenial(files, {
+      userId: userId ?? "",
+      allowedBuckets: S3Service.authorUploadBuckets(),
+    });
+    if (denial) {
+      this.logger.warn("grading.preview_file_reference.rejected", {
+        assignment_id: assignmentId,
         user_id: userId,
         question_id: questionId,
         denial_reason: denial,
@@ -1607,7 +1647,16 @@ export class QuestionResponseService {
         ? applyVariantToQuestion(baseQuestion, variantMapping.questionVariant)
         : baseQuestion;
 
-    if (language && language !== "en") {
+    if (language && language !== "en" && isVersionOnlyQuestion(baseQuestion)) {
+      // Its id is a version row's, not a question's: a translation looked up
+      // by it could belong to an unrelated question.
+      this.logger.warn("grading.translation.skipped_version_only_question", {
+        assignment_id: assignmentId,
+        attempt_id: assignmentAttemptId,
+        question_id: questionId,
+        language,
+      });
+    } else if (language && language !== "en") {
       const variantId = variantMapping?.questionVariant?.id ?? null;
       const key = buildTranslationCacheKey(language, questionId, variantId);
       let translation = cache?.translations.get(key);

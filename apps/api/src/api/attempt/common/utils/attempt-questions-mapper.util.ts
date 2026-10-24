@@ -16,6 +16,10 @@ import {
 } from "src/api/assignment/dto/update.questions.request.dto";
 import { PrismaService } from "../../../../database/prisma.service";
 import { CompletedAttemptQuestionDto } from "../../dto/completed-attempt.response.dto";
+import {
+  applyCorrectOptionsVisibility,
+  applyTrueFalseAnswerVisibility,
+} from "./correct-options-feedback.util";
 import { sanitizeLearnerChoices } from "./learner-attempt-shape.util";
 
 import {
@@ -205,6 +209,7 @@ export class AttemptQuestionsMapper {
         question,
         options.responseByQuestionId.get(question.source.id),
         options,
+        language,
       ),
     );
   }
@@ -213,6 +218,7 @@ export class AttemptQuestionsMapper {
     served: ServedQuestion,
     response: QuestionResponse | undefined,
     options: CompletedQuestionOptions,
+    language: string | null | undefined,
   ): CompletedAttemptQuestionDto {
     const choices = sanitizeLearnerChoices(
       served.choices,
@@ -234,11 +240,62 @@ export class AttemptQuestionsMapper {
               ? this.clampPoints(response.points, maxPoints)
               : null,
             feedback: options.showSubmissionFeedback
-              ? this.feedbackList(response.feedback)
+              ? this.visibleFeedback(served, response, options, language)
               : null,
           }
         : null,
     };
+  }
+
+  /**
+   * Stored feedback, with the answer key of a multiple-correct or true/false
+   * question named only when it is revealed.
+   */
+  private static visibleFeedback(
+    served: ServedQuestion,
+    response: QuestionResponse,
+    options: CompletedQuestionOptions,
+    language: string | null | undefined,
+  ): unknown[] | null {
+    const feedback = this.feedbackList(response.feedback);
+    const type = served.source.type;
+    if (
+      !feedback ||
+      (type !== QuestionType.MULTIPLE_CORRECT &&
+        type !== QuestionType.TRUE_FALSE)
+    ) {
+      return feedback;
+    }
+    const parsed = parseStoredJson(response.metadata);
+    const metadata: Record<string, unknown> =
+      parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : {};
+    if (type === QuestionType.TRUE_FALSE) {
+      return applyTrueFalseAnswerVisibility(feedback, {
+        revealAnswers: options.revealAnswers,
+        isCorrect:
+          typeof metadata.isCorrect === "boolean"
+            ? metadata.isCorrect
+            : undefined,
+        correctAnswer:
+          typeof metadata.correctAnswer === "boolean"
+            ? metadata.correctAnswer
+            : undefined,
+        language,
+      });
+    }
+    return applyCorrectOptionsVisibility(feedback, {
+      revealAnswers: options.revealAnswers,
+      perfectScore:
+        typeof metadata.perfectScore === "boolean"
+          ? metadata.perfectScore
+          : undefined,
+      correctOptions: served.choices
+        .filter((choice) => choice.isCorrect === true)
+        .map((choice) => choice.choice),
+      language,
+    });
   }
 
   /** Never more than the question's own maximum, as the totals are. */

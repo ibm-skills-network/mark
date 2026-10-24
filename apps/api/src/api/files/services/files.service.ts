@@ -33,7 +33,20 @@ import { FileProcessingBudgetService } from "./file-processing-budget.service";
 import { fileExtension, learnerUploadExtensions } from "./learner-upload-types";
 import { sanitizeUploadFileName, sanitizeUploadPath } from "./path-sanitizer";
 import { S3Service } from "./s3.service";
-import { generateStorageKeyId } from "./storage-key";
+import {
+  authorUploadKeyPrefix,
+  generateStorageKeyId,
+  isWellFormedStorageKey,
+} from "./storage-key";
+
+type ManagementSession = Pick<UserSession, "role" | "userId">;
+
+/** Where an author or admin file-management call may read and write. */
+export interface FileManagementScope {
+  bucket: string;
+  /** Every key touched must start with this; "" for admins. */
+  prefix: string;
+}
 
 const CHATBOT_ALLOWED_FILE_TYPES: Record<string, string[]> = {
   "text/plain": [
@@ -215,7 +228,23 @@ export class FilesService {
 
     switch (uploadType) {
       case UploadType.AUTHOR: {
-        prefix = normalizedPath ? `${normalizedPath}/` : `authors/${userId}/`;
+        const ownPrefix = authorUploadKeyPrefix(userId);
+        prefix = normalizedPath ? `${normalizedPath}/` : ownPrefix;
+        // A chosen folder must still be the author's own, as for move,
+        // rename and listing; admins may write anywhere in the bucket.
+        if (
+          role !== UserRole.ADMIN &&
+          (!userId ||
+            !prefix.startsWith(ownPrefix) ||
+            !isWellFormedStorageKey(prefix.slice(0, -1)))
+        ) {
+          this.logger.warn("upload_rejected: author path outside own prefix", {
+            denial_reason: "author_path_out_of_scope",
+            user_id: userId,
+            role,
+          });
+          throw new ForbiddenException();
+        }
         break;
       }
 
@@ -323,8 +352,9 @@ export class FilesService {
   /**
    * Who may delete which stored object. A learner may delete only their own
    * answer uploads for the session's assignment (or their own chat
-   * attachments); an author only author or their own chat files; an admin
-   * anything. Anything else is a bare 404 so the response never says whether
+   * attachments); an author only their own author files (under
+   * `authors/<userId>/`) or their own chat files; an admin anything. Keys with
+   * `.`/`..`/empty segments, backslashes or control characters never pass. Anything else is a bare 404 so the response never says whether
    * the object exists.
    */
   assertDeleteAllowed(
@@ -349,9 +379,11 @@ export class FilesService {
           (uploadType === UploadType.CHATBOT && key.startsWith(ownChatPrefix));
       } else if (session.role === UserRole.AUTHOR) {
         allowed =
-          uploadType === UploadType.AUTHOR ||
+          (uploadType === UploadType.AUTHOR &&
+            key.startsWith(authorUploadKeyPrefix(session.userId))) ||
           (uploadType === UploadType.CHATBOT && key.startsWith(ownChatPrefix));
       }
+      allowed = allowed && isWellFormedStorageKey(key);
     }
     if (!allowed) {
       this.logger.warn("delete_rejected: key not owned by caller", {
@@ -362,6 +394,100 @@ export class FilesService {
         upload_type: uploadType,
       });
       throw new NotFoundException();
+    }
+  }
+
+  /**
+   * Bucket and key prefix for an author or admin file-management call. The
+   * bucket always comes from `uploadType`, never from the request body. An
+   * author may manage only author files under their own `authors/<userId>/`
+   * prefix; an admin any configured bucket. Anyone else gets a bare 403.
+   */
+  resolveManagementScope(
+    uploadType: unknown,
+    session: ManagementSession,
+  ): FileManagementScope {
+    if (typeof uploadType !== "string" || uploadType.length === 0) {
+      throw new BadRequestException("Invalid upload type");
+    }
+    if (session.role === UserRole.ADMIN) {
+      return { bucket: this.s3Service.getBucketName(uploadType), prefix: "" };
+    }
+    if (
+      session.role !== UserRole.AUTHOR ||
+      !session.userId ||
+      uploadType !== UploadType.AUTHOR
+    ) {
+      this.logger.warn("file_management_rejected: role or upload type", {
+        denial_reason: "management_not_allowed",
+        user_id: session.userId,
+        role: session.role,
+        upload_type: uploadType,
+      });
+      throw new ForbiddenException();
+    }
+    return {
+      bucket: this.s3Service.getBucketName(UploadType.AUTHOR),
+      prefix: authorUploadKeyPrefix(session.userId),
+    };
+  }
+
+  /**
+   * 403 unless `key` is well formed and strictly inside the scope's prefix.
+   * The response never says which check failed.
+   */
+  private assertKeyInScope(
+    key: unknown,
+    scope: FileManagementScope,
+    session: ManagementSession,
+    operation: string,
+  ): asserts key is string {
+    const inScope =
+      isWellFormedStorageKey(key) &&
+      key.startsWith(scope.prefix) &&
+      key.length > scope.prefix.length;
+    if (!inScope) {
+      this.logger.warn("file_management_rejected: key outside caller scope", {
+        denial_reason: "key_out_of_scope",
+        operation,
+        user_id: session.userId,
+        role: session.role,
+      });
+      throw new ForbiddenException();
+    }
+  }
+
+  /** A body-supplied bucket, when sent at all, must be the derived one. */
+  private assertBodyBucketMatches(
+    bodyBucket: unknown,
+    scope: FileManagementScope,
+    session: ManagementSession,
+    operation: string,
+  ): void {
+    if (bodyBucket === undefined || bodyBucket === scope.bucket) {
+      return;
+    }
+    this.logger.warn("file_management_rejected: bucket mismatch", {
+      denial_reason: "bucket_mismatch",
+      operation,
+      user_id: session.userId,
+      role: session.role,
+    });
+    throw new ForbiddenException();
+  }
+
+  /** "/" or "/a/b" to the key form "" or "a/b"; anything else is a 400. */
+  private folderPathToKey(path: unknown): string {
+    if (typeof path !== "string" || !path.startsWith("/")) {
+      throw new BadRequestException("Path must start with /");
+    }
+    return path === "/" ? "" : path.slice(1);
+  }
+
+  /** A single file or folder name: one well-formed key segment. */
+  private assertSingleSegmentName(name: unknown): asserts name is string {
+    if (!isWellFormedStorageKey(name) || name.includes("/")) {
+      throw new BadRequestException("Invalid name");
     }
   }
 
@@ -1017,24 +1143,27 @@ export class FilesService {
     }
   }
 
-  async createFolder(createFolderDto: CreateFolderDto): Promise<any> {
+  async createFolder(
+    createFolderDto: CreateFolderDto,
+    session: ManagementSession,
+  ): Promise<any> {
     const { name, path, uploadType } = createFolderDto;
-
-    if (path !== "/" && !path.startsWith("/")) {
-      throw new BadRequestException("Path must start with /");
-    }
-
-    const bucket = this.s3Service.getBucketName(uploadType);
-    if (!bucket) {
-      throw new BadRequestException("Invalid upload type");
-    }
-
-    const folderKey = path === "/" ? `${name}/` : `${path.slice(1)}/${name}/`;
+    const scope = this.resolveManagementScope(uploadType, session);
+    this.assertSingleSegmentName(name);
+    const parentKey = this.folderPathToKey(path);
+    const folderPath = parentKey ? `${parentKey}/${name}` : name;
+    this.assertKeyInScope(folderPath, scope, session, "create_folder");
+    const folderKey = `${folderPath}/`;
 
     await this.s3Service.putObject({
-      Bucket: bucket,
+      Bucket: scope.bucket,
       Key: folderKey,
       Body: "",
+    });
+    this.logger.log("folder_created", {
+      user_id: session.userId,
+      role: session.role,
+      upload_type: uploadType,
     });
 
     return {
@@ -1063,17 +1192,20 @@ export class FilesService {
     };
   }
 
-  async deleteFolder(uploadType: string, folderPath: string): Promise<any> {
+  async deleteFolder(
+    uploadType: string,
+    folderPath: string,
+    session: ManagementSession,
+  ): Promise<any> {
     if (folderPath === "/") {
       throw new BadRequestException("Cannot delete the root folder");
     }
 
-    const bucket = this.s3Service.getBucketName(uploadType);
-    if (!bucket) {
-      throw new BadRequestException("Invalid upload type");
-    }
-
-    const folderPrefix = `${folderPath.slice(1)}/`;
+    const scope = this.resolveManagementScope(uploadType, session);
+    const folderKey = this.folderPathToKey(folderPath);
+    this.assertKeyInScope(folderKey, scope, session, "delete_folder");
+    const bucket = scope.bucket;
+    const folderPrefix = `${folderKey}/`;
 
     const listedObjects = await this.s3Service.listObjectsV2({
       Bucket: bucket,
@@ -1115,15 +1247,16 @@ export class FilesService {
 
   async listEmptyFolders(
     uploadType: string,
+    session: ManagementSession,
     groupId?: string,
   ): Promise<string[]> {
-    const bucket = this.s3Service.getBucketName(uploadType);
-    if (!bucket) {
-      throw new BadRequestException("Invalid upload type");
-    }
+    const scope = this.resolveManagementScope(uploadType, session);
+    const bucket = scope.bucket;
 
+    // Authors list only their own prefix; the group filter is admin-only.
     const prefix =
-      groupId && uploadType === "author" ? `group-${groupId}/` : "";
+      scope.prefix ||
+      (groupId && uploadType === UploadType.AUTHOR ? `group-${groupId}/` : "");
 
     const response = await this.s3Service.listObjectsV2({
       Bucket: bucket,
@@ -1218,15 +1351,16 @@ export class FilesService {
     };
   }
 
-  async listFiles(uploadType: string): Promise<FileResponseDto[]> {
-    const bucket = this.s3Service.getBucketName(uploadType);
-    if (!bucket) {
-      throw new BadRequestException("Invalid upload type");
-    }
+  async listFiles(
+    uploadType: string,
+    session: ManagementSession,
+  ): Promise<FileResponseDto[]> {
+    const scope = this.resolveManagementScope(uploadType, session);
+    const bucket = scope.bucket;
 
     const response = await this.s3Service.listObjectsV2({
       Bucket: bucket,
-      Prefix: "",
+      Prefix: scope.prefix,
     });
 
     const files = (response.Contents || [])
@@ -1251,17 +1385,27 @@ export class FilesService {
     return files;
   }
 
-  async moveFile(moveFileDto: MoveFileDto): Promise<any> {
-    const { sourceKey, targetPath, bucket } = moveFileDto;
+  async moveFile(
+    moveFileDto: MoveFileDto,
+    session: ManagementSession,
+  ): Promise<any> {
+    const { sourceKey, targetPath, uploadType } = moveFileDto;
 
-    if (!sourceKey || !bucket) {
-      throw new BadRequestException("sourceKey and bucket are required");
+    if (!sourceKey) {
+      throw new BadRequestException("sourceKey is required");
     }
 
-    const segments = sourceKey.split("/");
-    const fileName = segments.at(-1);
-    const newKey =
-      targetPath === "/" ? fileName : `${targetPath.slice(1)}/${fileName}`;
+    const scope = this.resolveManagementScope(uploadType, session);
+    this.assertBodyBucketMatches(moveFileDto.bucket, scope, session, "move");
+    this.assertKeyInScope(sourceKey, scope, session, "move");
+    const bucket = scope.bucket;
+
+    const fileName = sourceKey.split("/").at(-1);
+    const targetFolderKey = this.folderPathToKey(targetPath);
+    const newKey = targetFolderKey
+      ? `${targetFolderKey}/${fileName}`
+      : fileName;
+    this.assertKeyInScope(newKey, scope, session, "move");
 
     await this.s3Service.copyObject({
       Bucket: bucket,
@@ -1274,6 +1418,12 @@ export class FilesService {
       Key: sourceKey,
     });
 
+    this.logger.log("file_moved", {
+      user_id: session.userId,
+      role: session.role,
+      upload_type: uploadType,
+    });
+
     return {
       success: true,
       message: "File moved successfully",
@@ -1281,17 +1431,32 @@ export class FilesService {
     };
   }
 
-  async renameFile(renameFileDto: RenameFileDto): Promise<any> {
-    const { sourceKey, newFileName, bucket } = renameFileDto;
+  async renameFile(
+    renameFileDto: RenameFileDto,
+    session: ManagementSession,
+  ): Promise<any> {
+    const { sourceKey, newFileName, uploadType } = renameFileDto;
 
-    if (!sourceKey || !bucket) {
-      throw new BadRequestException("sourceKey and bucket are required");
+    if (!sourceKey) {
+      throw new BadRequestException("sourceKey is required");
     }
+
+    const scope = this.resolveManagementScope(uploadType, session);
+    this.assertBodyBucketMatches(
+      renameFileDto.bucket,
+      scope,
+      session,
+      "rename",
+    );
+    this.assertKeyInScope(sourceKey, scope, session, "rename");
+    this.assertSingleSegmentName(newFileName);
+    const bucket = scope.bucket;
 
     const pathParts = sourceKey.split("/");
     pathParts.pop();
     const prefix = pathParts.join("/");
     const newKey = prefix ? `${prefix}/${newFileName}` : newFileName;
+    this.assertKeyInScope(newKey, scope, session, "rename");
 
     await this.s3Service.copyObject({
       Bucket: bucket,
@@ -1302,6 +1467,12 @@ export class FilesService {
     await this.s3Service.deleteObject({
       Bucket: bucket,
       Key: sourceKey,
+    });
+
+    this.logger.log("file_renamed", {
+      user_id: session.userId,
+      role: session.role,
+      upload_type: uploadType,
     });
 
     return {

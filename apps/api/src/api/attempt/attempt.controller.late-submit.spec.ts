@@ -1,4 +1,10 @@
+import "reflect-metadata";
+import { GUARDS_METADATA, PATH_METADATA } from "@nestjs/common/constants";
+import { ROLES_KEY } from "src/auth/role/roles.global.guard";
+import { TRANSFORM_METADATA_KEY } from "src/common/interceptors/data-transform.interceptor";
+import { TRANSFORM_FIELDS } from "src/helpers/transform-config";
 import { UserRole } from "../../auth/interfaces/user.session.interface";
+import { AssignmentAttemptAccessControlGuard } from "../assignment/attempt/guards/assignment.attempt.access.control.guard";
 import { AttemptClosedException } from "../assignment/attempt/helper/submission-deadline.helper";
 import { UnsupportedResponseTypeException } from "./common/utils/learner-file-reference.util";
 import { AttemptControllerV2 } from "./attempt.controller";
@@ -208,5 +214,55 @@ describe("AttemptControllerV2 submit payload check", () => {
     );
 
     expect(attemptService.assertSubmitPayloadAcceptable).not.toHaveBeenCalled();
+  });
+});
+
+describe("AttemptControllerV2 submission status", () => {
+  const status = {
+    id: 1_873_208,
+    submitted: true,
+    closedAtTimeLimit: true,
+    acceptingSubmissions: false,
+    expiresAt: "2026-10-21T01:16:03.499Z",
+    serverNow: "2026-10-21T01:16:24.000Z",
+  };
+
+  it("returns the learner's own attempt status, scoped to the route assignment", async () => {
+    const getAttemptSubmissionStatus = jest.fn().mockResolvedValue(status);
+    const controller = new AttemptControllerV2(
+      logger as never,
+      { getAttemptSubmissionStatus } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+    await expect(
+      controller.getAttemptSubmissionStatus("771", "1873208", learnerRequest()),
+    ).resolves.toEqual(status);
+    expect(getAttemptSubmissionStatus).toHaveBeenCalledWith(
+      1_873_208,
+      771,
+      "learner@example.com",
+    );
+  });
+
+  it("is learner-only behind the attempt guard, with plain JSON out and decoded requests in", () => {
+    const handler = AttemptControllerV2.prototype.getAttemptSubmissionStatus;
+
+    expect(Reflect.getMetadata(ROLES_KEY, handler)).toEqual([UserRole.LEARNER]);
+    expect(Reflect.getMetadata(GUARDS_METADATA, handler)).toContain(
+      AssignmentAttemptAccessControlGuard,
+    );
+    expect(Reflect.getMetadata(TRANSFORM_METADATA_KEY, handler)).toEqual({
+      encodeResponse: false,
+      decodeRequest: true,
+      fields: [...TRANSFORM_FIELDS],
+      deep: true,
+    });
+    expect(Reflect.getMetadata(PATH_METADATA, handler)).toBe(
+      ":attemptId/submission-status",
+    );
   });
 });

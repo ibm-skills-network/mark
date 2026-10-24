@@ -36,6 +36,29 @@ const storedFile = {
 };
 
 describe("LearnerUpdateAssignmentAttemptRequestDto", () => {
+  it.each(["en", "fr", "zh-CN", "uk-UA", "ZH-tw"])(
+    "accepts the supported language %s",
+    async (language) => {
+      await expect(
+        validate({ ...submitOf(unanswered(1)), language }),
+      ).resolves.toBeDefined();
+    },
+  );
+
+  it("accepts a submit with no language", async () => {
+    const { language: _omitted, ...body } = submitOf(unanswered(1));
+    await expect(validate(body)).resolves.toBeDefined();
+  });
+
+  it.each(["xx", "english", "", "fr-FR-x-evil", "a".repeat(40)])(
+    "refuses the unsupported language %s with a 400",
+    async (language) => {
+      await expect(
+        validate({ ...submitOf(unanswered(1)), language }),
+      ).rejects.toMatchObject({ status: 400 });
+    },
+  );
+
   it("accepts the web client's empty answers", async () => {
     await expect(
       validate(submitOf(unanswered(1), unanswered(2))),

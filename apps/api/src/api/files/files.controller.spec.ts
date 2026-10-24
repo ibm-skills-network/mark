@@ -1,10 +1,13 @@
 import {
   BadRequestException,
+  ExecutionContext,
   ForbiddenException,
   NotFoundException,
 } from "@nestjs/common";
+import { Reflector } from "@nestjs/core";
 import { UserRole } from "src/auth/interfaces/user.session.interface";
 import type { UserSessionRequest } from "src/auth/interfaces/user.session.interface";
+import { RolesGlobalGuard } from "src/auth/role/roles.global.guard";
 import { Logger } from "winston";
 import { UploadType } from "./dto/upload.dto";
 import { FilesController } from "./files.controller";
@@ -477,5 +480,71 @@ describe("FilesController learner ownership checks", () => {
     ][]) {
       expect(call[1].Expires).toBe(expected);
     }
+  });
+});
+
+describe("FilesController file-management routes are author and admin only", () => {
+  const guard = new RolesGlobalGuard(new Reflector(), {
+    child: () => ({ warn: jest.fn() }),
+  } as unknown as Logger);
+
+  const contextFor = (
+    handler: (...arguments_: never[]) => unknown,
+    role: UserRole,
+  ): ExecutionContext =>
+    ({
+      getHandler: () => handler,
+      getClass: () => FilesController,
+      switchToHttp: () => ({
+        getRequest: () => ({
+          userSession: { role, userId: "someone@example.com" },
+        }),
+      }),
+    }) as unknown as ExecutionContext;
+
+  const routes = [
+    ["PUT move", FilesController.prototype.moveFile],
+    ["PUT rename", FilesController.prototype.renameFile],
+    ["POST folder", FilesController.prototype.createFolder],
+    ["DELETE folder", FilesController.prototype.deleteFolder],
+    ["GET list", FilesController.prototype.listFiles],
+    ["GET empty-folders", FilesController.prototype.listEmptyFolders],
+  ] as const;
+
+  it.each(routes)("refuses a learner on %s", (_label, handler) => {
+    expect(guard.canActivate(contextFor(handler, UserRole.LEARNER))).toBe(
+      false,
+    );
+  });
+
+  it.each(routes)("admits authors and admins on %s", (_label, handler) => {
+    expect(guard.canActivate(contextFor(handler, UserRole.AUTHOR))).toBe(true);
+    expect(guard.canActivate(contextFor(handler, UserRole.ADMIN))).toBe(true);
+  });
+
+  it("registers DELETE folder before DELETE :fileId so it is reachable", () => {
+    const order = Object.getOwnPropertyNames(FilesController.prototype);
+    expect(order.indexOf("deleteFolder")).toBeLessThan(
+      order.indexOf("deleteFile"),
+    );
+  });
+
+  it("passes the caller's session to the service", async () => {
+    const moveFile = jest.fn().mockResolvedValue({ success: true });
+    const controller = new FilesController(
+      { moveFile } as unknown as FilesService,
+      {} as S3Service,
+      { child: () => ({ info: jest.fn() }) } as unknown as Logger,
+    );
+    const session = { userId: "author@example.com", role: UserRole.AUTHOR };
+    const body = {
+      uploadType: UploadType.AUTHOR,
+      sourceKey: "authors/author@example.com/a.pdf",
+      targetPath: "/authors/author@example.com/sub",
+    };
+    await controller.moveFile(body, {
+      userSession: session,
+    } as unknown as UserSessionRequest);
+    expect(moveFile).toHaveBeenCalledWith(body, session);
   });
 });

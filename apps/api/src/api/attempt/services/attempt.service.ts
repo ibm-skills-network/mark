@@ -52,7 +52,10 @@ import { gradingFailureFromError } from "../../llm/features/grading/errors/gradi
 import { AttemptFeedbackService } from "./attempt-feedback.service";
 import { AttemptRegradingService } from "./attempt-regrading.service";
 import { AttemptReportingService } from "./attempt-reporting.service";
-import { AttemptSubmissionService } from "./attempt-submission.service";
+import {
+  AttemptSubmissionService,
+  AttemptSubmissionStatusDto,
+} from "./attempt-submission.service";
 import { newJobScopedCache } from "./grading/job-scoped-cache";
 import {
   GradingProgressService,
@@ -834,6 +837,19 @@ export class AttemptServiceV2 {
       assignmentId,
       userId,
       updateDto,
+    );
+  }
+
+  /** Submission state of a learner's own attempt with a fresh server clock. */
+  async getAttemptSubmissionStatus(
+    attemptId: number,
+    assignmentId: number,
+    userId: string,
+  ): Promise<AttemptSubmissionStatusDto> {
+    return this.submissionService.getAttemptSubmissionStatus(
+      attemptId,
+      assignmentId,
+      userId,
     );
   }
 

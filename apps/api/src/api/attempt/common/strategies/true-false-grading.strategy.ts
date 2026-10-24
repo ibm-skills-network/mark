@@ -118,26 +118,13 @@ export class TrueFalseGradingStrategy extends AbstractGradingStrategy<boolean> {
     const { correctAnswer } = resolved;
     const isCorrect = learnerResponse === correctAnswer;
 
-    const feedback = isCorrect
-      ? this.localizationService.getLocalizedString(
-          "correctTF",
-          context.language,
-        )
-      : this.localizationService.getLocalizedString(
-          "incorrectTF",
-          context.language,
-          {
-            correctAnswer: correctAnswer
-              ? this.localizationService.getLocalizedString(
-                  "true",
-                  context.language,
-                )
-              : this.localizationService.getLocalizedString(
-                  "false",
-                  context.language,
-                ),
-          },
-        );
+    // The correct answer is part of the answer key, so it is never written
+    // into stored feedback; it is added when the result is read and the
+    // assignment reveals answers (see correct-options-feedback.util).
+    const feedback = this.localizationService.getLocalizedString(
+      isCorrect ? "correctTF" : "incorrectTFNoAnswer",
+      context.language,
+    );
 
     const correctPoints = question.totalPoints || resolved.correctPoints;
     const pointsAwarded = isCorrect ? correctPoints : 0;

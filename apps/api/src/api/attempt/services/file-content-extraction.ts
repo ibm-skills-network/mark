@@ -8,6 +8,7 @@ import csv from "csv-parser";
 import * as mammoth from "mammoth";
 import pdfParse from "pdf-parse";
 import { S3Service } from "src/api/files/services/s3.service";
+import { isWellFormedStorageKey } from "src/api/files/services/storage-key";
 import * as unzipper from "unzipper";
 import * as XLSX from "xlsx";
 import { parseStringPromise } from "xml2js";
@@ -576,6 +577,31 @@ export class FileContentExtractionService {
       });
   }
 
+  /**
+   * A file read from storage must name a configured upload bucket and a
+   * well-formed key. Callers check ownership first; this keeps a missed check
+   * from turning grading into a read of any object the service can reach.
+   */
+  private assertReadableStorageReference(file: LearnerFileUpload): void {
+    if (file.buffer || (file.bucket === undefined && file.key === undefined)) {
+      return;
+    }
+    if (
+      typeof file.bucket !== "string" ||
+      !this.s3Service.isConfiguredUploadBucket(file.bucket) ||
+      !isWellFormedStorageKey(file.key)
+    ) {
+      this.logger.warn(
+        `file_extraction.storage_reference.rejected ${JSON.stringify({
+          filename: file.filename,
+          hasBucket: Boolean(file.bucket),
+          hasKey: Boolean(file.key),
+        })}`,
+      );
+      throw new BadRequestException("Invalid file reference");
+    }
+  }
+
   private async extractSingleFileContent(
     file: LearnerFileUpload,
     options?: {
@@ -586,6 +612,7 @@ export class FileContentExtractionService {
   ): Promise<ExtractedFileContent> {
     // Files are read from the server-side buffer or from storage. Content
     // carried in the file object itself is never trusted or graded.
+    this.assertReadableStorageReference(file);
     const header = file.buffer?.subarray(0, 8) ?? Buffer.alloc(0);
     if (isCompiledArtifact(header, file.filename)) {
       if (!file.buffer && !(file.bucket && file.key)) {

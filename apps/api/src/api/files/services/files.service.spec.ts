@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ForbiddenException,
+  HttpException,
   NotFoundException,
   ServiceUnavailableException,
 } from "@nestjs/common";
@@ -418,6 +419,60 @@ describe("FilesService", () => {
     );
   });
 
+  describe("author upload folders", () => {
+    const authorUpload = (path: string) => ({
+      fileName: "notes.txt",
+      fileType: "text/plain",
+      fileSize: 10,
+      uploadType: UploadType.AUTHOR,
+      context: { path },
+    });
+
+    beforeEach(() => {
+      (mockS3Service.getBucketName as jest.Mock).mockReturnValue(
+        "author-bucket",
+      );
+    });
+
+    it.each([
+      "/authors/user-123",
+      "authors/user-123/unit-1",
+      "/authors/user-123/a/b",
+    ])("keys an author upload into their own folder %s", (path) => {
+      const result = service.resolveUploadTarget(
+        authorUpload(path),
+        "user-123",
+        UserRole.AUTHOR,
+      );
+      expect(result.key.startsWith("authors/user-123/")).toBe(true);
+    });
+
+    it.each([
+      ["another author's folder", "/authors/someone-else"],
+      ["a sibling whose name shares the prefix", "/authors/user-1234"],
+      ["the bucket root folder", "/shared"],
+      ["the authors root", "/authors"],
+      ["a learner-style key", "/42/learner@example.com/7"],
+    ])("refuses %s with a 403", (_label, path) => {
+      expect(() =>
+        service.resolveUploadTarget(
+          authorUpload(path),
+          "user-123",
+          UserRole.AUTHOR,
+        ),
+      ).toThrow(ForbiddenException);
+    });
+
+    it("lets an admin choose any author folder", () => {
+      const result = service.resolveUploadTarget(
+        authorUpload("/shared/assets"),
+        "admin@example.com",
+        UserRole.ADMIN,
+      );
+      expect(result.key.startsWith("shared/assets/")).toBe(true);
+    });
+  });
+
   describe("direct upload", () => {
     const file = {
       buffer: Buffer.from("hello"),
@@ -723,10 +778,14 @@ describe("FilesService", () => {
       ).toThrow(NotFoundException);
     });
 
-    it("keeps authors to author files and their own chat files", () => {
+    it("keeps authors to their own author files and their own chat files", () => {
       const author = { ...learner, role: UserRole.AUTHOR };
       expect(() =>
-        service.assertDeleteAllowed("author", "authors/x/a.pdf", author),
+        service.assertDeleteAllowed(
+          "author",
+          "authors/learner@example.com/a.pdf",
+          author,
+        ),
       ).not.toThrow();
       expect(() =>
         service.assertDeleteAllowed(
@@ -735,6 +794,225 @@ describe("FilesService", () => {
           author,
         ),
       ).toThrow(NotFoundException);
+    });
+
+    it.each([
+      ["another author's file", "authors/x/a.pdf"],
+      ["a file outside the authors prefix", "shared/a.pdf"],
+      [
+        "a traversal out of their prefix",
+        "authors/learner@example.com/../x/a.pdf",
+      ],
+    ])("404s an author deleting %s", (_label, key) => {
+      const author = { ...learner, role: UserRole.AUTHOR };
+      expect(() => service.assertDeleteAllowed("author", key, author)).toThrow(
+        NotFoundException,
+      );
+    });
+
+    it("404s a learner key with a traversal segment under their prefix", () => {
+      expect(() =>
+        service.assertDeleteAllowed(
+          "learner",
+          "42/learner@example.com/../other@example.com/7/a.pdf",
+          learner,
+        ),
+      ).toThrow(NotFoundException);
+    });
+  });
+
+  describe("author and admin file management", () => {
+    const author = { userId: "author@example.com", role: UserRole.AUTHOR };
+    const admin = { userId: "admin@example.com", role: UserRole.ADMIN };
+    const learner = { userId: "learner@example.com", role: UserRole.LEARNER };
+    const own = "authors/author@example.com";
+
+    beforeEach(() => {
+      (mockS3Service.getBucketName as jest.Mock).mockImplementation(
+        (uploadType: string) => `${uploadType}-bucket`,
+      );
+      (mockS3Service.listObjectsV2 as jest.Mock).mockResolvedValue({
+        Contents: [{ Key: `${own}/a.pdf`, Size: 3 }],
+      });
+      (mockS3Service.deleteObjects as jest.Mock).mockResolvedValue({
+        Deleted: [{ Key: `${own}/a.pdf` }],
+      });
+      (mockS3Service.putObject as jest.Mock).mockResolvedValue({});
+      (mockS3Service.copyObject as jest.Mock).mockResolvedValue({});
+      (mockS3Service.deleteObject as jest.Mock).mockResolvedValue({});
+    });
+
+    it("refuses learners outright", async () => {
+      await expect(service.listFiles("author", learner)).rejects.toThrow(
+        ForbiddenException,
+      );
+      await expect(
+        service.moveFile(
+          {
+            uploadType: UploadType.AUTHOR,
+            sourceKey: `${own}/a.pdf`,
+            targetPath: `/${own}/b`,
+          },
+          learner,
+        ),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it("refuses an author working in a non-author bucket", async () => {
+      await expect(service.listFiles("learner", author)).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(mockS3Service.listObjectsV2).not.toHaveBeenCalled();
+    });
+
+    it("lists only the author's own prefix", async () => {
+      await service.listFiles("author", author);
+      expect(mockS3Service.listObjectsV2).toHaveBeenCalledWith({
+        Bucket: "author-bucket",
+        Prefix: `${own}/`,
+      });
+    });
+
+    it("lists empty folders under the author's own prefix, ignoring groupId", async () => {
+      await service.listEmptyFolders("author", author, "7");
+      expect(mockS3Service.listObjectsV2).toHaveBeenCalledWith(
+        expect.objectContaining({ Prefix: `${own}/` }),
+      );
+    });
+
+    it("keeps the admin group filter", async () => {
+      await service.listEmptyFolders("author", admin, "7");
+      expect(mockS3Service.listObjectsV2).toHaveBeenCalledWith(
+        expect.objectContaining({ Prefix: "group-7/" }),
+      );
+    });
+
+    it("moves a file within the author's prefix using the derived bucket", async () => {
+      const result = await service.moveFile(
+        {
+          uploadType: UploadType.AUTHOR,
+          sourceKey: `${own}/a.pdf`,
+          targetPath: `/${own}/sub`,
+          bucket: "author-bucket",
+        },
+        author,
+      );
+      expect(result.newKey).toBe(`${own}/sub/a.pdf`);
+      expect(mockS3Service.copyObject).toHaveBeenCalledWith({
+        Bucket: "author-bucket",
+        CopySource: `author-bucket/${own}/a.pdf`,
+        Key: `${own}/sub/a.pdf`,
+      });
+    });
+
+    it.each([
+      ["a source under another author", "authors/other/a.pdf", `/${own}`],
+      ["a target under another author", `${own}/a.pdf`, "/authors/other"],
+      ["a target at the bucket root", `${own}/a.pdf`, "/"],
+      ["a traversal in the source", `${own}/../other/a.pdf`, `/${own}`],
+      ["a traversal in the target", `${own}/a.pdf`, `/${own}/../other`],
+    ])("refuses a move with %s", async (_label, sourceKey, targetPath) => {
+      await expect(
+        service.moveFile(
+          { uploadType: UploadType.AUTHOR, sourceKey, targetPath },
+          author,
+        ),
+      ).rejects.toThrow(ForbiddenException);
+      expect(mockS3Service.copyObject).not.toHaveBeenCalled();
+      expect(mockS3Service.deleteObject).not.toHaveBeenCalled();
+    });
+
+    it("refuses a body bucket that is not the derived one", async () => {
+      await expect(
+        service.moveFile(
+          {
+            uploadType: UploadType.AUTHOR,
+            sourceKey: `${own}/a.pdf`,
+            targetPath: `/${own}/sub`,
+            bucket: "learner-bucket",
+          },
+          author,
+        ),
+      ).rejects.toThrow(ForbiddenException);
+      expect(mockS3Service.copyObject).not.toHaveBeenCalled();
+    });
+
+    it("renames within the author's prefix", async () => {
+      const result = await service.renameFile(
+        {
+          uploadType: "author",
+          sourceKey: `${own}/a.pdf`,
+          newFileName: "b.pdf",
+        },
+        author,
+      );
+      expect(result.newKey).toBe(`${own}/b.pdf`);
+    });
+
+    it.each([
+      ["another author's source", "authors/other/a.pdf", "b.pdf"],
+      ["a new name with a separator", `${own}/a.pdf`, "../../other/b.pdf"],
+      ["a dot-dot new name", `${own}/a.pdf`, ".."],
+    ])("refuses a rename with %s", async (_label, sourceKey, newFileName) => {
+      await expect(
+        service.renameFile(
+          { uploadType: "author", sourceKey, newFileName },
+          author,
+        ),
+      ).rejects.toBeInstanceOf(HttpException);
+      expect(mockS3Service.copyObject).not.toHaveBeenCalled();
+    });
+
+    it("creates a folder only under the author's prefix", async () => {
+      await service.createFolder(
+        { uploadType: UploadType.AUTHOR, path: `/${own}`, name: "unit-1" },
+        author,
+      );
+      expect(mockS3Service.putObject).toHaveBeenCalledWith({
+        Bucket: "author-bucket",
+        Key: `${own}/unit-1/`,
+        Body: "",
+      });
+      await expect(
+        service.createFolder(
+          { uploadType: UploadType.AUTHOR, path: "/", name: "unit-1" },
+          author,
+        ),
+      ).rejects.toThrow(ForbiddenException);
+      await expect(
+        service.createFolder(
+          { uploadType: UploadType.AUTHOR, path: `/${own}`, name: "../x" },
+          author,
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it("deletes a folder only under the author's prefix", async () => {
+      await service.deleteFolder("author", `/${own}/unit-1`, author);
+      expect(mockS3Service.listObjectsV2).toHaveBeenCalledWith({
+        Bucket: "author-bucket",
+        Prefix: `${own}/unit-1/`,
+      });
+      await expect(
+        service.deleteFolder("author", `/${own}`, author),
+      ).rejects.toThrow(ForbiddenException);
+      await expect(
+        service.deleteFolder("author", "/authors/other", author),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it("lets an admin manage any key in the bucket named by uploadType", async () => {
+      await service.moveFile(
+        {
+          uploadType: UploadType.LEARNER,
+          sourceKey: "42/x/7/a.pdf",
+          targetPath: "/42/x/8",
+        },
+        admin,
+      );
+      expect(mockS3Service.copyObject).toHaveBeenCalledWith(
+        expect.objectContaining({ Bucket: "learner-bucket" }),
+      );
     });
   });
 });

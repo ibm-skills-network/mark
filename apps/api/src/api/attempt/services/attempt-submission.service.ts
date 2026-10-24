@@ -100,6 +100,7 @@ import {
 } from "../common/utils/grading-question-source.util";
 import {
   findLearnerFileReferenceDenial,
+  NoGradableQuestionsException,
   InvalidLearnerFileReferenceException,
   UnsupportedResponseTypeException,
 } from "../common/utils/learner-file-reference.util";
@@ -107,6 +108,16 @@ import {
   buildSubmitResult,
   closedAtTimeLimitResult,
 } from "../common/utils/submit-result.util";
+
+/** Whether an attempt still accepts a submit, read with a fresh clock. */
+export interface AttemptSubmissionStatusDto {
+  id: number;
+  submitted: boolean;
+  closedAtTimeLimit: boolean;
+  acceptingSubmissions: boolean;
+  expiresAt: string | null;
+  serverNow: string;
+}
 
 /** What a learner submit grades; see resolveSubmitPlan. */
 interface SubmitPlan {
@@ -574,7 +585,7 @@ export class AttemptSubmissionService {
     cache?: JobScopedCache,
     submissionReceivedAt?: Date,
   ): Promise<SubmitAssignmentAttemptResponseDto> {
-    const { role } = request.userSession;
+    const { role, userId } = request.userSession;
     if (role === UserRole.LEARNER) {
       return this.updateLearnerAttempt(
         attemptId,
@@ -591,6 +602,7 @@ export class AttemptSubmissionService {
       return this.updateAuthorAttempt(
         assignmentId,
         updateDto,
+        userId,
         progressCallback,
       );
     } else {
@@ -725,20 +737,19 @@ export class AttemptSubmissionService {
         servedResponseByQuestionId.set(response.questionId, response);
       }
     }
-    const servedResponses = [...servedResponseByQuestionId.values()];
-    const rawPointsEarned = servedResponses.reduce(
-      (sum, response) => sum + (response.points ?? 0),
-      0,
+    // Media questions are no longer graded, so, exactly as on submit, they
+    // count toward neither total. The pinned (cached) question decides the
+    // type; a served question missing from it is checked against its row
+    // below.
+    const mediaQuestionIds = new Set(
+      cachedQuestions
+        .filter(
+          (question) =>
+            servedQuestionIdSet.has(question.id) &&
+            isMediaResponseType(question.responseType),
+        )
+        .map((question) => question.id),
     );
-    let totalPointsEarned = 0;
-    for (const response of servedResponses) {
-      const questionMax = questionMaxById.get(response.questionId);
-      const points = response.points ?? 0;
-      totalPointsEarned +=
-        typeof questionMax === "number"
-          ? Math.min(points, questionMax)
-          : points;
-    }
     // Totals are computed server-side so the score renders even when
     // showQuestions=false leaves the questions array empty.
     //
@@ -759,7 +770,7 @@ export class AttemptSubmissionService {
       missingMaxQuestionIds.length > 0
         ? await this.prisma.question.findMany({
             where: { id: { in: missingMaxQuestionIds } },
-            select: { id: true, totalPoints: true },
+            select: { id: true, totalPoints: true, responseType: true },
           })
         : [];
     const deletedQuestionMaxById = new Map(
@@ -768,8 +779,32 @@ export class AttemptSubmissionService {
         question.totalPoints,
       ]),
     );
+    for (const question of missingMaxQuestions) {
+      if (isMediaResponseType(question.responseType)) {
+        mediaQuestionIds.add(question.id);
+      }
+    }
+    const servedResponses = [...servedResponseByQuestionId.values()].filter(
+      (response) => !mediaQuestionIds.has(response.questionId),
+    );
+    const rawPointsEarned = servedResponses.reduce(
+      (sum, response) => sum + (response.points ?? 0),
+      0,
+    );
+    let totalPointsEarned = 0;
+    for (const response of servedResponses) {
+      const questionMax = questionMaxById.get(response.questionId);
+      const points = response.points ?? 0;
+      totalPointsEarned +=
+        typeof questionMax === "number"
+          ? Math.min(points, questionMax)
+          : points;
+    }
     let totalPossiblePoints = 0;
     for (const questionId of servedQuestionIdSet) {
+      if (mediaQuestionIds.has(questionId)) {
+        continue;
+      }
       if (questionMaxById.has(questionId)) {
         // Question is in the cache: use its defined max (null totalPoints
         // stays 0, matching the historical denominator behavior).
@@ -1267,7 +1302,6 @@ export class AttemptSubmissionService {
         assignment,
         pinnedQuestions,
         responses,
-        servedQuestionIds,
         gradedQuestionIds,
         totalPossiblePoints,
       } = plan;
@@ -1318,13 +1352,8 @@ export class AttemptSubmissionService {
 
       // The denominator is the served, gradable set, whatever the payload
       // carried: leaving a question out can only cost the learner its points.
-      if (gradedQuestionIds.length === 0) {
-        this.logger.warn("submitLearnerAttempt: no gradable questions served", {
-          attempt_id: attemptId,
-          assignment_id: assignmentId,
-          served_question_count: servedQuestionIds.length,
-        });
-      } else if (totalPossiblePoints <= 0) {
+      // resolveSubmitPlan has already refused a submit with nothing gradable.
+      if (totalPossiblePoints <= 0) {
         this.logger.error("submitLearnerAttempt: invalid totalPossiblePoints", {
           attemptId,
           assignmentId,
@@ -1425,6 +1454,7 @@ export class AttemptSubmissionService {
             assignment.currentVersion?.correctAnswerVisibility,
         },
         responses: successfulQuestionResponses,
+        language: updateDto.language,
       });
     } catch (error) {
       if (progressCallback) {
@@ -1457,6 +1487,55 @@ export class AttemptSubmissionService {
       );
     }
     await this.resolveSubmitPlan(attempt, assignmentId, userId, updateDto);
+  }
+
+  /**
+   * What the learner UI needs to decide whether an attempt is still editable,
+   * with a server clock reading taken now, not one replayed from a cached
+   * attempt payload. Scoped to the route assignment and the learner's own
+   * attempts; anything else is the same 404.
+   */
+  async getAttemptSubmissionStatus(
+    attemptId: number,
+    assignmentId: number,
+    userId: string,
+  ): Promise<AttemptSubmissionStatusDto> {
+    const attempt = userId
+      ? await this.prisma.assignmentAttempt.findFirst({
+          where: { id: attemptId, assignmentId, userId },
+          select: {
+            id: true,
+            submitted: true,
+            comments: true,
+            expiresAt: true,
+          },
+        })
+      : null;
+
+    if (!attempt) {
+      this.logger.warn(
+        `getAttemptSubmissionStatus: refused attempt_id=${attemptId} assignment_id=${assignmentId} user_id=${userId} denial_reason=not_found_or_unowned`,
+      );
+      throw new NotFoundException("Attempt not found or not owned by the user");
+    }
+
+    const serverNow = readServerClock();
+    const pastDeadline = this.validationService.isAttemptExpired(
+      attempt.expiresAt,
+      new Date(serverNow),
+    );
+
+    return {
+      id: attempt.id,
+      submitted: attempt.submitted,
+      closedAtTimeLimit:
+        attempt.submitted && wasClosedAtTimeLimit(attempt.comments),
+      acceptingSubmissions: !attempt.submitted && !pastDeadline,
+      expiresAt: attempt.expiresAt
+        ? new Date(attempt.expiresAt).toISOString()
+        : null,
+      serverNow,
+    };
   }
 
   /**
@@ -1670,6 +1749,13 @@ export class AttemptSubmissionService {
     const gradedQuestionIds = servedQuestionIds.filter(
       (questionId) => !mediaQuestionIds.has(questionId),
     );
+    if (gradedQuestionIds.length === 0) {
+      refuse("no_gradable_questions", {
+        served_question_count: servedQuestionIds.length,
+        media_question_count: mediaQuestionIds.size,
+      });
+      throw new NoGradableQuestionsException();
+    }
 
     if (assignment.requireAllQuestions) {
       const optionalQuestionIdsValue: unknown = assignment.optionalQuestionIds;
@@ -1733,6 +1819,7 @@ export class AttemptSubmissionService {
   private async updateAuthorAttempt(
     assignmentId: number,
     updateDto: LearnerUpdateAssignmentAttemptRequestDto,
+    authorUserId: string,
     progressCallback?: (
       progress: string,
       percentage?: number,
@@ -1773,6 +1860,8 @@ export class AttemptSubmissionService {
           updateDto.language,
           updateDto.authorQuestions,
           updateDto.authorAssignmentDetails,
+          undefined,
+          authorUserId,
         );
 
       if (progressCallback) {
@@ -1851,6 +1940,7 @@ export class AttemptSubmissionService {
             assignment.currentVersion?.correctAnswerVisibility,
         },
         responses: successfulQuestionResponses,
+        language: updateDto.language,
       });
     } catch (error) {
       if (progressCallback) {

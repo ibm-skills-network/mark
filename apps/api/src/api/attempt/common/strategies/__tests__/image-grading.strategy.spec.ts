@@ -149,7 +149,7 @@ describe("ImageGradingStrategy - Type Safety Tests", () => {
           },
         ],
         language: "en",
-      } as any as CreateQuestionResponseAttemptRequestDto;
+      } as unknown as CreateQuestionResponseAttemptRequestDto;
 
       await expect(
         strategy.validateResponse(mockQuestion, requestDto),

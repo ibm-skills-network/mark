@@ -10,6 +10,7 @@ import { PrismaService } from "../../../database/prisma.service";
 import { CreateQuestionResponseAttemptResponseDto } from "../../assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
 import {
   InvalidLearnerFileReferenceException,
+  NoGradableQuestionsException,
   UnsupportedResponseTypeException,
 } from "../common/utils/learner-file-reference.util";
 import { AttemptAccessCacheService } from "./attempt-access-cache.service";
@@ -399,6 +400,65 @@ describe("AttemptSubmissionService learner submit", () => {
       ).not.toHaveBeenCalled();
     });
 
+    it("refuses an attempt whose served questions are all media before anything is graded, written or sent", async () => {
+      givenAttempt({ questionOrder: [303, 404] });
+      givenAssignment({
+        questionOrder: [303, 404],
+        questions: [
+          liveQuestion(303, 25, ResponseType.PRESENTATION),
+          liveQuestion(404, 5, ResponseType.VIDEO),
+        ],
+      });
+      const warn = jest
+        .spyOn(
+          (service as unknown as { logger: { warn: () => void } }).logger,
+          "warn",
+        )
+        .mockImplementation(() => undefined);
+
+      const error: unknown = await submit([blank(303), blank(404)]).catch(
+        (caught: unknown) => caught,
+      );
+
+      expect(error).toBeInstanceOf(NoGradableQuestionsException);
+      expect((error as UnprocessableEntityException).getResponse()).toEqual({
+        statusCode: 422,
+        code: "NO_GRADABLE_QUESTIONS",
+        message: "This assignment has no questions that can be graded.",
+        error: "Unprocessable Entity",
+      });
+      expect(warn).toHaveBeenCalledWith(
+        "submit.rejected",
+        expect.objectContaining({ denial_reason: "no_gradable_questions" }),
+      );
+      expect(
+        mockQuestionResponseService.gradeQuestionsForLearner,
+      ).not.toHaveBeenCalled();
+      expect(
+        mockQuestionResponseService.commitAttemptWithResponses,
+      ).not.toHaveBeenCalled();
+    });
+
+    it("gives the queued-submit pre-check the same 422", async () => {
+      givenAttempt({ questionOrder: [303] });
+      givenAssignment({
+        questionOrder: [303],
+        questions: [liveQuestion(303, 25, ResponseType.AUDIO)],
+      });
+
+      await expect(
+        service.assertSubmitPayloadAcceptable(
+          ATTEMPT_ID,
+          ASSIGNMENT_ID,
+          LEARNER,
+          {
+            submitted: true,
+            responsesForQuestions: [],
+          },
+        ),
+      ).rejects.toBeInstanceOf(NoGradableQuestionsException);
+    });
+
     it("judges the response type by the pinned version", async () => {
       givenAttempt({ questionOrder: [101, 303], assignmentVersionId: 9 });
       // Live row was switched to a text question after publishing; the
@@ -542,6 +602,125 @@ describe("AttemptSubmissionService learner submit", () => {
       expect(result.feedbacksForQuestions).toEqual([
         { id: 1010, questionId: 101, totalPoints: null, feedback: null },
         { id: 2020, questionId: 202, totalPoints: null, feedback: null },
+      ]);
+    });
+  });
+
+  describe("submit result with questions hidden", () => {
+    it("sends no per-question entries", async () => {
+      givenAssignment({ showQuestions: false });
+
+      const result = await submit([blank(101), blank(202)]);
+
+      expect(result.showQuestions).toBe(false);
+      expect(result.feedbacksForQuestions).toEqual([]);
+    });
+  });
+
+  describe("multiple-correct feedback", () => {
+    const multipleCorrect = (perfectScore: boolean) => ({
+      questionId: 101,
+      learnerResponse: "",
+      responseDto: {
+        id: 1010,
+        questionId: 101,
+        question: "Pick all primes",
+        totalPoints: perfectScore ? 10 : 0,
+        feedback: [
+          { choice: "4", feedback: "**Incorrect selection:** 4 (-0 points)." },
+        ],
+        metadata: { perfectScore, correctChoices: ["2", "3"] },
+        points: perfectScore ? 10 : 0,
+      } as CreateQuestionResponseAttemptResponseDto,
+    });
+
+    beforeEach(() => {
+      mockQuestionResponseService.gradeQuestionsForLearner.mockResolvedValue([
+        multipleCorrect(false),
+        graded(202, 10),
+      ]);
+    });
+
+    const feedbackText = (result: Record<string, unknown>): string =>
+      JSON.stringify(
+        (result.feedbacksForQuestions as Array<{ feedback: unknown }>)[0]
+          .feedback,
+      );
+
+    it("names the correct options when the answer key is revealed", async () => {
+      givenAssignment({
+        currentVersion: { correctAnswerVisibility: "ALWAYS" },
+      });
+
+      const result = await submit([blank(101), blank(202)]);
+
+      expect(feedbackText(result)).toContain(
+        "The correct option(s) were: **2, 3**.",
+      );
+    });
+
+    it("keeps them out while the answer key is hidden", async () => {
+      givenAssignment({ currentVersion: { correctAnswerVisibility: "NEVER" } });
+
+      const result = await submit([blank(101), blank(202)]);
+
+      expect(feedbackText(result)).not.toContain("correct option");
+      expect(feedbackText(result)).not.toContain("2, 3");
+    });
+
+    it("follows ON_PASS from the submit's own grade", async () => {
+      // 10 of 20 points against a 60% pass mark: not passed, key hidden.
+      givenAssignment({ passingGrade: 60 });
+
+      const result = await submit([blank(101), blank(202)]);
+
+      expect(feedbackText(result)).not.toContain("2, 3");
+    });
+  });
+
+  describe("true/false feedback", () => {
+    beforeEach(() => {
+      mockQuestionResponseService.gradeQuestionsForLearner.mockResolvedValue([
+        {
+          questionId: 101,
+          learnerResponse: false,
+          responseDto: {
+            id: 1010,
+            questionId: 101,
+            question: "The sky is blue",
+            totalPoints: 0,
+            feedback: [{ choice: false, feedback: "Incorrect." }],
+            metadata: { isCorrect: false, correctAnswer: true },
+            points: 0,
+          } as CreateQuestionResponseAttemptResponseDto,
+        },
+        graded(202, 10),
+      ]);
+    });
+
+    const firstFeedback = (result: Record<string, unknown>) =>
+      (result.feedbacksForQuestions as Array<{ feedback: unknown }>)[0]
+        .feedback;
+
+    it("names the correct answer when the key is revealed", async () => {
+      givenAssignment({
+        currentVersion: { correctAnswerVisibility: "ALWAYS" },
+      });
+
+      const result = await submit([blank(101), blank(202)]);
+
+      expect(firstFeedback(result)).toEqual([
+        { choice: false, feedback: "Incorrect. The correct answer is True." },
+      ]);
+    });
+
+    it("keeps it out while the key is hidden", async () => {
+      givenAssignment({ currentVersion: { correctAnswerVisibility: "NEVER" } });
+
+      const result = await submit([blank(101), blank(202)]);
+
+      expect(firstFeedback(result)).toEqual([
+        { choice: false, feedback: "Incorrect." },
       ]);
     });
   });

@@ -1,5 +1,9 @@
 /* eslint-disable unicorn/no-null */
-import { Injectable, InternalServerErrorException } from "@nestjs/common";
+import {
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+} from "@nestjs/common";
 import {
   AssignmentAttempt,
   QuestionVariant,
@@ -18,7 +22,10 @@ import {
   findQuestionTranslation,
 } from "../../common/utils/translation-language.util";
 import { TranslatedContent } from "../../common/utils/attempt-questions-mapper.util";
-import { applyVariantToQuestion } from "../../common/utils/grading-question-source.util";
+import {
+  applyVariantToQuestion,
+  isVersionOnlyQuestion,
+} from "../../common/utils/grading-question-source.util";
 import {
   buildTranslationCacheKey,
   type JobScopedCache,
@@ -42,6 +49,8 @@ function toLanguageFamily(language?: string): string {
 }
 @Injectable()
 export class TranslationService {
+  private readonly logger = new Logger(TranslationService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly questionService: QuestionService,
@@ -227,6 +236,14 @@ export class TranslationService {
     cache?: JobScopedCache,
   ): Promise<QuestionDto> {
     if (!language || language === "en") {
+      return question;
+    }
+    if (isVersionOnlyQuestion(question)) {
+      // Its id is a version row's, not a question's: a translation looked up
+      // by it could belong to an unrelated question.
+      this.logger.warn(
+        `translation.skipped_version_only_question question_id=${question.id} language=${language}`,
+      );
       return question;
     }
 

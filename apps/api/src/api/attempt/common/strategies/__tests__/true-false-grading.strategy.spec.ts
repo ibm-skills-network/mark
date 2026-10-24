@@ -32,6 +32,7 @@ describe("TrueFalseGradingStrategy - Type Safety Tests", () => {
               (key: string, _language?: string, parameters?: any) => {
                 const messages: Record<string, string> = {
                   correctTF: "Correct!",
+                  incorrectTFNoAnswer: "Incorrect.",
                   incorrectTF: `Incorrect. The correct answer is ${String(
                     parameters?.correctAnswer || "true",
                   )}.`,
@@ -347,7 +348,10 @@ describe("TrueFalseGradingStrategy - Type Safety Tests", () => {
       );
 
       expect(result.totalPoints).toBe(0);
-      expect((result.feedback as any)[0].feedback).toContain("False");
+      // The answer stays out of stored feedback; only metadata keeps it.
+      expect((result.feedback as any)[0].feedback).toBe("Incorrect.");
+      expect((result.metadata as any).correctAnswer).toBe(false);
+      expect((result.metadata as any).isCorrect).toBe(false);
     });
 
     it("accepts True on a True-answer question", async () => {
@@ -368,7 +372,8 @@ describe("TrueFalseGradingStrategy - Type Safety Tests", () => {
       );
 
       expect(result.totalPoints).toBe(0);
-      expect((result.feedback as any)[0].feedback).toContain("True");
+      expect(JSON.stringify(result.feedback)).not.toContain("True");
+      expect((result.metadata as any).correctAnswer).toBe(true);
     });
 
     it("awards the correct choice's points when the question has no totalPoints", async () => {

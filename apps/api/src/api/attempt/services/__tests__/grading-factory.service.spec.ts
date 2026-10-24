@@ -1,4 +1,6 @@
+import { BadRequestException, Logger } from "@nestjs/common";
 import { QuestionType } from "@prisma/client";
+import { UnsupportedResponseTypeException } from "../../common/utils/learner-file-reference.util";
 import { GradingFactoryService } from "../grading-factory.service";
 
 describe("GradingFactoryService", () => {
@@ -17,6 +19,12 @@ describe("GradingFactoryService", () => {
     trueFalseStrategy as never,
     imageStrategy as never,
   );
+
+  beforeAll(() => {
+    jest.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined);
+  });
+
+  afterAll(() => jest.restoreAllMocks());
 
   const files = (...filenames: string[]) =>
     filenames.map((filename) => ({ filename }));
@@ -77,20 +85,17 @@ describe("GradingFactoryService", () => {
     ).toBe(fileStrategy);
   });
 
-  it("has no strategy of its own for media response types", () => {
-    // Media questions are refused before grading; nothing routes them to a
-    // dedicated grader any more.
-    expect(
-      factory.getStrategy(
-        QuestionType.UPLOAD,
-        "LIVE_RECORDING",
-        files("frame.png"),
-      ),
-    ).toBe(imageStrategy);
-    expect(
-      factory.getStrategy(QuestionType.UPLOAD, "PRESENTATION", files("a.pdf")),
-    ).toBe(fileStrategy);
-  });
+  it.each(["PRESENTATION", "VIDEO", "AUDIO", "LIVE_RECORDING"])(
+    "refuses a %s response type with a 400",
+    (responseType) => {
+      expect(() =>
+        factory.getStrategy(QuestionType.UPLOAD, responseType, files("a.png")),
+      ).toThrow(UnsupportedResponseTypeException);
+      expect(() =>
+        factory.getStrategy(QuestionType.TEXT, responseType),
+      ).toThrow(BadRequestException);
+    },
+  );
 
   it("ignores files for non-upload question types", () => {
     expect(

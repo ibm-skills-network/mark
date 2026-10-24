@@ -288,6 +288,12 @@ export class S3Service {
     return buckets;
   }
 
+  /** The bucket author uploads are written to, when configured. */
+  static authorUploadBuckets(): Set<string> {
+    const bucket = process.env[S3Service.BUCKET_ENV_VAR_BY_TYPE.author];
+    return new Set(bucket ? [bucket] : []);
+  }
+
   /**
    * Check whether the supplied bucket name matches one of the configured
    * upload buckets. Used to reject arbitrary bucket names from query params

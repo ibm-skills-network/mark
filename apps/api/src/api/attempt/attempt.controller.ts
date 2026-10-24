@@ -60,6 +60,7 @@ import {
   AttemptSummaryResponseDto,
   LearnerAttemptResponseDto,
 } from "./dto/learner-attempt.response.dto";
+import type { AttemptSubmissionStatusDto } from "./services/attempt-submission.service";
 import { AttemptServiceV2 } from "./services/attempt.service";
 import { GradingProgressService } from "./services/grading-progress.service";
 import { GradingAuditService } from "./services/question-response/grading-audit.service";
@@ -434,6 +435,47 @@ export class AttemptControllerV2 {
       );
       return result;
     }
+  }
+
+  @Get(":attemptId/submission-status")
+  @Roles(UserRole.LEARNER)
+  @UseGuards(AssignmentAttemptAccessControlGuard)
+  // Plain JSON out; requests are decoded the same way the submit PATCH does.
+  @DataTransform({
+    encodeResponse: false,
+    decodeRequest: true,
+    fields: [...TRANSFORM_FIELDS],
+    deep: true,
+  })
+  @ApiOperation({
+    summary:
+      "Whether an attempt still accepts a submit, with a fresh server clock reading.",
+  })
+  @ApiResponse({ status: 200 })
+  @ApiResponse({ status: 403 })
+  @ApiResponse({ status: 404, description: "Missing or not owned." })
+  async getAttemptSubmissionStatus(
+    @Param("assignmentId") assignmentId: string,
+    @Param("attemptId") attemptId: string,
+    @Req() request: UserSessionRequest,
+  ): Promise<AttemptSubmissionStatusDto> {
+    // The guard has already parsed both ids strictly.
+    const parsedAttemptId = Number(attemptId);
+    const parsedAssignmentId = Number(assignmentId);
+    const userId = request.userSession.userId;
+    const status = await this.attemptService.getAttemptSubmissionStatus(
+      parsedAttemptId,
+      parsedAssignmentId,
+      userId,
+    );
+    this.logger.debug("Attempt submission status read", {
+      attemptId: parsedAttemptId,
+      assignmentId: parsedAssignmentId,
+      userId,
+      submitted: status.submitted,
+      acceptingSubmissions: status.acceptingSubmissions,
+    });
+    return status;
   }
 
   @Get(":attemptId/grading/:gradingJobId/status-stream")
