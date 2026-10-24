@@ -14,7 +14,7 @@ pub mod http;
 pub mod shutdown;
 pub mod telemetry;
 
-pub use config::{Config, ConfigError, ExecutionControls, LogFormat, Role};
+pub use config::{Config, ConfigError, ExecutionControls, GradingHandOff, LogFormat, Role};
 
 /// Milliseconds as a `u64` so tracing records a number, not a string.
 /// Saturates on absurd values rather than panicking in a log call.
