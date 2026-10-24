@@ -1,0 +1,767 @@
+openapi: 3.1.0
+info:
+  title: Mark learner load routes
+  version: 2.1.0
+  description: |
+    Authoritative contract for the six routes a learner uses between opening
+    `/learner/:assignmentId` and seeing the first question. Both backends
+    (`apps/api` NestJS and `rust/crates/api`) implement this shape byte for
+    byte so the gateway can route either way.
+
+    Differences from the legacy wire format, applied in both backends in the
+    same release:
+    - No base64 response encoding. Text fields are plain JSON strings or null.
+    - No answer key. Learner responses never carry `currentVersion`, `versions`,
+      `questionVariants`, `assignmentVersion.questionVersions`, `answer`,
+      choice `points`, or `authorComment` text.
+    - Correct-answer visibility is only consulted once an attempt is submitted.
+    - `randomizedChoices` is a JSON array, never a JSON string.
+    - Attempt and time limits come from the base `Assignment` row, not the
+      published version. Everything else merges version -> base -> defaults.
+    - `GET .../languages` requires assignment access like every other route.
+    - `POST .../attempts` refuses unpublished assignments.
+    - A repeated `lang` query parameter uses its first value.
+    - `grade` is null whenever `showAssignmentScore` is false, on every route.
+
+    Authentication: the api-gateway verifies the session cookie and forwards
+    a `user-session` header (ASCII-escaped JSON `UserSession`). Backends trust
+    that header and must only be reachable from the gateway. Missing header
+    -> 401, unparsable -> 400.
+
+    Timestamps are ISO-8601 UTC with milliseconds (`2026-10-23T22:55:02.591Z`).
+    Identifiers are JSON integers.
+
+servers:
+  - url: /api/v2
+
+components:
+  parameters:
+    assignmentId:
+      name: assignmentId
+      in: path
+      required: true
+      description: |
+        `/assignments/{id}` and `/languages` parse with ParseIntPipe semantics
+        (non-integer -> 400). Attempt routes parse strictly
+        (`String(Number(x)) === x`, positive) and answer 403 on failure.
+      schema: { type: integer, minimum: 1 }
+    attemptId:
+      name: attemptId
+      in: path
+      required: true
+      schema: { type: integer, minimum: 1 }
+    lang:
+      name: lang
+      in: query
+      required: false
+      description: |
+        BCP-47 code, case-insensitive, region kept (`zh-cn`). Default `en`.
+        `en*` always serves authored content. Assignment-level translation
+        matches by family with exact -> base -> sibling precedence, same as
+        question translations.
+      schema: { type: string, maxLength: 16 }
+
+  headers:
+    RetryAfter:
+      schema: { type: string, enum: ["1"] }
+
+  schemas:
+    Error:
+      type: object
+      required: [statusCode, message]
+      properties:
+        statusCode: { type: integer }
+        message: { type: string }
+        error:
+          { type: string, description: Nest-style reason phrase, optional. }
+        code:
+          type: string
+          description: Machine-readable code where the client branches on it.
+          enum:
+            - AI_TEMPORARILY_DISABLED
+            - ATTEMPT_IN_PROGRESS
+            - ATTEMPT_TIME_RANGE_EXCEEDED
+            - ATTEMPT_MAX_REACHED
+            - ASSIGNMENT_NOT_PUBLISHED
+      additionalProperties: false
+
+    Role:
+      type: string
+      enum: [learner, author, admin]
+
+    UserSession:
+      description: Forwarded by the gateway in the `user-session` header.
+      type: object
+      required: [userId, role]
+      properties:
+        userId: { type: string, format: email }
+        role: { $ref: "#/components/schemas/Role" }
+        groupId: { type: string }
+        assignmentId: { type: integer }
+        gradingCallbackRequired: { type: boolean }
+        returnUrl: { type: string }
+        launch_presentation_locale: { type: string }
+        lisOutcomeServiceUrl: { type: string }
+        toolConsumerInstanceGuid: { type: string }
+        courseTitle: { type: string }
+        courseId: { type: string }
+        activityTitle: { type: string }
+        toolConsumerProductFamilyCode: { type: string }
+
+    CorrectAnswerVisibility:
+      type: string
+      enum: [NEVER, ALWAYS, ON_PASS]
+    QuestionType:
+      type: string
+      enum:
+        [
+          TEXT,
+          SINGLE_CORRECT,
+          MULTIPLE_CORRECT,
+          TRUE_FALSE,
+          URL,
+          UPLOAD,
+          LINK_FILE,
+        ]
+    ResponseType:
+      type: string
+      enum:
+        [
+          REPO,
+          CODE,
+          ESSAY,
+          REPORT,
+          PRESENTATION,
+          VIDEO,
+          AUDIO,
+          IMAGES,
+          SPREADSHEET,
+          LIVE_RECORDING,
+          OTHER,
+        ]
+    AssignmentType:
+      type: string
+      enum: [AI_GRADED, MANUAL]
+    DisplayOrder:
+      type: string
+      enum: [DEFINED, RANDOM]
+    QuestionDisplay:
+      type: string
+      enum: [ONE_PER_PAGE, ALL_PER_PAGE]
+
+    QuestionControls:
+      type: object
+      nullable: true
+      properties:
+        disableCopy: { type: boolean }
+        disablePaste: { type: boolean }
+        disableRightClick: { type: boolean }
+        disablePrint: { type: boolean }
+      additionalProperties: true
+
+    LearnerAssignment:
+      description: |
+        Learner view of an assignment. Version-merged (version -> base ->
+        defaults) except the limit fields, which always come from the base row:
+        `numAttempts`, `attemptsBeforeCoolDown`, `retakeAttemptCoolDownMinutes`,
+        `allotedTimeMinutes`, `attemptsPerTimeRange`, `attemptsTimeRangeHours`,
+        `numberOfQuestionsPerAttempt`. Text fields are translated when `lang`
+        has a stored translation; otherwise authored text.
+      type: object
+      required:
+        - id
+        - name
+        - introduction
+        - instructions
+        - gradingCriteriaOverview
+        - timeEstimateMinutes
+        - attemptsBeforeCoolDown
+        - retakeAttemptCoolDownMinutes
+        - type
+        - graded
+        - numAttempts
+        - allotedTimeMinutes
+        - requireAllQuestions
+        - optionalQuestionIds
+        - attemptsPerTimeRange
+        - attemptsTimeRangeHours
+        - passingGrade
+        - displayOrder
+        - questionDisplay
+        - numberOfQuestionsPerAttempt
+        - questionOrder
+        - published
+        - showAssignmentScore
+        - showQuestionScore
+        - showSubmissionFeedback
+        - showQuestions
+        - showPassFailIndicator
+        - correctAnswerVisibility
+        - questionControls
+        - updatedAt
+        - languageCode
+        - currentVersionId
+        - success
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        introduction: { type: [string, "null"] }
+        instructions: { type: [string, "null"] }
+        gradingCriteriaOverview: { type: [string, "null"] }
+        timeEstimateMinutes: { type: [integer, "null"] }
+        attemptsBeforeCoolDown: { type: integer }
+        retakeAttemptCoolDownMinutes: { type: integer }
+        type: { $ref: "#/components/schemas/AssignmentType" }
+        graded: { type: boolean }
+        numAttempts: { type: integer, description: -1 means unlimited. }
+        allotedTimeMinutes: { type: [integer, "null"] }
+        requireAllQuestions: { type: boolean }
+        optionalQuestionIds: { type: array, items: { type: integer } }
+        attemptsPerTimeRange: { type: [integer, "null"] }
+        attemptsTimeRangeHours: { type: [integer, "null"] }
+        passingGrade: { type: integer, description: Percent, 0-100. }
+        displayOrder:
+          {
+            oneOf:
+              [{ $ref: "#/components/schemas/DisplayOrder" }, { type: "null" }],
+          }
+        questionDisplay: { $ref: "#/components/schemas/QuestionDisplay" }
+        numberOfQuestionsPerAttempt: { type: [integer, "null"] }
+        questionOrder: { type: array, items: { type: integer } }
+        published: { type: boolean }
+        showAssignmentScore: { type: boolean }
+        showQuestionScore: { type: boolean }
+        showSubmissionFeedback: { type: boolean }
+        showQuestions: { type: boolean }
+        showPassFailIndicator: { type: boolean }
+        correctAnswerVisibility:
+          { $ref: "#/components/schemas/CorrectAnswerVisibility" }
+        questionControls: { $ref: "#/components/schemas/QuestionControls" }
+        updatedAt: { type: string, format: date-time }
+        languageCode: { type: [string, "null"] }
+        currentVersionId: { type: [integer, "null"] }
+        success: { type: boolean, const: true }
+      additionalProperties: false
+
+    Languages:
+      type: object
+      required: [languages]
+      properties:
+        languages:
+          type: array
+          description: Stored translation codes in database order, then `en` if absent.
+          items: { type: string }
+      additionalProperties: false
+
+    AttemptSummary:
+      description: One row of the learner's own attempts. Authors see every learner's rows.
+      type: object
+      required:
+        - id
+        - assignmentId
+        - assignmentVersionId
+        - userId
+        - submitted
+        - grade
+        - expiresAt
+        - createdAt
+        - questionOrder
+        - comments
+        - preferredLanguage
+      properties:
+        id: { type: integer }
+        assignmentId: { type: integer }
+        assignmentVersionId: { type: [integer, "null"] }
+        userId: { type: string }
+        submitted: { type: boolean }
+        grade:
+          type: [number, "null"]
+          description: 0-1 fraction. Null when unsubmitted or `showAssignmentScore` is false.
+        expiresAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        questionOrder: { type: array, items: { type: integer } }
+        comments: { type: [string, "null"] }
+        preferredLanguage: { type: [string, "null"] }
+      additionalProperties: false
+
+    AttemptCreated:
+      type: object
+      required: [id, success, serverNow]
+      properties:
+        id: { type: integer }
+        success: { type: boolean, const: true }
+        serverNow: { type: string, format: date-time }
+      additionalProperties: false
+
+    AttemptAbandoned:
+      type: object
+      required: [id, success]
+      properties:
+        id: { type: integer }
+        success: { type: boolean, const: true }
+      additionalProperties: false
+
+    Choice:
+      type: object
+      required: [id, choice]
+      properties:
+        id: { type: [integer, "null"] }
+        choice: { type: string }
+        isCorrect:
+          type: boolean
+          description: Present only when the attempt is submitted and visibility allows.
+        feedback:
+          type: [string, "null"]
+          description: Present only when the attempt is submitted and visibility allows.
+      additionalProperties: false
+
+    QuestionTranslation:
+      type: object
+      required: [translatedText, translatedChoices]
+      properties:
+        translatedText: { type: string }
+        translatedChoices:
+          type: [array, "null"]
+          items: { $ref: "#/components/schemas/Choice" }
+      additionalProperties: false
+
+    RubricCriterion:
+      type: object
+      required: [description, points]
+      properties:
+        id: { type: integer }
+        description: { type: string }
+        points: { type: number }
+      additionalProperties: true
+
+    Rubric:
+      type: object
+      required: [rubricQuestion, criteria]
+      properties:
+        rubricQuestion: { type: string }
+        criteria:
+          {
+            type: array,
+            items: { $ref: "#/components/schemas/RubricCriterion" },
+          }
+      additionalProperties: true
+
+    Scoring:
+      type: object
+      required: [type]
+      properties:
+        type: { type: string }
+        showRubricsToLearner: { type: boolean }
+        showPoints: { type: boolean }
+        showSubQuestionsToLearner: { type: boolean }
+        rubrics:
+          type: array
+          description: Present only when `showRubricsToLearner` is true.
+          items: { $ref: "#/components/schemas/Rubric" }
+      additionalProperties: true
+
+    AttemptQuestion:
+      description: |
+        A question as served to a learner, in the order frozen on the attempt.
+        Text and choices are the chosen variant's when one was selected at
+        creation, translated to `lang` when a translation exists. Choice order
+        follows the frozen `randomizedChoices` when present.
+      type: object
+      required:
+        - id
+        - question
+        - type
+        - choices
+        - translations
+        - authorComment
+        - totalPoints
+        - assignmentId
+        - gradingContextQuestionIds
+        - isDeleted
+        - randomizedChoices
+      properties:
+        id: { type: integer }
+        question: { type: string }
+        type: { $ref: "#/components/schemas/QuestionType" }
+        responseType:
+          {
+            oneOf:
+              [{ $ref: "#/components/schemas/ResponseType" }, { type: "null" }],
+          }
+        choices: { type: array, items: { $ref: "#/components/schemas/Choice" } }
+        translations:
+          type: object
+          description: Keyed by stored non-English code in the requested family. Empty object when none.
+          additionalProperties:
+            { $ref: "#/components/schemas/QuestionTranslation" }
+        authorComment: { type: "null" }
+        maxWords: { type: integer }
+        maxCharacters: { type: integer }
+        scoring: { $ref: "#/components/schemas/Scoring" }
+        totalPoints: { type: number }
+        assignmentId: { type: integer }
+        gradingContextQuestionIds: { type: array, items: { type: integer } }
+        isDeleted: { type: boolean }
+        randomizedChoices:
+          type: [array, "null"]
+          description: Frozen display order for this attempt, same sanitisation as `choices`. Null when choices were not randomized.
+          items: { $ref: "#/components/schemas/Choice" }
+        videoPresentationConfig:
+          { type: [object, "null"], additionalProperties: true }
+        liveRecordingConfig:
+          { type: [object, "null"], additionalProperties: true }
+      additionalProperties: false
+
+    QuestionResponse:
+      type: object
+      required:
+        [
+          id,
+          assignmentAttemptId,
+          questionId,
+          learnerResponse,
+          points,
+          feedback,
+          metadata,
+          gradedAt,
+        ]
+      properties:
+        id: { type: integer }
+        assignmentAttemptId: { type: integer }
+        questionId: { type: integer }
+        learnerResponse: { description: Stored JSON value as persisted. }
+        points: { type: [number, "null"] }
+        feedback: { description: Stored JSON value as persisted. }
+        metadata: { description: Stored JSON value as persisted. }
+        gradedAt: { type: [string, "null"], format: date-time }
+      additionalProperties: false
+
+    Attempt:
+      description: An in-progress or submitted attempt with its questions.
+      type: object
+      required:
+        - id
+        - assignmentId
+        - assignmentVersionId
+        - userId
+        - submitted
+        - grade
+        - expiresAt
+        - createdAt
+        - questionOrder
+        - comments
+        - preferredLanguage
+        - serverNow
+        - questions
+        - questionResponses
+        - passingGrade
+        - showAssignmentScore
+        - showSubmissionFeedback
+        - showQuestionScore
+        - showQuestions
+        - correctAnswerVisibility
+        - currentVersionId
+        - versionMismatch
+        - assignmentVersion
+      properties:
+        id: { type: integer }
+        assignmentId: { type: integer }
+        assignmentVersionId: { type: [integer, "null"] }
+        userId: { type: string }
+        submitted: { type: boolean }
+        grade:
+          {
+            type: [number, "null"],
+            description: Null while unsubmitted or when `showAssignmentScore` is false.,
+          }
+        expiresAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        questionOrder: { type: array, items: { type: integer } }
+        comments: { type: [string, "null"] }
+        preferredLanguage: { type: [string, "null"] }
+        serverNow: { type: string, format: date-time }
+        questions:
+          {
+            type: array,
+            items: { $ref: "#/components/schemas/AttemptQuestion" },
+          }
+        questionResponses:
+          {
+            type: array,
+            items: { $ref: "#/components/schemas/QuestionResponse" },
+          }
+        passingGrade: { type: integer }
+        showAssignmentScore: { type: boolean }
+        showSubmissionFeedback: { type: boolean }
+        showQuestionScore: { type: boolean }
+        showQuestions: { type: boolean }
+        correctAnswerVisibility:
+          { $ref: "#/components/schemas/CorrectAnswerVisibility" }
+        currentVersionId: { type: [integer, "null"] }
+        versionMismatch:
+          type: boolean
+          description: True when the attempt is pinned to a version that is no longer current.
+        assignmentVersion:
+          type: [object, "null"]
+          required: [id, allotedTimeMinutes]
+          properties:
+            id: { type: integer }
+            allotedTimeMinutes: { type: [integer, "null"] }
+          additionalProperties: false
+      additionalProperties: false
+
+  responses:
+    Unauthorized:
+      description: No usable `user-session` header.
+      content:
+        { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Forbidden:
+      description: Role not allowed, no AssignmentGroup link, author on another assignment, or malformed attempt-route id.
+      content:
+        { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    NotFound:
+      description: Assignment missing, or attempt missing / not owned by the learner.
+      content:
+        { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Unavailable:
+      description: Database unreachable or pool exhausted. The web client retries this; it never retries 500.
+      headers: { Retry-After: { $ref: "#/components/headers/RetryAfter" } }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { statusCode: 503, message: Service temporarily unavailable }
+
+paths:
+  /assignments/{assignmentId}:
+    get:
+      operationId: getLearnerAssignment
+      summary: Assignment metadata for the About and Questions pages
+      description: |
+        Roles: learner, author. Access: `AssignmentGroup(assignmentId, session.groupId)`
+        must exist. When it does not but `session.assignmentId` equals the route id
+        and `groupId` is non-empty, the link is created and access granted
+        (legacy self-heal; the only write on a GET in this contract). Authors
+        must have `session.assignmentId` equal to the route id. Authors receive
+        the legacy author shape, which this contract does not cover.
+      parameters:
+        - $ref: "#/components/parameters/assignmentId"
+        - $ref: "#/components/parameters/lang"
+      responses:
+        "200":
+          content:
+            {
+              application/json:
+                { schema: { $ref: "#/components/schemas/LearnerAssignment" } },
+            }
+        "400": { description: Non-integer id. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+
+  /assignments/{assignmentId}/languages:
+    get:
+      operationId: getAssignmentLanguages
+      summary: Languages with a stored assignment translation
+      description: Roles learner, author. Same access check as the assignment read, without self-heal.
+      parameters:
+        - $ref: "#/components/parameters/assignmentId"
+      responses:
+        "200":
+          content:
+            {
+              application/json:
+                { schema: { $ref: "#/components/schemas/Languages" } },
+            }
+        "400": { description: Non-integer id. }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+
+  /assignments/{assignmentId}/attempts:
+    get:
+      operationId: listAttempts
+      summary: The learner's attempts on this assignment
+      description: |
+        Roles learner, author. Access: group link required, no self-heal.
+        Learners get only their own rows (`userId` filter); authors get all.
+        Ordered by `createdAt` ascending, then `id`.
+      parameters:
+        - $ref: "#/components/parameters/assignmentId"
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                {
+                  type: array,
+                  items: { $ref: "#/components/schemas/AttemptSummary" },
+                }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+    post:
+      operationId: createAttempt
+      summary: Start a new attempt or resume the active one
+      description: |
+        Role learner only. Access: group link required. No request body.
+
+        Idempotent per (userId, assignmentId): if an unsubmitted attempt whose
+        `expiresAt` is null or in the future exists, its id is returned with no
+        further checks. Otherwise, inside one transaction serialised by
+        `pg_advisory_xact_lock(hashtextextended('<userId>:<assignmentId>', 0))`
+        (transaction-scoped, so safe behind pgbouncer and shared with the
+        legacy backend), re-check for a resumable attempt, then validate in
+        this order with these statuses:
+
+        1. `published` false -> 403 `ASSIGNMENT_NOT_PUBLISHED`
+        2. AI grading disabled and the assignment has a TEXT/URL/UPLOAD question -> 409 `AI_TEMPORARILY_DISABLED`
+        3. active attempt -> 422 `ATTEMPT_IN_PROGRESS`
+        4. `attemptsPerTimeRange` reached within `attemptsTimeRangeHours` -> 422 `ATTEMPT_TIME_RANGE_EXCEEDED`
+        5. `numAttempts` (not -1/null) reached, counting every attempt -> 422 `ATTEMPT_MAX_REACHED`
+        6. cooldown (only when `numAttempts` is limited): total attempts >= `attemptsBeforeCoolDown` and now < last submitted attempt's (`expiresAt ?? createdAt`, clamped to now) + `retakeAttemptCoolDownMinutes` -> 429, no code
+
+        Then, atomically: insert the attempt pinned to `Assignment.currentVersionId`
+        with `expiresAt = now + allotedTimeMinutes` when > 0 else null; select the
+        question pool from the pinned version's QuestionVersions (live non-deleted
+        questions when unpinned); take `numberOfQuestionsPerAttempt` with the
+        seeded shuffle when > 0; order by `displayOrder` RANDOM (seeded shuffle)
+        or `questionOrder`; persist `questionOrder`; write one
+        `AssignmentAttemptQuestionVariant` per question with a uniformly chosen
+        variant (or none) and the frozen choice order. Limits and ordering read
+        the base `Assignment` row. Seeds: `selectionSeed = attemptId XOR assignmentId`
+        (i32), `orderingSeed = u32(selectionSeed * 2654435761)`, LCG
+        `s = (s*9301 + 49297) mod 233280`, `j = floor(s/233280 * (i+1))`.
+      parameters:
+        - $ref: "#/components/parameters/assignmentId"
+      responses:
+        "201":
+          content:
+            {
+              application/json:
+                { schema: { $ref: "#/components/schemas/AttemptCreated" } },
+            }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403":
+          description: "Role, access, or unpublished assignment (code ASSIGNMENT_NOT_PUBLISHED)."
+          content:
+            {
+              application/json:
+                { schema: { $ref: "#/components/schemas/Error" } },
+            }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: AI grading disabled for an assignment that needs it.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                {
+                  statusCode: 409,
+                  code: AI_TEMPORARILY_DISABLED,
+                  message: This activity is temporarily out of service. Please try again later.,
+                }
+        "422":
+          description: Attempt rules.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                inProgress:
+                  value:
+                    {
+                      statusCode: 422,
+                      code: ATTEMPT_IN_PROGRESS,
+                      message: A attempt is already in progress and has not expired.,
+                    }
+                timeRange:
+                  value:
+                    {
+                      statusCode: 422,
+                      code: ATTEMPT_TIME_RANGE_EXCEEDED,
+                      message: You have exceeded the allowed number of attempts within the specified time range.,
+                    }
+                maxReached:
+                  value:
+                    {
+                      statusCode: 422,
+                      code: ATTEMPT_MAX_REACHED,
+                      message: Maximum number of attempts reached for this assignment.,
+                    }
+        "429":
+          description: Cooldown.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                {
+                  statusCode: 429,
+                  message: You must wait some time before creating a new attempt for this assignment,
+                }
+        "503": { $ref: "#/components/responses/Unavailable" }
+
+  /assignments/{assignmentId}/attempts/{attemptId}:
+    get:
+      operationId: getAttempt
+      summary: An attempt with its questions for rendering
+      description: |
+        Roles learner, author. Learner: the row must match (attemptId, assignmentId,
+        session.userId); a session without `userId` is refused before querying.
+        A learner may read their own attempt without a current group link (read-only
+        owner exemption). Missing or unowned -> 404.
+
+        Questions come from the pinned version (live non-deleted questions when
+        unpinned), ordered by `attempt.questionOrder`, using the frozen variant and
+        choice order. Translations for the requested family are attached; English
+        is never served from stored rows. Stripping: `answer` never; `authorComment`
+        null; choice `points` never; `isCorrect`/`feedback` only when
+        `submitted` and (`ALWAYS`, or `ON_PASS` with grade >= passingGrade/100);
+        `scoring.rubrics` only when `showRubricsToLearner`.
+      parameters:
+        - $ref: "#/components/parameters/assignmentId"
+        - $ref: "#/components/parameters/attemptId"
+        - $ref: "#/components/parameters/lang"
+      responses:
+        "200":
+          content:
+            {
+              application/json:
+                { schema: { $ref: "#/components/schemas/Attempt" } },
+            }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "503": { $ref: "#/components/responses/Unavailable" }
+
+  /assignments/{assignmentId}/attempts/{attemptId}/abandon:
+    post:
+      operationId: abandonAttempt
+      summary: Delete a pristine attempt pinned to a stale version
+      description: |
+        Roles learner, author. Access: ownership and group link both required
+        (no read-only exemption). Body `{}` or empty. Hard-deletes the attempt and
+        its variant rows in one transaction when it is unsubmitted, has no
+        responses, and its version differs from `Assignment.currentVersionId`.
+      parameters:
+        - $ref: "#/components/parameters/assignmentId"
+        - $ref: "#/components/parameters/attemptId"
+      responses:
+        "201":
+          content:
+            {
+              application/json:
+                { schema: { $ref: "#/components/schemas/AttemptAbandoned" } },
+            }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "422":
+          description: Already submitted, has responses, no current version, or already on the current version.
+          content:
+            {
+              application/json:
+                { schema: { $ref: "#/components/schemas/Error" } },
+            }
+        "503": { $ref: "#/components/responses/Unavailable" }

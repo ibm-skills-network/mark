@@ -1111,3 +1111,27 @@ The principal migration is complete when every required capability has a verifie
 Retire legacy applications individually only after their active/delayed jobs, scheduled work, callbacks, API consumers, and data writers have been drained or transferred. Remove legacy credentials and deployment resources after the observation window and retention obligations are satisfied.
 
 Keep schema contraction, full parser replacement, and optional static-hosting conversion as separately gated closures where they cannot safely fit the principal rollout. The master plan succeeds through reliable assessment delivery and simpler ownership, with the existing visual experience preserved.
+
+# Execution addendum
+
+The plan above is the reference design. Execution deviates in a few places,
+recorded here so the two documents never disagree. Live status and the full
+decisions log are in `rust-migration-progress.md`.
+
+- **Branching.** No long-lived integration branch. The foundation merged from
+  `master-rust`; everything after it goes on `rust/<feature>` branches straight
+  to master, where the Rust deployments are disabled by default.
+- **Scope.** Mark is being simplified, not ported wholesale. Video, audio and
+  live-recording response types, the v1 assignment API, chat extras, the LLM
+  pricing admin, admin statistics, Flo and the GitHub OAuth picker are out of
+  scope for Rust and will be removed from the TypeScript app as each slice
+  reaches them.
+- **Parity rule.** Every Rust route ships with the matching TypeScript route
+  and web change in the same PR, against one contract under `contracts/`.
+  The gateway then routes a route family to either backend by helm value.
+- **Limits.** Attempt and time limits are read from the base `Assignment` row.
+  Other assignment fields merge version, then base, then defaults.
+- **Advisory lock.** Attempt creation keeps the transaction-scoped advisory
+  lock so both backends serialise against each other during coexistence.
+- **First slice order.** Learner load (six routes) with reads routed to Rust
+  first; attempt autosave, submit and grading follow.
