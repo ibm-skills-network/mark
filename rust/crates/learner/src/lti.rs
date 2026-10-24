@@ -1,7 +1,10 @@
 //! Grade passback for LTI launches (`lti-grade-sync.service.ts`
 //! `createAndSync`): record the sync, PUT the score to the LTI gateway, and
-//! on any failure schedule the row for the legacy retry job exactly as its
-//! own failure handler does. Never fails the submit; never logs the cookie.
+//! on a failed answer schedule the row for the legacy retry job exactly as
+//! its own failure handler does. A PUT that times out may still have
+//! reached the LMS, so its row is left `IN_PROGRESS` without an error or a
+//! notice, for the legacy stale-row recovery to resend. Never fails the
+//! submit; never logs the cookie.
 
 use std::time::Duration;
 
@@ -25,6 +28,7 @@ const RETRY_MESSAGE: &str = "We encountered an issue syncing your grade to your 
 pub struct LtiGateway {
     url: Option<String>,
     http: Option<reqwest::Client>,
+    timeout: Duration,
 }
 
 impl std::fmt::Debug for LtiGateway {
@@ -41,17 +45,25 @@ pub struct SendFailure {
     pub message: String,
     pub http_status: Option<i32>,
     pub response_body: Option<String>,
+    /// No answer within the timeout: the LMS may have the grade already.
+    pub timed_out: bool,
 }
 
 impl LtiGateway {
     pub fn new(url: Option<String>) -> Result<Self, reqwest::Error> {
+        Self::with_timeout(url, TIMEOUT)
+    }
+
+    /// As `new`, with another request timeout.
+    pub fn with_timeout(url: Option<String>, timeout: Duration) -> Result<Self, reqwest::Error> {
         let http = reqwest::Client::builder()
-            .timeout(TIMEOUT)
-            .connect_timeout(TIMEOUT)
+            .timeout(timeout)
+            .connect_timeout(timeout)
             .build()?;
         Ok(Self {
             url,
             http: Some(http),
+            timeout,
         })
     }
 
@@ -66,6 +78,7 @@ impl LtiGateway {
                 message: "GRADING_LTI_GATEWAY_URL is not set".to_owned(),
                 http_status: None,
                 response_body: None,
+                timed_out: false,
             });
         };
         let response = http
@@ -75,8 +88,9 @@ impl LtiGateway {
             .send()
             .await
             .map_err(|e| SendFailure {
+                timed_out: e.is_timeout(),
                 message: if e.is_timeout() {
-                    format!("timeout of {}ms exceeded", TIMEOUT.as_millis())
+                    format!("timeout of {}ms exceeded", self.timeout.as_millis())
                 } else {
                     // The URL is ours; the error text never carries the cookie.
                     e.without_url().to_string()
@@ -93,6 +107,7 @@ impl LtiGateway {
                 message: format!("Unexpected response status: {}", status.as_u16()),
                 http_status: None,
                 response_body: None,
+                timed_out: false,
             });
         }
         let text = response.text().await.unwrap_or_default();
@@ -114,6 +129,7 @@ impl LtiGateway {
             message,
             http_status: Some(i32::from(status.as_u16())),
             response_body,
+            timed_out: false,
         })
     }
 }
@@ -142,8 +158,9 @@ pub fn passback_score(grades: &[Option<f64>], grade: f64) -> f64 {
     best
 }
 
-/// Record and send the grade; on failure leave the row SCHEDULED for the
-/// legacy retry job. Errors are logged, never returned.
+/// Record and send the grade; on a failed answer leave the row SCHEDULED
+/// for the legacy retry job, on a timeout leave it `IN_PROGRESS`. Errors are
+/// logged, never returned.
 pub async fn sync(pool: &PgPool, gateway: &LtiGateway, passback: Passback<'_>, grade: f64) {
     if let Err(err) = sync_inner(pool, gateway, &passback, grade).await {
         error!(
@@ -191,9 +208,20 @@ async fn sync_inner(
 
     let outcome = gateway.send(score, p.auth_cookie).await;
     let now = now_millis();
-    let mut tx = store::begin_write(pool).await?;
     match outcome {
+        Err(failure) if failure.timed_out => {
+            // The LMS may have taken the grade; scheduling a retry with an
+            // error and a "retrying" notice would be wrong if it did.
+            warn!(
+                assignment_id = p.assignment_id,
+                attempt_id = p.attempt_id,
+                sync_id,
+                outcome = "timed_out",
+                "lti grade sync timed out; row left IN_PROGRESS for stale-row recovery"
+            );
+        }
         Ok(()) => {
+            let mut tx = store::begin_write(pool).await?;
             store::mark_lti_sync_success(&mut tx, sync_id, now).await?;
             tx.commit().await?;
             info!(
@@ -205,6 +233,7 @@ async fn sync_inner(
             );
         }
         Err(failure) => {
+            let mut tx = store::begin_write(pool).await?;
             let next_retry_at = schedule_retry(&mut tx, sync_id, p, score, &failure, now).await?;
             tx.commit().await?;
             notify_learner(pool, sync_id, p, score, next_retry_at, now).await;

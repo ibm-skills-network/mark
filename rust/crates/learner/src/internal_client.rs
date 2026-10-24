@@ -19,7 +19,9 @@ use tracing::{error, warn};
 use crate::error::ApiError;
 
 pub const JOB_QUEUE_SECRET_HEADER: &str = "x-job-queue-secret";
-const TIMEOUT: Duration = Duration::from_secs(5);
+/// A call that times out may still have enqueued the job; the learner's
+/// retry then finds it through the in-flight lookup and reuses it.
+const TIMEOUT: Duration = Duration::from_secs(15);
 
 /// Client for the internal grading endpoints.
 #[derive(Clone)]
@@ -84,8 +86,8 @@ pub enum Enqueued {
         grading_job_id: String,
         reused: bool,
     },
-    /// A 409 (the AI kill switch) to pass to the learner unchanged.
-    Refused(Value),
+    /// A 409 (the AI kill switch) or 400 to pass to the learner unchanged.
+    Refused { status: StatusCode, body: Value },
 }
 
 /// Why a call failed.
@@ -184,12 +186,25 @@ impl InternalApi {
             .await
             .map_err(|e| transport_error(&e))?;
         let status = response.status();
-        if status == StatusCode::CONFLICT {
+        if status == StatusCode::CONFLICT || status == StatusCode::BAD_REQUEST {
             let body: Value = response
                 .json()
                 .await
-                .map_err(|e| CallError::Failed(format!("enqueue 409 body: {e}")))?;
-            return Ok(Enqueued::Refused(body));
+                .map_err(|e| CallError::Failed(format!("enqueue {status} body: {e}")))?;
+            if status == StatusCode::BAD_REQUEST {
+                // Rust validated this payload, so a 400 means the two sides
+                // disagree about the contract.
+                error!(
+                    assignment_id = request.assignment_id,
+                    attempt_id = request.attempt_id,
+                    refusal = body
+                        .get("message")
+                        .map(serde_json::Value::to_string)
+                        .unwrap_or_default(),
+                    "contract_drift: internal enqueue refused a validated submit with 400"
+                );
+            }
+            return Ok(Enqueued::Refused { status, body });
         }
         if status == StatusCode::SERVICE_UNAVAILABLE {
             return Err(CallError::Unreachable("enqueue answered 503".to_owned()));

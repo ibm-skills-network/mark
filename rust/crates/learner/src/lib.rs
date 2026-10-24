@@ -41,6 +41,7 @@ pub mod shuffle;
 pub mod status;
 pub mod store;
 pub mod submit;
+pub mod submit_body;
 pub mod submit_request;
 pub mod submit_result;
 pub mod translation;
@@ -48,8 +49,12 @@ pub mod wire;
 
 use error::ApiError;
 
-/// Largest submit body accepted: every answer of an attempt, base64-encoded.
-pub const SUBMIT_BODY_LIMIT: usize = 64 * 1024 * 1024;
+/// Largest submit body accepted (413 above it). File references carry only
+/// a 255-character `content` marker and one text answer at its 200000
+/// character cap is under 1 MiB base64-encoded, so this holds a dozen such
+/// answers; the parser keeps only the fields it validates, so the cost of a
+/// large body is the raw buffer.
+pub const SUBMIT_BODY_LIMIT: usize = 16 * 1024 * 1024;
 
 /// Where accepted submits go and what they may reference.
 #[derive(Debug, Clone, Default)]

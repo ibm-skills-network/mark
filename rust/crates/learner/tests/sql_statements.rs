@@ -253,7 +253,7 @@ async fn every_statement_prepares_against_the_schema() {
     check!(
         c,
         "complete_grading_progress",
-        store::complete_grading_progress(c, -1, 3, now)
+        store::complete_grading_progress(c, -1, now)
     );
     check!(
         c,

@@ -61,15 +61,35 @@ pub struct Context<'a> {
     pub renderings: &'a [ChoiceRendering],
 }
 
-/// The choice list a grader reads: an array, or JSON text of one.
+/// The refusal for stored choices a grader cannot read. Never carries the
+/// stored text, which holds the answer key.
+pub const UNREADABLE_CHOICES: &str = "The question's choices could not be read.";
+
+fn unreadable_choices() -> GradingError {
+    GradingError(UNREADABLE_CHOICES.to_owned())
+}
+
+/// The choice list a grader reads: an array, or JSON text of one; nothing
+/// for a missing, empty or unparsable value.
 pub fn choice_list(choices: Option<&Value>) -> Vec<Value> {
+    graded_choices(choices).unwrap_or_default()
+}
+
+/// `parseChoices` and the list methods called on its result: a stored value
+/// that is (or parses to) anything other than a list fails the legacy
+/// grader, so it is refused here too.
+fn graded_choices(choices: Option<&Value>) -> Result<Vec<Value>, GradingError> {
     match choices {
-        Some(Value::Array(items)) => items.clone(),
-        Some(Value::String(text)) if !text.is_empty() => match serde_json::from_str(text) {
-            Ok(Value::Array(items)) => items,
-            _ => Vec::new(),
+        None | Some(Value::Null | Value::Bool(false)) => Ok(Vec::new()),
+        Some(Value::Array(items)) => Ok(items.clone()),
+        Some(Value::String(text)) if text.is_empty() => Ok(Vec::new()),
+        Some(Value::String(text)) => match serde_json::from_str(text) {
+            Ok(Value::Array(items)) => Ok(items),
+            Ok(_) => Err(unreadable_choices()),
+            Err(_) => Ok(Vec::new()),
         },
-        _ => Vec::new(),
+        Some(Value::Number(n)) if n.as_f64() == Some(0.0) => Ok(Vec::new()),
+        Some(_) => Err(unreadable_choices()),
     }
 }
 
@@ -131,7 +151,7 @@ pub fn grade(
     }
     match question.question_type.as_str() {
         "SINGLE_CORRECT" => grade_single(question, response, ctx),
-        "MULTIPLE_CORRECT" => Ok(grade_multiple(question, response, ctx)),
+        "MULTIPLE_CORRECT" => grade_multiple(question, response, ctx),
         "TRUE_FALSE" => grade_true_false(question, response, ctx),
         other => Err(GradingError(format!(
             "No grading strategy found for question type: {other}"
@@ -182,7 +202,6 @@ fn grade_single(
             &[("max", "1")],
         )));
     }
-    let choices = choice_list(question.choices.as_ref());
     let learner_response = Value::Array(learner.iter().cloned().map(Value::String).collect());
     let Some(learner_choice) = learner.first() else {
         return Ok(Graded {
@@ -196,6 +215,7 @@ fn grade_single(
             metadata: Some(Value::Object(Map::new())),
         });
     };
+    let choices = graded_choices(question.choices.as_ref())?;
     let correct = choices.iter().find(|c| js::truthy_opt(c.get("isCorrect")));
     let correct_text = correct.and_then(|c| c.get("choice"));
     let selected = find_single(&choices, learner_choice, ctx);
@@ -330,11 +350,11 @@ fn grade_multiple(
     question: &GradingQuestion,
     response: &SubmittedResponse,
     ctx: &Context<'_>,
-) -> Graded {
+) -> Result<Graded, GradingError> {
     let learner = learner_choices(response);
     let learner_response = Value::Array(learner.iter().cloned().map(Value::String).collect());
     if learner.is_empty() {
-        return Graded {
+        return Ok(Graded {
             question_id: question.id,
             learner_response,
             points: Some(0.0),
@@ -343,9 +363,9 @@ fn grade_multiple(
                 "feedback": localized("noOptionSelected", ctx.language, &[]),
             })],
             metadata: None,
-        };
+        });
     }
-    let choices = choice_list(question.choices.as_ref());
+    let choices = graded_choices(question.choices.as_ref())?;
     let graded = map_to_grading_language(&choices, &learner, ctx);
     let normalized_learner: Vec<String> = {
         let mut set: Vec<String> = Vec::new();
@@ -479,7 +499,7 @@ fn grade_multiple(
         Value::from(question.total_points),
     );
 
-    Graded {
+    Ok(Graded {
         question_id: question.id,
         learner_response,
         points: Some(final_points),
@@ -488,7 +508,7 @@ fn grade_multiple(
             "feedback": js::trim(&message),
         })],
         metadata: Some(Value::Object(metadata)),
-    }
+    })
 }
 
 /// `resolveTrueFalseAnswer`: the boolean the question accepts and the points
@@ -539,11 +559,9 @@ fn grade_true_false(
         Some(Value::String(text)) => match serde_json::from_str::<Value>(text) {
             Ok(Value::Array(items)) => items,
             Ok(_) => Vec::new(),
-            Err(_) => {
-                return Err(GradingError(format!("\"{text}\" is not valid JSON")));
-            }
+            Err(_) => return Err(unreadable_choices()),
         },
-        Some(_) => Vec::new(),
+        Some(_) => return Err(unreadable_choices()),
     };
     let Some((correct_answer, correct_points)) = resolve_true_false(&choices) else {
         return Err(GradingError(localized(
@@ -913,5 +931,33 @@ mod tests {
             err.message(),
             "Failed to process question response: Se esperaba una respuesta verdadero/falso, pero no se recibió."
         );
+    }
+
+    #[test]
+    fn unreadable_stored_choices_are_refused_without_their_text() {
+        let generic = format!("Failed to process question response: {UNREADABLE_CHOICES}");
+        let secret = json!({"choice": "Paris", "isCorrect": true});
+        for kind in ["SINGLE_CORRECT", "MULTIPLE_CORRECT"] {
+            for stored in [secret.clone(), json!(secret.to_string()), json!(7)] {
+                let q = question(kind, 2, stored.clone());
+                let err = grade(&q, &picks(&["Paris"]), &ctx()).unwrap_err();
+                assert_eq!(err.message(), generic, "{kind} {stored}");
+                // No pick: the legacy grader answers before reading them.
+                let q = question(kind, 2, stored);
+                assert_eq!(grade(&q, &picks(&[]), &ctx()).unwrap().points, Some(0.0));
+            }
+            // Unparsable text grades against no choices, as before.
+            let q = question(kind, 2, json!("{not json"));
+            assert_eq!(
+                grade(&q, &picks(&["Paris"]), &ctx()).unwrap().points,
+                Some(0.0)
+            );
+        }
+        for stored in [json!("[{\"choice\": \"True\", \"isCorrect\": tru"), secret] {
+            let q = question("TRUE_FALSE", 1, stored);
+            let err = grade(&q, &tf(true), &ctx()).unwrap_err();
+            assert_eq!(err.message(), generic);
+            assert!(!err.message().contains("True") && !err.message().contains("Paris"));
+        }
     }
 }

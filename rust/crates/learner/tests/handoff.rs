@@ -139,7 +139,7 @@ async fn enqueue_posts_the_decoded_submit() {
 }
 
 #[tokio::test]
-async fn enqueue_passes_a_409_through_and_fails_on_anything_else() {
+async fn enqueue_passes_409_and_400_through_and_fails_on_anything_else() {
     let refusal = json!({"statusCode": 409, "code": "AI_TEMPORARILY_DISABLED", "message": "This activity is temporarily out of service. Please try again later."});
     let base = serve(internal_mock(
         Seen::default(),
@@ -150,7 +150,28 @@ async fn enqueue_passes_a_409_through_and_fails_on_anything_else() {
     let api = InternalApi::new(&base, "s".into()).unwrap();
     assert_eq!(
         api.enqueue(&enqueue_request()).await.unwrap(),
-        Enqueued::Refused(refusal)
+        Enqueued::Refused {
+            status: StatusCode::CONFLICT,
+            body: refusal
+        }
+    );
+
+    // A 400 (the two sides disagree on the payload) reaches the learner as
+    // it was sent, not as a 500.
+    let invalid = json!({"message": ["responsesForQuestions.0.id must be an integer number"], "error": "Bad Request", "statusCode": 400});
+    let base = serve(internal_mock(
+        Seen::default(),
+        StatusCode::BAD_REQUEST,
+        invalid.clone(),
+    ))
+    .await;
+    let api = InternalApi::new(&base, "s".into()).unwrap();
+    assert_eq!(
+        api.enqueue(&enqueue_request()).await.unwrap(),
+        Enqueued::Refused {
+            status: StatusCode::BAD_REQUEST,
+            body: invalid
+        }
     );
 
     let base = serve(internal_mock(
