@@ -55,5 +55,6 @@ Accepted differences: Express adds ETag/304 and helmet headers and `charset=utf-
 - `/languages` guard and `published` check on create are behaviour changes; both land with this slice in TS and Rust.
 - Redis attempt-access cache: Rust does not use it. If latency on GET attempt matters, add a Rust-side cache with its own key prefix.
 - Named prepared statements through pgbouncer are still unverified; sqlx statement cache stays off.
+- 2026-10-24 staging finding: with the cache off, a bare pool query still sends two Syncs (Parse/Describe, then Bind/Execute), and pgbouncer in transaction mode can move the second half to another server connection: `unnamed prepared statement does not exist`. Seen on 22% of readiness pings on both Rust pods. Fix in this slice: simple-protocol ping, and every request's statements inside one transaction so pgbouncer pins the connection. Rule: never run a parameterised query straight on the pool; always inside a transaction.
 - Product decision: `correctAnswerVisibility` default is `ALWAYS`. Visibility now only applies after submission, so the default is safe, but authors may want `ON_PASS` as the default.
 - Web UI must mark video/audio/live-recording question types as disabled (planned with the authoring slice).

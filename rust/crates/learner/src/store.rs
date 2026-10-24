@@ -5,15 +5,35 @@
 //! `PREPARE`, `LISTEN` or session advisory locks. The only lock is the
 //! transaction-scoped `pg_advisory_xact_lock` taken by attempt creation.
 //!
+//! Every statement must run inside an explicit transaction ([`begin_read`]
+//! or [`begin_write`]): a non-persistent query is two Sync-terminated
+//! round trips, and only an open transaction keeps pgbouncer on the server
+//! connection that holds the unnamed statement. See `platform::db`.
+//!
 //! Tables and columns are Prisma's: quoted `PascalCase` tables, quoted
 //! camelCase columns. Enum columns are read as `::text`.
 
 use chrono::NaiveDateTime;
 use serde_json::Value;
 use sqlx::postgres::PgRow;
-use sqlx::{Acquire, PgConnection, Row};
+use sqlx::{Acquire, PgConnection, PgPool, Postgres, Row, Transaction};
 
 type Result<T> = std::result::Result<T, sqlx::Error>;
+
+/// A read-only transaction for a request's reads. `SET TRANSACTION` is
+/// transaction-scoped, so it cannot leak through pgbouncer.
+pub async fn begin_read(pool: &PgPool) -> Result<Transaction<'static, Postgres>> {
+    let mut tx = pool.begin().await?;
+    sqlx::raw_sql("SET TRANSACTION READ ONLY")
+        .execute(&mut *tx)
+        .await?;
+    Ok(tx)
+}
+
+/// A read-write transaction for a request that may write.
+pub async fn begin_write(pool: &PgPool) -> Result<Transaction<'static, Postgres>> {
+    pool.begin().await
+}
 
 fn q(
     sql: &'static str,

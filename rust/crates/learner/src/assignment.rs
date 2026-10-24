@@ -192,13 +192,20 @@ pub async fn get_assignment(
     info!(assignment_id, user_id = session.log_user(), role = role.as_str(), lang = %lang.code, "get assignment requested");
 
     let id = access::assignment_route_id(&session, role, assignment_id)?;
-    let mut conn = state.pool.acquire().await?;
     let heal = if state.accept_operations {
         Heal::Allowed
     } else {
         Heal::Never
     };
-    let id = access::assignment_read(&mut conn, &session, id, heal).await?;
+    // The access check may self-heal (a write), so it gets its own
+    // transaction, read-write only when healing is allowed, and commits
+    // before the reads so the heal survives whatever the reads answer.
+    let mut access_tx = match heal {
+        Heal::Allowed => store::begin_write(&state.pool).await?,
+        Heal::Never => store::begin_read(&state.pool).await?,
+    };
+    let id = access::assignment_read(&mut access_tx, &session, id, heal).await?;
+    access_tx.commit().await?;
     if role == Role::Author {
         info!(
             assignment_id = id,
@@ -211,19 +218,20 @@ pub async fn get_assignment(
         ));
     }
 
-    let Some(base) = store::load_assignment(&mut conn, id).await? else {
+    let mut tx = store::begin_read(&state.pool).await?;
+    let Some(base) = store::load_assignment(&mut tx, id).await? else {
         return Err(ApiError::nest(
             StatusCode::NOT_FOUND,
             "Assignment not found",
         ));
     };
-    let version = store::load_active_version(&mut conn, id, base.current_version_id).await?;
+    let version = store::load_active_version(&mut tx, id, base.current_version_id).await?;
     let mut view = merge_learner_view(&base, version.as_ref());
     if !lang.is_authored() {
-        let rows =
-            store::assignment_translations(&mut conn, id, &like_prefix(&lang.family)).await?;
+        let rows = store::assignment_translations(&mut tx, id, &like_prefix(&lang.family)).await?;
         apply_assignment_translation(&mut view, &rows, &lang);
     }
+    tx.commit().await?;
     info!(
         assignment_id = id,
         versioned = version.is_some(),
@@ -259,9 +267,10 @@ pub async fn get_languages(
         "get languages requested"
     );
     let id = access::assignment_route_id(&session, role, assignment_id)?;
-    let mut conn = state.pool.acquire().await?;
-    let id = access::assignment_read(&mut conn, &session, id, Heal::Never).await?;
-    let languages = with_english(store::language_codes(&mut conn, id).await?);
+    let mut tx = store::begin_read(&state.pool).await?;
+    let id = access::assignment_read(&mut tx, &session, id, Heal::Never).await?;
+    let languages = with_english(store::language_codes(&mut tx, id).await?);
+    tx.commit().await?;
     info!(
         assignment_id = id,
         count = languages.languages.len(),

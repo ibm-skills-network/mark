@@ -8,7 +8,6 @@ use chrono::{Duration, NaiveDateTime};
 use rand::RngExt;
 use serde::Serialize;
 use serde_json::Value;
-use sqlx::Acquire;
 use tracing::{info, warn};
 
 use crate::access::{self, Intent};
@@ -151,8 +150,8 @@ pub async fn list_attempts(
         "list attempts requested"
     );
 
-    let mut conn = state.pool.acquire().await?;
-    access::attempt_collection(&mut conn, &session, role, assignment_id).await?;
+    let mut tx = store::begin_read(&state.pool).await?;
+    access::attempt_collection(&mut tx, &session, role, assignment_id).await?;
     let owner = match role {
         Role::Learner => match session.non_empty_user_id() {
             Some(user) => Owner::User(user),
@@ -167,10 +166,11 @@ pub async fn list_attempts(
         },
         Role::Author | Role::Admin => Owner::Anyone,
     };
-    let show_score = store::attempt_settings(&mut conn, assignment_id)
+    let show_score = store::attempt_settings(&mut tx, assignment_id)
         .await?
         .is_some_and(|s| s.show_assignment_score);
-    let rows = store::list_attempts(&mut conn, assignment_id, owner).await?;
+    let rows = store::list_attempts(&mut tx, assignment_id, owner).await?;
+    tx.commit().await?;
     info!(
         assignment_id,
         count = rows.len(),
@@ -460,8 +460,10 @@ pub async fn create_attempt(
     };
     info!(assignment_id, user_id, "create attempt requested");
 
-    let mut conn = state.pool.acquire().await?;
-    access::attempt_collection(&mut conn, &session, Role::Learner, assignment_id).await?;
+    // One read-write transaction for the whole request: the checks before
+    // the creation lock must stay on the same server connection too.
+    let mut tx = store::begin_write(&state.pool).await?;
+    access::attempt_collection(&mut tx, &session, Role::Learner, assignment_id).await?;
 
     let created = |id: i32, how: &str| {
         info!(
@@ -481,11 +483,11 @@ pub async fn create_attempt(
         ))
     };
 
-    if let Some(id) = store::find_resumable(&mut conn, assignment_id, user_id, now_millis()).await?
-    {
+    if let Some(id) = store::find_resumable(&mut tx, assignment_id, user_id, now_millis()).await? {
+        tx.commit().await?;
         return created(id, "resumed");
     }
-    let Some(assignment) = store::load_assignment(&mut conn, assignment_id).await? else {
+    let Some(assignment) = store::load_assignment(&mut tx, assignment_id).await? else {
         return Err(ApiError::nest(
             StatusCode::NOT_FOUND,
             "Assignment not found",
@@ -493,7 +495,6 @@ pub async fn create_attempt(
     };
     let base = &assignment.settings;
 
-    let mut tx = conn.begin().await?;
     store::set_local_lock_timeout(&mut tx).await?;
     store::lock_attempt_creation(&mut tx, &format!("{user_id}:{assignment_id}")).await?;
     let now = now_millis();
@@ -585,9 +586,9 @@ pub async fn get_attempt(
     let lang = Lang::from_query(query.as_deref());
     info!(assignment_id, attempt_id, user_id = session.log_user(), role = role.as_str(), lang = %lang.code, "get attempt requested");
 
-    let mut conn = state.pool.acquire().await?;
+    let mut tx = store::begin_read(&state.pool).await?;
     let attempt = access::attempt_item(
-        &mut conn,
+        &mut tx,
         &session,
         role,
         assignment_id,
@@ -595,7 +596,7 @@ pub async fn get_attempt(
         Intent::Read,
     )
     .await?;
-    let Some(settings) = store::attempt_settings(&mut conn, assignment_id).await? else {
+    let Some(settings) = store::attempt_settings(&mut tx, assignment_id).await? else {
         return Err(ApiError::nest(
             StatusCode::NOT_FOUND,
             "Assignment not found",
@@ -604,14 +605,15 @@ pub async fn get_attempt(
 
     let (sources, version) = match attempt.assignment_version_id {
         Some(version_id) => (
-            store::version_questions(&mut conn, version_id).await?,
-            store::version_alloted_time(&mut conn, version_id).await?,
+            store::version_questions(&mut tx, version_id).await?,
+            store::version_alloted_time(&mut tx, version_id).await?,
         ),
-        None => (store::live_questions(&mut conn, assignment_id).await?, None),
+        None => (store::live_questions(&mut tx, assignment_id).await?, None),
     };
-    let selections = store::frozen_selections(&mut conn, attempt.id).await?;
-    let translations = load_translations(&mut conn, &lang, &sources, &selections).await?;
-    let responses = store::question_responses(&mut conn, attempt.id).await?;
+    let selections = store::frozen_selections(&mut tx, attempt.id).await?;
+    let translations = load_translations(&mut tx, &lang, &sources, &selections).await?;
+    let responses = store::question_responses(&mut tx, attempt.id).await?;
+    tx.commit().await?;
 
     let passing_grade = settings
         .passing_grade
@@ -689,9 +691,9 @@ pub async fn abandon_attempt(
         "abandon attempt requested"
     );
 
-    let mut conn = state.pool.acquire().await?;
+    let mut tx = store::begin_write(&state.pool).await?;
     access::attempt_item(
-        &mut conn,
+        &mut tx,
         &session,
         role,
         assignment_id,
@@ -700,7 +702,6 @@ pub async fn abandon_attempt(
     )
     .await?;
 
-    let mut tx = conn.begin().await?;
     let Some(check) = store::lock_attempt_for_abandon(&mut tx, attempt_id).await? else {
         return Err(ApiError::nest(
             StatusCode::NOT_FOUND,
