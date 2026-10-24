@@ -53,20 +53,20 @@ The repository describes Mark as an educational assessment platform with AI grad
 
 “Core” means necessary to deliver and operate assessments. “Supporting” means an independently sequenced product capability, not an automatic candidate for removal. Preserve an existing capability through either Rust or an explicit legacy adapter until the product owner approves its retirement.
 
-| Capability                | Observed platform responsibilities                                                                                 | Migration treatment                                                                                           |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
-| Identity and access       | Learner, author, and admin sessions; cookie and bearer authentication paths; assignment and LMS context            | Core foundation. Central policy and authenticated context in Rust; preserve launch and cookie compatibility   |
-| Assessment authoring      | Assignment settings, questions, scoring configuration, generated questions, variants, and attached author material | Core. One authoring domain with typed commands                                                                |
-| Drafts and publication    | User drafts, assignment versions, comparison, restoration, and publishing workflows                                | Core. Separate mutable drafts from immutable published assessment content                                     |
-| Learner attempts          | Attempt eligibility, resume behavior, submission, response validation, time and attempt restrictions               | Core. Transactional lifecycle with idempotent commands                                                        |
-| Grading and feedback      | Choice and true/false strategies; text, URL, file, image, and presentation grading; grading progress and regrading | Core. Deterministic scoring separated from evidence-based AI evaluation                                       |
-| Content and evidence      | Uploads, object storage, document extraction, structured evidence, and highlighting-related data                   | Core for supported file formats. Preserve evidence fidelity before replacing parsers                          |
-| Localization              | Assignment, question, variant, and feedback translation; translation maintenance                                   | Core for currently supported locales. Version translations against source content                             |
-| LMS result delivery       | Grade synchronization through an external LTI gateway, retries, and administrative recovery                        | Core integration. Grade completion and delivery completion are separate states                                |
-| Operational control       | Queue status, translation repair, regrading requests, flagged submissions, model/pricing controls, AI switches     | Core operations. Ship essential recovery tools before increasing traffic                                      |
-| Analytics                 | Assignment and attempt insights, grade aggregates, AI cost reporting                                               | Preserve. Read models can migrate separately from writes                                                      |
-| AI assistant              | Scoped chat, history, streaming, tool interactions, and attachments                                                | Supporting. Preserve behind an adapter initially; migrate after authorization and command contracts stabilize |
-| Support and notifications | User reports, GitHub-related workflows, Flo/Skills Network support routing, email-related controls                 | Supporting. Separate support-case handling from assessment analytics                                          |
+| Capability | Observed platform responsibilities | Migration treatment |
+| - | - | - |
+| Identity and access | Learner, author, and admin sessions; cookie and bearer authentication paths; assignment and LMS context | Core foundation. Central policy and authenticated context in Rust; preserve launch and cookie compatibility |
+| Assessment authoring | Assignment settings, questions, scoring configuration, generated questions, variants, and attached author material | Core. One authoring domain with typed commands |
+| Drafts and publication | User drafts, assignment versions, comparison, restoration, and publishing workflows | Core. Separate mutable drafts from immutable published assessment content |
+| Learner attempts | Attempt eligibility, resume behavior, submission, response validation, time and attempt restrictions | Core. Transactional lifecycle with idempotent commands |
+| Grading and feedback | Choice and true/false strategies; text, URL, file, image, and presentation grading; grading progress and regrading | Core. Deterministic scoring separated from evidence-based AI evaluation |
+| Content and evidence | Uploads, object storage, document extraction, structured evidence, and highlighting-related data | Core for supported file formats. Preserve evidence fidelity before replacing parsers |
+| Localization | Assignment, question, variant, and feedback translation; translation maintenance | Core for currently supported locales. Version translations against source content |
+| LMS result delivery | Grade synchronization through an external LTI gateway, retries, and administrative recovery | Core integration. Grade completion and delivery completion are separate states |
+| Operational control | Queue status, translation repair, regrading requests, flagged submissions, model/pricing controls, AI switches | Core operations. Ship essential recovery tools before increasing traffic |
+| Analytics | Assignment and attempt insights, grade aggregates, AI cost reporting | Preserve. Read models can migrate separately from writes |
+| AI assistant | Scoped chat, history, streaming, tool interactions, and attachments | Supporting. Preserve behind an adapter initially; migrate after authorization and command contracts stabilize |
+| Support and notifications | User reports, GitHub-related workflows, Flo/Skills Network support routing, email-related controls | Supporting. Separate support-case handling from assessment analytics |
 
 Evidence for these boundaries: [Session model](https://github.com/ibm-skills-network/mark/blob/master/apps/api/src/auth/interfaces/user.session.interface.ts), [assignment module](https://github.com/ibm-skills-network/mark/blob/master/apps/api/src/api/assignment/v2/modules/assignment.module.ts), [draft endpoints](https://github.com/ibm-skills-network/mark/blob/master/apps/api/src/api/assignment/v2/controllers/draft-management.controller.ts), [version endpoints](https://github.com/ibm-skills-network/mark/blob/master/apps/api/src/api/assignment/v2/controllers/version-management.controller.ts), [attempt module](https://github.com/ibm-skills-network/mark/blob/master/apps/api/src/api/attempt/attempt.module.ts), [admin module](https://github.com/ibm-skills-network/mark/blob/master/apps/api/src/api/admin/admin.module.ts), [analytics response and assignment endpoints](https://github.com/ibm-skills-network/mark/blob/master/apps/api/src/api/assignment/v2/controllers/assignment.controller.ts).
 
@@ -74,18 +74,18 @@ The format acceptance matrix must distinguish question type from submission form
 
 # 4 Existing applications and services
 
-| Current component                                         | Role established by source                                                                                                 | Proposed disposition                                                                                               |
-| --------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `apps/web`                                                | Next.js/React frontend with rich text, styling, interactive controls, and browser media dependencies                       | Retain and refactor selectively                                                                                    |
-| `apps/api-gateway`                                        | Authentication, forwarding to Mark and the LTI credential manager, special streaming handling, administrative role support | Retain during migration; eventually absorb Mark-specific policy into Rust and keep standard routing at the ingress |
-| `apps/api`                                                | NestJS application containing the principal business capabilities and persistence access                                   | Replace by capability with a Rust application core                                                                 |
-| `apps/jobs`                                               | BullMQ workers, consuming multiple job classes and invoking application functionality                                      | Replace with Rust workers; preserve legacy queue handling until drained                                            |
-| PostgreSQL and Prisma                                     | Durable application data and the existing schema/migration history                                                         | Keep PostgreSQL; replace Prisma access with reviewed SQL through Rust                                              |
-| Redis and BullMQ                                          | Background queues and transient job state                                                                                  | Keep for legacy execution; introduce a language-neutral durable job contract for migrated work                     |
-| NATS and Skills Network messaging                         | Platform integration and event publication                                                                                 | Preserve required external subjects and message envelopes                                                          |
-| IBM Cloud Object Storage                                  | S3-compatible storage and multipart operations                                                                             | Retain buckets and keys initially; replace the client adapter                                                      |
-| External LTI services                                     | Credential-management forwarding and grade callbacks                                                                       | Preserve as external integrations; their implementation is outside this repository’s rewrite                       |
-| Model providers, GitHub, support services, email, Instana | AI, collaboration/support, notifications, and telemetry                                                                    | Use explicit adapters with contract tests and operational ownership                                                |
+| Current component | Role established by source | Proposed disposition |
+| - | - | - |
+| `apps/web` | Next.js/React frontend with rich text, styling, interactive controls, and browser media dependencies | Retain and refactor selectively |
+| `apps/api-gateway` | Authentication, forwarding to Mark and the LTI credential manager, special streaming handling, administrative role support | Retain during migration; eventually absorb Mark-specific policy into Rust and keep standard routing at the ingress |
+| `apps/api` | NestJS application containing the principal business capabilities and persistence access | Replace by capability with a Rust application core |
+| `apps/jobs` | BullMQ workers, consuming multiple job classes and invoking application functionality | Replace with Rust workers; preserve legacy queue handling until drained |
+| PostgreSQL and Prisma | Durable application data and the existing schema/migration history | Keep PostgreSQL; replace Prisma access with reviewed SQL through Rust |
+| Redis and BullMQ | Background queues and transient job state | Keep for legacy execution; introduce a language-neutral durable job contract for migrated work |
+| NATS and Skills Network messaging | Platform integration and event publication | Preserve required external subjects and message envelopes |
+| IBM Cloud Object Storage | S3-compatible storage and multipart operations | Retain buckets and keys initially; replace the client adapter |
+| External LTI services | Credential-management forwarding and grade callbacks | Preserve as external integrations; their implementation is outside this repository’s rewrite |
+| Model providers, GitHub, support services, email, Instana | AI, collaboration/support, notifications, and telemetry | Use explicit adapters with contract tests and operational ownership |
 
 The manifests identify the four applications and the API/jobs dependency on BullMQ; local Compose defines PostgreSQL and Redis. These are separate from NATS messaging. Do not assume that the existence of NATS makes it the current durable job queue. [Root workspace](https://github.com/ibm-skills-network/mark/blob/master/package.json), [web manifest](https://github.com/ibm-skills-network/mark/blob/master/apps/web/package.json), [API manifest](https://github.com/ibm-skills-network/mark/blob/master/apps/api/package.json), [jobs manifest](https://github.com/ibm-skills-network/mark/blob/master/apps/jobs/package.json), [local infrastructure](https://github.com/ibm-skills-network/mark/blob/master/docker-compose.yml).
 
@@ -151,18 +151,18 @@ The database-to-worker arrow represents the recommended initial durable job mech
 
 ## Logical module boundaries
 
-| Module                      | Owns                                                                               | Must not own                                     |
-| --------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------ |
-| Access                      | Principal construction, role and resource policy, trusted integration context      | Assessment scoring decisions                     |
-| Assessment                  | Drafts, questions, variants, rubrics, versions, publication                        | Provider HTTP calls or queue internals           |
-| Attempts                    | Eligibility, saved answers, submission snapshots, attempt transitions              | Mutation of published assessment content         |
-| Evaluation                  | Deterministic scoring, grading runs, criterion results, feedback, regrading policy | HTTP session parsing                             |
-| Content                     | Upload metadata, extraction requests, evidence artifacts, format adapters          | Final grade decisions                            |
-| Localization                | Source-version relationships, translations, invalidation and repair                | Publication decisions outside an explicit policy |
-| Operations                  | Durable jobs, progress, leases, scheduling, retries, cancellation                  | Feature-specific business rules                  |
-| Integrations                | Grade delivery, messaging, GitHub, support, email                                  | Direct uncoordinated mutation of assessment data |
-| Administration and insights | Privileged commands, audit access, analytical read models                          | A separate implementation of domain rules        |
-| Assistant                   | Conversation state and authorized tool orchestration                               | Bypassing application commands or permissions    |
+| Module | Owns | Must not own |
+| - | - | - |
+| Access | Principal construction, role and resource policy, trusted integration context | Assessment scoring decisions |
+| Assessment | Drafts, questions, variants, rubrics, versions, publication | Provider HTTP calls or queue internals |
+| Attempts | Eligibility, saved answers, submission snapshots, attempt transitions | Mutation of published assessment content |
+| Evaluation | Deterministic scoring, grading runs, criterion results, feedback, regrading policy | HTTP session parsing |
+| Content | Upload metadata, extraction requests, evidence artifacts, format adapters | Final grade decisions |
+| Localization | Source-version relationships, translations, invalidation and repair | Publication decisions outside an explicit policy |
+| Operations | Durable jobs, progress, leases, scheduling, retries, cancellation | Feature-specific business rules |
+| Integrations | Grade delivery, messaging, GitHub, support, email | Direct uncoordinated mutation of assessment data |
+| Administration and insights | Privileged commands, audit access, analytical read models | A separate implementation of domain rules |
+| Assistant | Conversation state and authorized tool orchestration | Bypassing application commands or permissions |
 
 These are ownership boundaries, not a requirement for ten crates or ten services. Start with a small Cargo workspace separating domain/application logic, infrastructure adapters, API, and worker binaries. Add further crates when they enforce a useful dependency boundary.
 
@@ -170,18 +170,18 @@ The domain should use explicit types for identifiers, role context, assessment v
 
 # 7 Rust technology decisions
 
-| Concern                | Recommended starting choice                                              | Rationale and validation                                                                                                   |
-| ---------------------- | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
-| HTTP API and streaming | Axum, Tokio, Tower middleware                                            | Suitable for asynchronous request handling and composable middleware; prove SSE, upload, and cancellation behavior         |
-| Persistence            | SQLx with PostgreSQL                                                     | Explicit SQL and transaction control; query checking where practical; retain raw SQL constraints and indexes               |
-| Serialization          | Serde and explicit request/response types                                | Separate external compatibility types from internal domain types                                                           |
-| Outbound HTTP          | A maintained Rust HTTP client such as reqwest                            | Central deadlines, connection limits, retries, redaction, and provider adapters                                            |
-| Storage                | S3-compatible Rust SDK/client adapter                                    | Validate IBM COS signing, path-style endpoints, multipart uploads, and existing object access                              |
-| Observability          | Structured tracing and OpenTelemetry-compatible export                   | Correlate web requests, jobs, model calls, and delivery attempts; verify compatibility with the existing telemetry backend |
-| API contract           | Reviewed OpenAPI plus generated TypeScript client and runtime validators | Enforce request/response compatibility; supplement with streaming and behavioral contracts                                 |
-| Job persistence        | PostgreSQL operation/job tables with bounded leasing                     | Small initial infrastructure footprint; select only after contention, recovery, and workload tests                         |
-| External messaging     | Rust NATS adapter where required                                         | Preserve the Skills Network wire contract; do not infer it from a client library’s method names                            |
-| Frontend               | Existing Next.js, React, styling and editor ecosystem                    | Maintain rendering and interaction compatibility                                                                           |
+| Concern | Recommended starting choice | Rationale and validation |
+| - | - | - |
+| HTTP API and streaming | Axum, Tokio, Tower middleware | Suitable for asynchronous request handling and composable middleware; prove SSE, upload, and cancellation behavior |
+| Persistence | SQLx with PostgreSQL | Explicit SQL and transaction control; query checking where practical; retain raw SQL constraints and indexes |
+| Serialization | Serde and explicit request/response types | Separate external compatibility types from internal domain types |
+| Outbound HTTP | A maintained Rust HTTP client such as reqwest | Central deadlines, connection limits, retries, redaction, and provider adapters |
+| Storage | S3-compatible Rust SDK/client adapter | Validate IBM COS signing, path-style endpoints, multipart uploads, and existing object access |
+| Observability | Structured tracing and OpenTelemetry-compatible export | Correlate web requests, jobs, model calls, and delivery attempts; verify compatibility with the existing telemetry backend |
+| API contract | Reviewed OpenAPI plus generated TypeScript client and runtime validators | Enforce request/response compatibility; supplement with streaming and behavioral contracts |
+| Job persistence | PostgreSQL operation/job tables with bounded leasing | Small initial infrastructure footprint; select only after contention, recovery, and workload tests |
+| External messaging | Rust NATS adapter where required | Preserve the Skills Network wire contract; do not infer it from a client library’s method names |
+| Frontend | Existing Next.js, React, styling and editor ecosystem | Maintain rendering and interaction compatibility |
 
 Axum is built around Tokio/Hyper and Tower integration. SQLx supports asynchronous PostgreSQL access and checked SQL queries. These are reasonable candidates, not a mandate to use the newest release without compatibility testing. Pin a Rust toolchain and dependency versions, document the minimum supported compiler, and establish dependency/security update ownership. [Axum documentation](https://docs.rs/axum/latest/axum/), [SQLx project](https://github.com/transact-rs/sqlx).
 
@@ -223,11 +223,11 @@ Begin response validation and error-handling improvements against the existing b
 
 A mostly client-rendered application is a plausible simplification for authenticated assessment workflows. It removes the frontend Node server from production if every required server responsibility is replaced. It does not automatically improve API correctness, authorization, or error handling.
 
-| Option                                | Benefit                                                                                | Work or tradeoff                                                                                 |
-| ------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
-| Keep Next.js SSR                      | Lowest initial migration disruption; retains server-only rendering/configuration paths | Continue operating a frontend server and maintaining SSR-specific behavior                       |
-| Use a static React frontend           | Static hosting/CDN delivery and fewer application runtimes                             | Move necessary auth mediation/configuration/routing elsewhere; handle initial loading explicitly |
-| Retain a small server-rendered subset | Preserve a measured requirement on specific routes                                     | Keep mixed rendering complexity only if its benefit is demonstrated                              |
+| Option | Benefit | Work or tradeoff |
+| - | - | - |
+| Keep Next.js SSR | Lowest initial migration disruption; retains server-only rendering/configuration paths | Continue operating a frontend server and maintaining SSR-specific behavior |
+| Use a static React frontend | Static hosting/CDN delivery and fewer application runtimes | Move necessary auth mediation/configuration/routing elsewhere; handle initial loading explicitly |
+| Retain a small server-rendered subset | Preserve a measured requirement on specific routes | Keep mixed rendering complexity only if its benefit is demonstrated |
 
 After the API boundary is established, trial a representative learner flow with client rendering. Test embedded LMS launch, cookies and CSRF, reauthentication, hard refresh on deep links, theme initialization, locale, accessibility, uploads, status streams, and browser back/forward behavior. Compare first-use performance and operational complexity.
 
@@ -257,12 +257,12 @@ flowchart TD
     Transport --> Gateway[Gateway routes to legacy or Rust API]
 ```
 
-| Layer                  | Owns                                                                                                     | Boundary rule                               |
-| ---------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
-| Transport              | Authentication attachment, deadlines, cancellation, response metadata, request correlation               | No toasts, navigation, or assessment rules  |
-| Endpoint client        | Path and method, request/response schemas, documented success/error variants, explicit legacy adaptation | Raw data stays unknown until validated      |
-| Feature hooks          | Server-state cache, mutation state, invalidation, workflow recovery, feature-specific error decisions    | Components do not duplicate transport logic |
-| Screens and components | Display, input, unsaved local edits, accessible interactions                                             | Render validated models and explicit states |
+| Layer | Owns | Boundary rule |
+| - | - | - |
+| Transport | Authentication attachment, deadlines, cancellation, response metadata, request correlation | No toasts, navigation, or assessment rules |
+| Endpoint client | Path and method, request/response schemas, documented success/error variants, explicit legacy adaptation | Raw data stays unknown until validated |
+| Feature hooks | Server-state cache, mutation state, invalidation, workflow recovery, feature-specific error decisions | Components do not duplicate transport logic |
+| Screens and components | Display, input, unsaved local edits, accessible interactions | Render validated models and explicit states |
 
 Use the existing query/mutation tooling consistently rather than introducing a new state framework. Separate cached server data from unsaved form edits. Scope cache keys by identity and the relevant assignment, version, attempt, and locale. Clear or replace identity-scoped caches on logout and role changes.
 
@@ -272,14 +272,14 @@ Migrate calls feature by feature. New and migrated components must use the endpo
 
 Use a discriminated error model that can survive the Next.js server/client boundary without depending on class identity.
 
-| Category         | What is known                                          | Default handling                                                       |
-| ---------------- | ------------------------------------------------------ | ---------------------------------------------------------------------- |
-| HTTP error       | An actual non-success response arrived                 | Preserve observed status, structured code, and request ID              |
-| Network failure  | Fetch or body transfer failed at the transport layer   | Describe uncertainty; do not invent an HTTP status or blame the server |
-| Timeout          | The configured client deadline expired                 | Determine whether a write was accepted before permitting resubmission  |
-| Invalid response | Content type, JSON, or endpoint schema is incompatible | Contain the feature failure; record contract diagnostics               |
-| Cancellation     | Navigation or the caller deliberately stopped waiting  | Usually no user-facing error                                           |
-| Client defect    | Rendering or frontend logic failed                     | Local error boundary and client-defect diagnostics                     |
+| Category | What is known | Default handling |
+| - | - | - |
+| HTTP error | An actual non-success response arrived | Preserve observed status, structured code, and request ID |
+| Network failure | Fetch or body transfer failed at the transport layer | Describe uncertainty; do not invent an HTTP status or blame the server |
+| Timeout | The configured client deadline expired | Determine whether a write was accepted before permitting resubmission |
+| Invalid response | Content type, JSON, or endpoint schema is incompatible | Contain the feature failure; record contract diagnostics |
+| Cancellation | Navigation or the caller deliberately stopped waiting | Usually no user-facing error |
+| Client defect | Rendering or frontend logic failed | Local error boundary and client-defect diagnostics |
 
 An HTTP status and an application outcome are separate fields. A malformed response with observed HTTP 200 is an invalid-response error, not a synthetic 500. A legitimate 204 is accepted only for endpoints whose contract permits an empty result. Invalid JSON must not automatically be blamed on a dropped connection; the producer or an intermediary may be responsible.
 
@@ -291,15 +291,15 @@ Combine caller cancellation and request deadlines correctly. For ordinary JSON r
 
 Each failure has one presentation owner. A failed request must not produce a toast, global modal, and page replacement simultaneously.
 
-| Situation                        | User experience                                                                      |
-| -------------------------------- | ------------------------------------------------------------------------------------ |
-| Assignment cannot initially load | Focused error view with safe retry and support reference                             |
-| Background refresh fails         | Retain previously validated data; indicate that it may be stale                      |
-| Autosave fails                   | Retain edits, show unsaved state, and retry safely                                   |
-| Submission response is lost      | Show confirmation pending; reconcile acceptance with the server                      |
-| Session expires                  | Preserve work in the current session where possible and offer reauthentication       |
-| Optional chat or analytics fails | Keep the main assessment workflow usable                                             |
-| A component crashes              | Contain the component or route with an error boundary; classify as a frontend defect |
+| Situation | User experience |
+| - | - |
+| Assignment cannot initially load | Focused error view with safe retry and support reference |
+| Background refresh fails | Retain previously validated data; indicate that it may be stale |
+| Autosave fails | Retain edits, show unsaved state, and retry safely |
+| Submission response is lost | Show confirmation pending; reconcile acceptance with the server |
+| Session expires | Preserve work in the current session where possible and offer reauthentication |
+| Optional chat or analytics fails | Keep the main assessment workflow usable |
+| A component crashes | Contain the component or route with an error boundary; classify as a frontend defect |
 
 Persisting drafts across browser sessions requires an explicit privacy and retention decision. Do not place credentials or sensitive learner submissions in local storage merely as an error-handling shortcut. Suppress automatic reload/navigation when it would discard edits.
 
@@ -651,15 +651,15 @@ This layout is proposed; preserve existing directories and conventions where the
 
 Keep Yarn/Turborepo for JavaScript and Cargo for Rust. Use existing scripts or a small task runner to provide stable entry points; do not build a custom cross-language build framework.
 
-| Proposed developer command | Behavior                                                                                         |
-| -------------------------- | ------------------------------------------------------------------------------------------------ |
-| `dev-legacy`               | Start the established stack against isolated development data                                    |
-| `dev-mixed`                | Start frontend, gateway, required legacy services, Rust API/workers, and explicit test ownership |
-| `check-web`                | Type check, lint without automatic changes, relevant tests, and build                            |
-| `check-rust`               | Formatting check, Clippy, unit tests, and build                                                  |
-| `generate-contracts`       | Regenerate client/validation artifacts reproducibly                                              |
-| `test-contracts`           | Check real server responses and compatibility fixtures                                           |
-| `test-integration`         | Execute supported mixed-service workflows and failure cases                                      |
+| Proposed developer command | Behavior |
+| - | - |
+| `dev-legacy` | Start the established stack against isolated development data |
+| `dev-mixed` | Start frontend, gateway, required legacy services, Rust API/workers, and explicit test ownership |
+| `check-web` | Type check, lint without automatic changes, relevant tests, and build |
+| `check-rust` | Formatting check, Clippy, unit tests, and build |
+| `generate-contracts` | Regenerate client/validation artifacts reproducibly |
+| `test-contracts` | Check real server responses and compatibility fixtures |
+| `test-integration` | Execute supported mixed-service workflows and failure cases |
 
 These names describe the intended interface, not commands that already exist. Commands should provide clear prerequisite failures and avoid modifying tracked files during verification. Separate intentional formatting/generation commands from checks.
 
@@ -687,17 +687,17 @@ CI must verify the configurations that the team intends to deploy. Extend the ex
 
 ## Pull request pipeline
 
-| Job                    | Checks                                                                                                       | Trigger                                                    |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------- |
-| Change classification  | Determine affected apps, contracts, migrations, tooling, and supported runtime combinations                  | Every PR                                                   |
-| Web quality            | Strict type checking in migrated boundaries, non-mutating lint, component tests, production build            | Web, client, or relevant contract changes                  |
-| Legacy quality         | Existing application builds and relevant tests                                                               | Legacy or shared changes                                   |
-| Rust quality           | `cargo fmt --check`, Clippy, locked build, unit tests                                                        | Rust or shared contract/toolchain changes                  |
-| Database integration   | Apply authoritative migrations to ephemeral PostgreSQL; test SQL, constraints, transactions, and concurrency | Rust persistence, legacy persistence, or schema changes    |
-| Contract compatibility | Contract diff, generated artifacts, request/response validation against actual servers                       | API, gateway, schema-contract, or generated client changes |
-| Mixed workflow         | Real gateway, frontend-facing API, database, workers, and stubbed external systems                           | Migrated workflows, ownership, queues, or routing changes  |
-| Browser regression     | Focused learner/author flows and error recovery                                                              | Relevant frontend/backend changes                          |
-| Required result        | Verify every selected check succeeded and no required check was accidentally bypassed                        | Every PR                                                   |
+| Job | Checks | Trigger |
+| - | - | - |
+| Change classification | Determine affected apps, contracts, migrations, tooling, and supported runtime combinations | Every PR |
+| Web quality | Strict type checking in migrated boundaries, non-mutating lint, component tests, production build | Web, client, or relevant contract changes |
+| Legacy quality | Existing application builds and relevant tests | Legacy or shared changes |
+| Rust quality | `cargo fmt --check`, Clippy, locked build, unit tests | Rust or shared contract/toolchain changes |
+| Database integration | Apply authoritative migrations to ephemeral PostgreSQL; test SQL, constraints, transactions, and concurrency | Rust persistence, legacy persistence, or schema changes |
+| Contract compatibility | Contract diff, generated artifacts, request/response validation against actual servers | API, gateway, schema-contract, or generated client changes |
+| Mixed workflow | Real gateway, frontend-facing API, database, workers, and stubbed external systems | Migrated workflows, ownership, queues, or routing changes |
+| Browser regression | Focused learner/author flows and error recovery | Relevant frontend/backend changes |
+| Required result | Verify every selected check succeeded and no required check was accidentally bypassed | Every PR |
 
 Path filtering is an optimization, not a correctness boundary. Changes to contracts, shared packages, lockfiles, root scripts, database migrations, routing, or toolchains must trigger the relevant cross-application checks. Keep an always-running required result job so skipped optional checks do not leave branch protection pending or accidentally approve an incomplete run.
 
@@ -705,14 +705,14 @@ Use narrowly scoped warning policies. New Rust code should pass the agreed Clipp
 
 ## Supported runtime matrix
 
-| Configuration                                  | Purpose                                                      | Minimum coverage                                         |
-| ---------------------------------------------- | ------------------------------------------------------------ | -------------------------------------------------------- |
-| Current frontend with legacy backend           | Preserve existing behavior during frontend cleanup           | Critical existing author/learner journeys                |
-| Current frontend with migrated Rust capability | Validate the replacement contract and behavior               | Every migrated capability                                |
-| Legacy authoring with Rust learner workflow    | Enable the first end-to-end slice before authoring migration | Version resolution, attempt, grade, callback             |
-| Rust authoring with active legacy attempts     | Verify safe coexistence after authoring transfer             | Historical snapshots, resume, visibility and results     |
-| Previous supported frontend with new backend   | Protect cached bundles and open sessions                     | Critical reads/writes and errors                         |
-| Ownership transfer and rollback                | Validate operational safety                                  | API, worker, scheduler, callback and delayed-retry cases |
+| Configuration | Purpose | Minimum coverage |
+| - | - | - |
+| Current frontend with legacy backend | Preserve existing behavior during frontend cleanup | Critical existing author/learner journeys |
+| Current frontend with migrated Rust capability | Validate the replacement contract and behavior | Every migrated capability |
+| Legacy authoring with Rust learner workflow | Enable the first end-to-end slice before authoring migration | Version resolution, attempt, grade, callback |
+| Rust authoring with active legacy attempts | Verify safe coexistence after authoring transfer | Historical snapshots, resume, visibility and results |
+| Previous supported frontend with new backend | Protect cached bundles and open sessions | Critical reads/writes and errors |
+| Ownership transfer and rollback | Validate operational safety | API, worker, scheduler, callback and delayed-retry cases |
 
 Add a combination only if it is a supported deployment state. Each production rollout must identify the exact configuration that passed. A large arbitrary matrix of every flag combination is unnecessary.
 
@@ -728,20 +728,20 @@ Run schema evolution through one migration stream. During coexistence, keeping t
 
 ## Failure cases that must become fixtures
 
-| Scenario                                                | Expected behavior                                                             |
-| ------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Scenario | Expected behavior |
+| - | - |
 | HTTP 200 with malformed JSON or missing required fields | Invalid-response classification with actual status retained; no synthetic 500 |
-| Documented HTTP 204                                     | Valid empty success; no JSON parse attempt                                    |
-| HTTP 401 or 403                                         | Correct identity/access response; unsaved input is retained where possible    |
-| HTTP 429 with retry guidance                            | Bounded retry for eligible operations; no uncontrolled retry loop             |
-| HTTP 5xx with an HTML body                              | Preserve real status and show a safe fallback                                 |
-| Caller cancellation or stale read                       | No misleading failure toast and no stale state overwrite                      |
-| Body transfer stalls                                    | Deadline/recovery behavior works after headers have arrived                   |
-| Submission accepted but response lost                   | Reconcile the original operation; no duplicate authoritative submission       |
-| Autosave responses arrive out of order                  | The latest edits remain authoritative and accurately marked saved/unsaved     |
-| SSE disconnects or replays events                       | Recover from a snapshot or ordered events without regressing terminal state   |
-| Worker crashes or loses its lease                       | Recover work without a stale worker committing a second result                |
-| LMS callback times out after remote acceptance          | Surface ambiguous outcome and reconcile according to the integration contract |
+| Documented HTTP 204 | Valid empty success; no JSON parse attempt |
+| HTTP 401 or 403 | Correct identity/access response; unsaved input is retained where possible |
+| HTTP 429 with retry guidance | Bounded retry for eligible operations; no uncontrolled retry loop |
+| HTTP 5xx with an HTML body | Preserve real status and show a safe fallback |
+| Caller cancellation or stale read | No misleading failure toast and no stale state overwrite |
+| Body transfer stalls | Deadline/recovery behavior works after headers have arrived |
+| Submission accepted but response lost | Reconcile the original operation; no duplicate authoritative submission |
+| Autosave responses arrive out of order | The latest edits remain authoritative and accurately marked saved/unsaved |
+| SSE disconnects or replays events | Recover from a snapshot or ordered events without regressing terminal state |
+| Worker crashes or loses its lease | Recover work without a stale worker committing a second result |
+| LMS callback times out after remote acceptance | Surface ambiguous outcome and reconcile according to the integration contract |
 
 Use browser network fixtures or an equivalent controlled mock layer for malformed and interrupted responses. Add a smaller set of real-browser integration tests through the deployed gateway. Keep unit and component tests fast; use the full browser matrix for the release candidate and affected high-risk changes.
 
@@ -777,14 +777,14 @@ The manifest is the tested system configuration. Individual components can deplo
 
 ## Environment progression
 
-| Stage                      | Execution policy                                                                                           | Evidence to advance                                         |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| Local                      | Synthetic identities and seeded cohorts; external effects stubbed                                          | Reproducible developer journey                              |
-| CI/preview                 | Isolated database, storage namespace, queues, and callbacks                                                | Relevant automated tests pass                               |
-| Staging                    | Production-like authentication, ingress, storage and resource limits; sandbox integrations                 | Complete workflow and recovery rehearsal                    |
+| Stage | Execution policy | Evidence to advance |
+| - | - | - |
+| Local | Synthetic identities and seeded cohorts; external effects stubbed | Reproducible developer journey |
+| CI/preview | Isolated database, storage namespace, queues, and callbacks | Relevant automated tests pass |
+| Staging | Production-like authentication, ingress, storage and resource limits; sandbox integrations | Complete workflow and recovery rehearsal |
 | Production dark deployment | Rust deployed but assigned no authoritative workloads; consumers disabled or limited to isolated test work | Readiness, telemetry, configuration and isolation confirmed |
-| Production canary cohorts  | Explicit selected assignments and operations owned by Rust                                                 | Quality, error, cost, latency and reconciliation gates      |
-| Expanded production        | Larger supported cohorts with recorded ownership                                                           | Observation window and rollback readiness maintained        |
+| Production canary cohorts | Explicit selected assignments and operations owned by Rust | Quality, error, cost, latency and reconciliation gates |
+| Expanded production | Larger supported cohorts with recorded ownership | Observation window and rollback readiness maintained |
 
 “Dark deployment” must include worker behavior. Deploying an API with no inbound traffic does not stop a newly started worker or scheduler from consuming shared production work. Queue subscriptions, scheduled tasks, credentials, and external dispatch must all be controlled explicitly.
 
@@ -826,14 +826,14 @@ The rollout operator, technical lead, quality owner, and assessment owner should
 
 # 19 Delivery roadmap and capability sequencing
 
-| Phase                                 | Indicative duration | Deliverables                                                                                                                                     | Exit condition                                                                                  |
-| ------------------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
-| 0 Discovery and contracts             | 2–3 weeks           | Pinned source/deployment inventory; behavior and format matrix; API/error contracts; baselines; reference corpus                                 | Required behavior and key unknowns have named owners                                            |
-| 1 Foundation and frontend boundary    | 3–4 weeks           | Rust toolchain/API skeleton; CI and mixed-mode development; validated client; honest error handling; safe read comparisons                       | Foundation deploys without production work; priority frontend fixtures pass                     |
-| 2 Objective learner workflow          | 3–5 weeks           | Legacy-published assessment → Rust attempt/resume/save/submit → deterministic grade → progress/result → sandbox LMS; durable jobs where required | End-to-end behavior, lost-response recovery, ownership and rollback pass                        |
-| 3 Authoring and publication           | 4–6 weeks           | Draft/version commands, compatibility APIs, publication and required localization, authoring ownership transfer                                  | Author journeys pass; active attempts retain their original assessment meaning                  |
-| 4 AI grading and evidence             | 5–7 weeks           | Versioned AI orchestration, evidence processing, heavy-worker isolation, regrading and operational recovery                                      | Grading/evidence corpus and delivery/recovery gates pass                                        |
-| 5 Supporting capabilities and rollout | 4–6 weeks           | Required chat, analytics, support/admin integrations; remaining formats or accepted bridges; cohort expansion and retirement                     | Every required capability is covered and every retired component has zero outstanding ownership |
+| Phase | Indicative duration | Deliverables | Exit condition |
+| - | - | - | - |
+| 0 Discovery and contracts | 2–3 weeks | Pinned source/deployment inventory; behavior and format matrix; API/error contracts; baselines; reference corpus | Required behavior and key unknowns have named owners |
+| 1 Foundation and frontend boundary | 3–4 weeks | Rust toolchain/API skeleton; CI and mixed-mode development; validated client; honest error handling; safe read comparisons | Foundation deploys without production work; priority frontend fixtures pass |
+| 2 Objective learner workflow | 3–5 weeks | Legacy-published assessment → Rust attempt/resume/save/submit → deterministic grade → progress/result → sandbox LMS; durable jobs where required | End-to-end behavior, lost-response recovery, ownership and rollback pass |
+| 3 Authoring and publication | 4–6 weeks | Draft/version commands, compatibility APIs, publication and required localization, authoring ownership transfer | Author journeys pass; active attempts retain their original assessment meaning |
+| 4 AI grading and evidence | 5–7 weeks | Versioned AI orchestration, evidence processing, heavy-worker isolation, regrading and operational recovery | Grading/evidence corpus and delivery/recovery gates pass |
+| 5 Supporting capabilities and rollout | 4–6 weeks | Required chat, analytics, support/admin integrations; remaining formats or accepted bridges; cohort expansion and retirement | Every required capability is covered and every retired component has zero outstanding ownership |
 
 These ranges describe workstreams with deliberate overlap; they are not dates or a promise that all phases run in parallel. Discovery, frontend cleanup, corpus construction, and selected adapters can overlap, while production expansion depends on the relevant gates. The overall planning allowance is 24–32 weeks with the team in Section 21, subject to re-estimation after discovery. The objective learner slice precedes authoring migration; AI evaluation and historical-data compatibility are likely schedule drivers.
 
@@ -903,14 +903,14 @@ Keep a runbook with trigger, incident owner, traffic switch, worker pause, data 
 
 ## Planning team
 
-| Role                                              | Planning allocation                                   | Main responsibility                                                         |
-| ------------------------------------------------- | ----------------------------------------------------- | --------------------------------------------------------------------------- |
-| Technical lead with Rust and migration experience | 1 full time                                           | Domain decisions, compatibility, architecture and cutover                   |
-| Backend Rust engineers                            | 3 full time                                           | API, persistence, grading, jobs and integration adapters                    |
-| Frontend engineer                                 | 1 full time                                           | Rendering continuity, client contracts, visual and interaction preservation |
-| Quality and automation engineer                   | 1 full time                                           | Contract suite, corpus tooling, browser and recovery tests                  |
-| Platform/SRE engineer                             | About 0.5 full time                                   | Deployment, observability, capacity and rollback                            |
-| Assessment/product specialist                     | About 0.25 full time, with additional review at gates | Intended scoring behavior, evaluation acceptance and scope                  |
+| Role | Planning allocation | Main responsibility |
+| - | - | - |
+| Technical lead with Rust and migration experience | 1 full time | Domain decisions, compatibility, architecture and cutover |
+| Backend Rust engineers | 3 full time | API, persistence, grading, jobs and integration adapters |
+| Frontend engineer | 1 full time | Rendering continuity, client contracts, visual and interaction preservation |
+| Quality and automation engineer | 1 full time | Contract suite, corpus tooling, browser and recovery tests |
+| Platform/SRE engineer | About 0.5 full time | Deployment, observability, capacity and rollback |
+| Assessment/product specialist | About 0.25 full time, with additional review at gates | Intended scoring behavior, evaluation acceptance and scope |
 
 At the stated allocation, a 24–32 week programme represents approximately **160–215 person-weeks**, including platform and product participation. This is a rough planning allowance, not a fixed quote or a code-size-derived estimate. It includes frontend API/error restructuring, CI/tooling, and staged delivery as parts of the existing workstreams. Re-estimate after Phase 0 using actual scope, parallel capacity, historical-data exceptions, and the extraction corpus. Do not treat the lower bound as a commitment before those inputs are known.
 
@@ -942,20 +942,20 @@ The investment case is strongest if the migration reduces failure/recovery compl
 
 Build tests around observable behavior and domain invariants. Reuse useful existing browser tests, but do not assume they fully specify the product. Mark’s documented Playwright setup already separates author and learner projects across Chromium, Firefox, and WebKit. [Testing guide](https://github.com/ibm-skills-network/mark/blob/master/TESTING.md).
 
-| Area                     | Required evidence before rollout                                                                                                                     |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Capability coverage      | Every required journey has an owner, implementation or accepted adapter, and passing acceptance evidence                                             |
-| Deterministic behavior   | All approved objective-scoring, eligibility, ordering, visibility, and serialization fixtures pass exactly                                           |
-| AI grading quality       | Human-adjudicated corpus results meet pre-agreed non-inferiority thresholds by format, language, and rubric type                                     |
-| Evidence fidelity        | Required pages, tables, code, images and citations survive extraction; truncation and unsupported content are explicit                               |
-| Data integrity           | No unexplained reconciliation differences for the cohort; identifiers, relationships, grades, and artifact references agree                          |
-| Reliability              | Crash, timeout, retry, lease-expiry, and duplicate-request tests preserve one authoritative outcome                                                  |
-| LMS delivery             | Duplicate and out-of-order scenarios do not replace a newer grade; ambiguous outcomes are visible and reconcilable                                   |
-| Frontend                 | Critical journeys pass; invalid responses never become fabricated 500s; lost-response recovery preserves submissions; edits and themes remain intact |
-| Contracts and CI         | Real implementations satisfy reviewed schemas; generated clients are current; supported legacy/mixed/previous-client combinations pass               |
-| Deployment and ownership | Immutable manifest, one migration stream, fenced writers, controlled worker subscriptions, and a rehearsed rollback are demonstrated                 |
-| Access                   | Negative tests cover cross-user, cross-assignment, cross-course, forged-context, and privileged-operation cases                                      |
-| Operations               | Dashboards, alerts, recovery actions, queue inspection, restore rehearsal, and cutover runbook are demonstrated                                      |
+| Area | Required evidence before rollout |
+| - | - |
+| Capability coverage | Every required journey has an owner, implementation or accepted adapter, and passing acceptance evidence |
+| Deterministic behavior | All approved objective-scoring, eligibility, ordering, visibility, and serialization fixtures pass exactly |
+| AI grading quality | Human-adjudicated corpus results meet pre-agreed non-inferiority thresholds by format, language, and rubric type |
+| Evidence fidelity | Required pages, tables, code, images and citations survive extraction; truncation and unsupported content are explicit |
+| Data integrity | No unexplained reconciliation differences for the cohort; identifiers, relationships, grades, and artifact references agree |
+| Reliability | Crash, timeout, retry, lease-expiry, and duplicate-request tests preserve one authoritative outcome |
+| LMS delivery | Duplicate and out-of-order scenarios do not replace a newer grade; ambiguous outcomes are visible and reconcilable |
+| Frontend | Critical journeys pass; invalid responses never become fabricated 500s; lost-response recovery preserves submissions; edits and themes remain intact |
+| Contracts and CI | Real implementations satisfy reviewed schemas; generated clients are current; supported legacy/mixed/previous-client combinations pass |
+| Deployment and ownership | Immutable manifest, one migration stream, fenced writers, controlled worker subscriptions, and a rehearsed rollback are demonstrated |
+| Access | Negative tests cover cross-user, cross-assignment, cross-course, forged-context, and privileged-operation cases |
+| Operations | Dashboards, alerts, recovery actions, queue inspection, restore rehearsal, and cutover runbook are demonstrated |
 
 ## Grading evaluation design
 
@@ -977,20 +977,20 @@ Test database and Redis outages, worker termination before and after commit, obj
 
 # 23 Principal risks and decision register
 
-| Risk                                      | Consequence                                                                    | Mitigation and owner                                                                         |
-| ----------------------------------------- | ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------- |
-| Undocumented deployed behavior            | Correct source-level rewrite breaks real institutions                          | Lead and product owner capture contracts from deployed revision and representative users     |
-| Historical version ambiguity              | Existing attempts are graded against the wrong content                         | Data lead defines legacy snapshots and exception handling before migration                   |
-| Extraction differences                    | Missing evidence changes grades                                                | Backend and assessment specialist maintain a format corpus; retain adapters until proven     |
-| Concurrent legacy and Rust writers        | Duplicate publication, inconsistent results, stale callbacks                   | Lead enforces ownership records, fencing, and controlled transfer                            |
-| Queue semantics lost                      | Accepted jobs disappear or run with duplicate effects                          | Backend/SRE test crash recovery, delayed retries, and idempotency                            |
-| Authentication and LMS cookie changes     | Launch failures or unauthorized resource access                                | Access owner tests real embedded launch flows and gateway trust boundaries                   |
-| AI changes mixed with rewrite             | Quality regression cannot be attributed                                        | Evaluation owner versions prompts/models and separates experiments                           |
-| Rich-text normalization drift             | Content or rendering is damaged                                                | Frontend/data owners preserve originals and test shared fixtures                             |
-| Supporting features overlooked            | Admin/support workflows fail after core launch                                 | Product owner signs off a complete capability disposition matrix                             |
-| Frontend contract drift or cached clients | Misleading errors, broken active assessments, or invalid data reaching screens | Frontend/API owners validate boundaries and maintain a supported client-version window       |
-| CI selection misses a shared change       | An untested mixed release reaches production                                   | Quality/platform owners test the dependency matrix and use an always-running required result |
-| Rust skills or ecosystem gaps             | Delivery slows and bridges become permanent by accident                        | Lead runs early spikes and assigns each bridge an owner and exit criterion                   |
+| Risk | Consequence | Mitigation and owner |
+| - | - | - |
+| Undocumented deployed behavior | Correct source-level rewrite breaks real institutions | Lead and product owner capture contracts from deployed revision and representative users |
+| Historical version ambiguity | Existing attempts are graded against the wrong content | Data lead defines legacy snapshots and exception handling before migration |
+| Extraction differences | Missing evidence changes grades | Backend and assessment specialist maintain a format corpus; retain adapters until proven |
+| Concurrent legacy and Rust writers | Duplicate publication, inconsistent results, stale callbacks | Lead enforces ownership records, fencing, and controlled transfer |
+| Queue semantics lost | Accepted jobs disappear or run with duplicate effects | Backend/SRE test crash recovery, delayed retries, and idempotency |
+| Authentication and LMS cookie changes | Launch failures or unauthorized resource access | Access owner tests real embedded launch flows and gateway trust boundaries |
+| AI changes mixed with rewrite | Quality regression cannot be attributed | Evaluation owner versions prompts/models and separates experiments |
+| Rich-text normalization drift | Content or rendering is damaged | Frontend/data owners preserve originals and test shared fixtures |
+| Supporting features overlooked | Admin/support workflows fail after core launch | Product owner signs off a complete capability disposition matrix |
+| Frontend contract drift or cached clients | Misleading errors, broken active assessments, or invalid data reaching screens | Frontend/API owners validate boundaries and maintain a supported client-version window |
+| CI selection misses a shared change | An untested mixed release reaches production | Quality/platform owners test the dependency matrix and use an always-running required result |
+| Rust skills or ecosystem gaps | Delivery slows and bridges become permanent by accident | Lead runs early spikes and assigns each bridge an owner and exit criterion |
 
 ## Decisions to close in discovery
 
@@ -1020,22 +1020,22 @@ The initial delivery commitment is the foundation and a complete objective learn
 
 The backlog below turns the architecture into reviewable increments. It is a proposed sequence for implementation, not a list of repository changes already made. Keep PRs small enough to review; a backlog item can require several PRs.
 
-| Order | Deliverable                                                                                         | Depends on                           | Completion evidence                                                             |
-| ----- | --------------------------------------------------------------------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------- |
-| 1     | Pin source and deployed versions; inventory active routes, jobs, formats, integrations, and writers | Discovery access                     | Reviewed capability/ownership matrix with unresolved items assigned             |
-| 2     | Capture objective assessment and error/recovery fixtures                                            | Product and assessment review        | Reproducible anonymized/synthetic corpus with intended outcomes                 |
-| 3     | Add Rust workspace, pinned toolchain, formatting/lint/build/test CI                                 | Existing repository conventions      | Clean checkout passes checks and builds an image                                |
-| 4     | Add Rust health/readiness/configuration/telemetry and staging deployment with no production work    | Foundation                           | Correlated test request and verified disabled consumers                         |
-| 5     | Establish reviewed endpoint/error contracts and generated client/validators                         | Prioritized route inventory          | Generation and real-response validation checks pass                             |
-| 6     | Remove fabricated error-status defaults from migrated UI paths; separate transport and presentation | Error contract                       | Network, invalid-response, cancellation, and real HTTP errors display correctly |
-| 7     | Add mixed development mode and CI services with seeded ownership                                    | Foundation and fixtures              | One documented command boots a predictable mixed stack                          |
-| 8     | Implement authenticated Rust assignment reads and version resolution                                | Access contract, SQL integration     | Legacy comparison and negative access tests pass                                |
-| 9     | Implement ownership enforcement and additive operation/idempotency structures                       | Schema plan and runtime contracts    | Late/wrong-owner writers fail safely; no duplicate command effect               |
-| 10    | Implement Rust attempt start/resume/save/submit and objective scoring                               | Reads, ownership, lifecycle fixtures | Repeated and concurrent requests preserve intended attempt/grade outcomes       |
-| 11    | Add progress, outbox delivery, worker recovery, and sandbox LMS integration                         | Durable operations                   | Accepted-but-response-lost and worker-crash scenarios recover                   |
-| 12    | Wire the existing frontend to the first complete Rust workflow                                      | Validated client and runtime slice   | Learner browser journey passes with unchanged visual design                     |
-| 13    | Rehearse ownership transfer and rollback; select initial internal cohort                            | Complete slice and manifest          | Recovery runbook demonstrated with no lost acknowledged work                    |
-| 14    | Expand into authoring/publication and AI/evidence workstreams                                       | Phase gates                          | Each capability has its own acceptance and rollout evidence                     |
+| Order | Deliverable | Depends on | Completion evidence |
+| - | - | - | - |
+| 1 | Pin source and deployed versions; inventory active routes, jobs, formats, integrations, and writers | Discovery access | Reviewed capability/ownership matrix with unresolved items assigned |
+| 2 | Capture objective assessment and error/recovery fixtures | Product and assessment review | Reproducible anonymized/synthetic corpus with intended outcomes |
+| 3 | Add Rust workspace, pinned toolchain, formatting/lint/build/test CI | Existing repository conventions | Clean checkout passes checks and builds an image |
+| 4 | Add Rust health/readiness/configuration/telemetry and staging deployment with no production work | Foundation | Correlated test request and verified disabled consumers |
+| 5 | Establish reviewed endpoint/error contracts and generated client/validators | Prioritized route inventory | Generation and real-response validation checks pass |
+| 6 | Remove fabricated error-status defaults from migrated UI paths; separate transport and presentation | Error contract | Network, invalid-response, cancellation, and real HTTP errors display correctly |
+| 7 | Add mixed development mode and CI services with seeded ownership | Foundation and fixtures | One documented command boots a predictable mixed stack |
+| 8 | Implement authenticated Rust assignment reads and version resolution | Access contract, SQL integration | Legacy comparison and negative access tests pass |
+| 9 | Implement ownership enforcement and additive operation/idempotency structures | Schema plan and runtime contracts | Late/wrong-owner writers fail safely; no duplicate command effect |
+| 10 | Implement Rust attempt start/resume/save/submit and objective scoring | Reads, ownership, lifecycle fixtures | Repeated and concurrent requests preserve intended attempt/grade outcomes |
+| 11 | Add progress, outbox delivery, worker recovery, and sandbox LMS integration | Durable operations | Accepted-but-response-lost and worker-crash scenarios recover |
+| 12 | Wire the existing frontend to the first complete Rust workflow | Validated client and runtime slice | Learner browser journey passes with unchanged visual design |
+| 13 | Rehearse ownership transfer and rollback; select initial internal cohort | Complete slice and manifest | Recovery runbook demonstrated with no lost acknowledged work |
+| 14 | Expand into authoring/publication and AI/evidence workstreams | Phase gates | Each capability has its own acceptance and rollout evidence |
 
 ## Foundation PR scope
 
@@ -1061,15 +1061,15 @@ An increment is complete when its capability contract is reviewed; the frontend 
 
 ## Decision ownership
 
-| Role                  | Accountable decisions                                                                           |
-| --------------------- | ----------------------------------------------------------------------------------------------- |
-| Product owner         | Required capabilities, supported formats/locales, deliberate behavior changes and retirements   |
-| Technical lead        | Domain boundaries, API contracts, ownership model, compatibility and dependency order           |
-| Frontend owner        | Runtime validation, error presentation, state recovery, visual preservation and rendering trial |
-| Backend/data owner    | Transactions, schema evolution, historical snapshots, idempotency and reconciliation            |
-| Assessment specialist | Rubric interpretation, grading corpus, quality thresholds and adjudication                      |
-| Quality owner         | Contract/browser/failure evidence and supported runtime matrix                                  |
-| Platform/SRE owner    | Release manifest, migrations, queue isolation, monitoring, capacity and rollback execution      |
+| Role | Accountable decisions |
+| - | - |
+| Product owner | Required capabilities, supported formats/locales, deliberate behavior changes and retirements |
+| Technical lead | Domain boundaries, API contracts, ownership model, compatibility and dependency order |
+| Frontend owner | Runtime validation, error presentation, state recovery, visual preservation and rendering trial |
+| Backend/data owner | Transactions, schema evolution, historical snapshots, idempotency and reconciliation |
+| Assessment specialist | Rubric interpretation, grading corpus, quality thresholds and adjudication |
+| Quality owner | Contract/browser/failure evidence and supported runtime matrix |
+| Platform/SRE owner | Release manifest, migrations, queue isolation, monitoring, capacity and rollback execution |
 
 Assign named people at kickoff. Small teams may combine roles, but each decision still needs an accountable owner.
 
@@ -1077,14 +1077,14 @@ Record architecture decisions for the authoritative API schema, initial queue tr
 
 ## Milestone reviews
 
-| Gate                          | Required demonstration                                                                                    |
-| ----------------------------- | --------------------------------------------------------------------------------------------------------- |
-| Foundation ready              | Reproducible tooling, required CI, isolated deployment, and no accidental production consumption          |
-| Frontend boundary ready       | Priority endpoints validated; errors classified truthfully; user edits and submission uncertainty handled |
-| First workflow ready          | Authenticated objective assessment reaches a durable grade and sandbox LMS through the real frontend      |
-| First production cohort ready | Ownership fencing, compatible schema, rollback rehearsal, telemetry and support coverage                  |
-| Capability expansion ready    | Required formats/locales and quality margins pass; operations can recover failures                        |
-| Legacy retirement ready       | No remaining owned work, consumers, callbacks, schedules, or unsupported client dependencies              |
+| Gate | Required demonstration |
+| - | - |
+| Foundation ready | Reproducible tooling, required CI, isolated deployment, and no accidental production consumption |
+| Frontend boundary ready | Priority endpoints validated; errors classified truthfully; user edits and submission uncertainty handled |
+| First workflow ready | Authenticated objective assessment reaches a durable grade and sandbox LMS through the real frontend |
+| First production cohort ready | Ownership fencing, compatible schema, rollback rehearsal, telemetry and support coverage |
+| Capability expansion ready | Required formats/locales and quality margins pass; operations can recover failures |
+| Legacy retirement ready | No remaining owned work, consumers, callbacks, schedules, or unsupported client dependencies |
 
 Review progress through working demonstrations and evidence, not file counts or the number of Rust modules. Maintain a single capability register with status, owner, contract version, test coverage, execution owner, remaining adapters, and retirement criteria.
 

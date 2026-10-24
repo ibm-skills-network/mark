@@ -114,6 +114,36 @@ app.kubernetes.io/name: {{ include "mark.jobs.name" . }}
 
 {{/*
 ###############################
+rust-api helpers
+###############################
+*/}}
+
+{{- define "mark.rustApi.name" -}}
+{{- printf "%s-%s" (include "mark.fullname" .) "rust-api" | replace "+" "_" | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{- define "mark.rustApi.labels" -}}
+app.kubernetes.io/name: {{ include "mark.rustApi.name" . }}
+{{ include "mark.selectorLabels" . }}
+{{- end }}
+
+{{/*
+###############################
+rust-worker helpers
+###############################
+*/}}
+
+{{- define "mark.rustWorker.name" -}}
+{{- printf "%s-%s" (include "mark.fullname" .) "rust-worker" | replace "+" "_" | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{- define "mark.rustWorker.labels" -}}
+app.kubernetes.io/name: {{ include "mark.rustWorker.name" . }}
+{{ include "mark.selectorLabels" . }}
+{{- end }}
+
+{{/*
+###############################
 ui helpers
 ###############################
 */}}
