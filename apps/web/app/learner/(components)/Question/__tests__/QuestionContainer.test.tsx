@@ -3,13 +3,14 @@
  */
 
 import React from "react";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QuestionDisplayType, type QuestionStore } from "@/config/types";
 import {
   useAssignmentDetails,
   useLearnerOverviewStore,
   useLearnerStore,
 } from "@/stores/learner";
+import { translateQuestion } from "@/lib/talkToBackend";
 import QuestionContainer from "../QuestionContainer";
 
 jest.mock("../RenderQuestion", () => ({
@@ -193,5 +194,64 @@ describe("QuestionContainer submit affordance", () => {
         screen.getByRole("button", { name: /submit assignment/i }),
       ).toBeDisabled();
     });
+  });
+});
+
+describe("QuestionContainer translation", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    learnerState = {
+      ...buildLearnerState(),
+      getTranslationOn: () => true,
+    };
+    (useLearnerStore as unknown as jest.Mock).mockImplementation(
+      (selector: (state: typeof learnerState) => unknown) =>
+        selector(learnerState),
+    );
+    (useAssignmentDetails as unknown as jest.Mock).mockImplementation(
+      (selector: (state: unknown) => unknown) =>
+        selector({ assignmentDetails: { questionControls: null } }),
+    );
+    (useLearnerOverviewStore as unknown as jest.Mock).mockImplementation(
+      (selector: (state: unknown) => unknown) => selector({ assignmentId: 1 }),
+    );
+  });
+
+  const renderSpanish = () =>
+    render(
+      <QuestionContainer
+        question={{ ...question, selectedLanguage: "Español" }}
+        questionNumber={1}
+        questionId={question.id}
+        questionDisplay={QuestionDisplayType.ONE_PER_PAGE}
+        lastQuestionNumber={1}
+      />,
+    );
+
+  it("asks for the selected language by code only", async () => {
+    (translateQuestion as jest.Mock).mockResolvedValue({
+      translatedQuestion: "<p>Explica tu respuesta</p>",
+    });
+
+    renderSpanish();
+
+    await waitFor(() =>
+      expect(learnerState.setTranslatedQuestion).toHaveBeenCalledWith(
+        question.id,
+        "<p>Explica tu respuesta</p>",
+      ),
+    );
+    expect(translateQuestion).toHaveBeenCalledWith(1, question.id, "es");
+  });
+
+  it("leaves the question untranslated when the server declines", async () => {
+    (translateQuestion as jest.Mock).mockResolvedValue(null);
+
+    renderSpanish();
+
+    await waitFor(() => expect(translateQuestion).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(learnerState.setTranslatedQuestion).not.toHaveBeenCalled();
+    expect(learnerState.setTranslatedChoices).not.toHaveBeenCalled();
   });
 });

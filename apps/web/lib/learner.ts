@@ -1245,38 +1245,6 @@ export async function getAssignmentVersionInfo(
 }
 
 /**
- * Get real-time grading progress for an assignment attempt
- */
-export interface GradingProgress {
-  id: number;
-  attemptId: number;
-  status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
-  currentQuestion: number | null;
-  totalQuestions: number;
-  currentStage: string | null;
-  progress: number;
-  error: string | null;
-  notifyOnComplete: boolean;
-  notificationEmail: string | null;
-  completedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export async function getGradingProgress(
-  assignmentId: number,
-  attemptId: number,
-): Promise<GradingProgress | null> {
-  try {
-    const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/attempts/${attemptId}/progress`;
-    const response = await apiClient.get<GradingProgress>(endpointURL);
-    return response;
-  } catch (err) {
-    return null;
-  }
-}
-
-/**
  * Subscribe to email notification when grading is complete
  */
 export async function subscribeToGradingNotification(

@@ -48,9 +48,35 @@ describe("getAttemptSubmissionStatus", () => {
       expect.stringMatching(
         /\/assignments\/771\/attempts\/1873208\/submission-status$/,
       ),
-      { quiet: true },
+      { quiet: true, transformResponse: false },
     );
     expect(result).toMatchObject({ ok: true, serverTimeOffsetMs: -5000 });
+  });
+
+  it("returns the plain-JSON status body as served", async () => {
+    const body = status({
+      submitted: true,
+      closedAtTimeLimit: true,
+      acceptingSubmissions: false,
+      expiresAt: null,
+    });
+    mockGet.mockResolvedValue(body);
+
+    const result = await getAttemptSubmissionStatus(771, 1873208);
+
+    expect(result).toMatchObject({ ok: true, status: body });
+    if (result.ok) {
+      expect(closedAttemptReason(result.status)).toBe("time_limit");
+    }
+  });
+
+  it("rejects a body missing the required fields", async () => {
+    mockGet.mockResolvedValue({ id: 1, serverNow: "2026-10-21T00:31:10.000Z" });
+    jest.spyOn(console, "warn").mockImplementation(() => undefined);
+
+    await expect(getAttemptSubmissionStatus(771, 1)).resolves.toEqual({
+      ok: false,
+    });
   });
 
   it("reports failure instead of throwing when the request fails", async () => {

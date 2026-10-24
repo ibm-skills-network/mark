@@ -662,6 +662,74 @@ describe("LearnerHeader submit gating", () => {
   });
 });
 
+describe("LearnerHeader submit payload", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    localStorage.clear();
+    mockSearchParams.mockImplementation(() => new URLSearchParams());
+    mockUseParams.mockReturnValue({ assignmentId: "3428" });
+    mockSubmitAssignment.mockResolvedValue(undefined);
+  });
+
+  const upload = {
+    filename: "report.pdf",
+    key: "3428/learner@example.com/2/report.pdf",
+    bucket: "learner-bucket",
+    fileType: "application/pdf",
+  };
+
+  // A learner mid-attempt when the repository picker went away can still hold
+  // its entries; sent as-is they fail the whole submit.
+  it("sends file answers as upload references only, dropping older entries", async () => {
+    seedLearnerState(null);
+    useLearnerStore.setState({
+      questions: [
+        answeredQuestion,
+        {
+          id: 2,
+          type: "UPLOAD",
+          status: "edited",
+          learnerFileResponse: [
+            {
+              filename: "main.py",
+              githubUrl: "https://github.com/o/r/blob/main/main.py",
+              owner: "o",
+              repo: "r",
+              path: "main.py",
+              content: "print('hi')\n".repeat(100),
+            },
+            { ...upload, content: "full text ".repeat(100) },
+          ],
+        } as unknown as QuestionStore,
+      ],
+    });
+
+    render(<LearnerHeader />);
+    await triggerSubmit();
+
+    expect(mockSubmitAssignment).toHaveBeenCalledTimes(1);
+    const responses = mockSubmitAssignment.mock.calls[0][2] as {
+      id: number;
+      learnerFileResponse: unknown[];
+    }[];
+    expect(responses.find((r) => r.id === 2)?.learnerFileResponse).toEqual([
+      { ...upload, content: "InCos" },
+    ]);
+    expect(responses.find((r) => r.id === 1)?.learnerFileResponse).toEqual([]);
+  });
+
+  it("names a supported language even when the stored preference is not one", async () => {
+    seedLearnerState(null);
+    useLearnerStore.setState({ userPreferedLanguage: "xx" });
+
+    render(<LearnerHeader />);
+    await triggerSubmit();
+
+    expect(mockSubmitAssignment).toHaveBeenCalledTimes(1);
+    expect(mockSubmitAssignment.mock.calls[0][3]).toBe("en");
+  });
+});
+
 describe("Regression: stale automatic language fetch", () => {
   it("ignores the prior attempt response after the attempt changes", async () => {
     jest.clearAllMocks();

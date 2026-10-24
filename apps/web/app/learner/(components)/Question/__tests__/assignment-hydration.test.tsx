@@ -227,8 +227,15 @@ describe("QuestionPage assignment hydration", () => {
     [
       "UPLOAD",
       "learnerFileResponse",
-      [{ filename: "answer.pdf" }],
-      [{ filename: "answer.pdf" }],
+      [{ filename: "answer.pdf", key: "42/u/7/answer.pdf", bucket: "b" }],
+      [
+        {
+          filename: "answer.pdf",
+          key: "42/u/7/answer.pdf",
+          bucket: "b",
+          content: "InCos",
+        },
+      ],
       [],
     ],
   ] as const)(
@@ -272,4 +279,48 @@ describe("QuestionPage assignment hydration", () => {
       expect(useLearnerStore.getState().questions[0][field]).toEqual(draft);
     },
   );
+
+  it("restores only uploaded-file references from an older client's draft", async () => {
+    const saved = [
+      {
+        filename: "main.py",
+        githubUrl: "https://github.com/o/r/blob/main/main.py",
+        owner: "o",
+        repo: "r",
+        path: "main.py",
+        content: "print('x')\n".repeat(100),
+      },
+      {
+        filename: "report.pdf",
+        key: "42/u/7/report.pdf",
+        bucket: "learner-bucket",
+        fileType: "application/pdf",
+        content: "x".repeat(1000),
+        imageAnalysisResult: { width: 1 },
+      },
+    ];
+    const attempt = {
+      ...textAttempt,
+      questions: [{ ...textAttempt.questions[0], type: "UPLOAD" }],
+      questionResponses: [
+        { ...makeResponse(90), learnerResponse: JSON.stringify(saved) },
+      ],
+    } as AssignmentAttemptWithQuestions;
+
+    render(<QuestionPage attempt={attempt} assignmentId={42} />);
+
+    await waitFor(() =>
+      expect(
+        useLearnerStore.getState().questions[0]?.learnerFileResponse,
+      ).toEqual([
+        {
+          filename: "report.pdf",
+          key: "42/u/7/report.pdf",
+          bucket: "learner-bucket",
+          fileType: "application/pdf",
+          content: "InCos",
+        },
+      ]),
+    );
+  });
 });

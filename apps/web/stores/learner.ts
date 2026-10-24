@@ -15,6 +15,7 @@ import { shallow } from "zustand/shallow";
 import { createWithEqualityFn } from "zustand/traditional";
 import { createSafeStorage } from "@/lib/safe-storage";
 import { withTextFileContent } from "@/lib/learner-file-content";
+import { toSubmittedFileReferences } from "@/lib/learner-file-response";
 import { parseRandomizedChoices } from "@/app/learner/utils/randomizedChoices";
 import type { QuestionUploadStatus, UploadStatusByQuestion } from "@/lib/utils";
 
@@ -320,6 +321,11 @@ export type LearnerActions = {
     questionId: number,
   ) => void;
   deleteFile: (fileToDelete: learnerFileResponse, questionId: number) => void;
+  /**
+   * Reduces every stored file answer to an uploaded-object reference and
+   * drops the rest, so a draft saved by an older client cannot block submit.
+   */
+  dropUnsubmittableFiles: () => void;
   setTranslationOn: (questionId: number, translationOn: boolean) => void;
   getTranslationOn: (questionId: number) => boolean;
   setSelectedLanguage: (questionId: number, language: string) => void;
@@ -446,6 +452,46 @@ const persistQuestionDraft = (question: QuestionStore) => ({
   translationOn: question.translationOn,
   selectedLanguage: question.selectedLanguage,
 });
+
+type QuestionWithFiles = Pick<QuestionStore, "learnerFileResponse">;
+
+/**
+ * File answers reduced to what the submit route accepts. Questions whose
+ * files are unchanged keep their identity so subscribers do not re-render.
+ */
+const withSubmittableFiles = <T extends QuestionWithFiles>(
+  questions: T[],
+): { questions: T[]; changed: T[] } => {
+  const changed: T[] = [];
+  const next = questions.map((question) => {
+    const files = question.learnerFileResponse;
+    if (!Array.isArray(files) || files.length === 0) return question;
+    const references = toSubmittedFileReferences(files);
+    const unchanged =
+      references.length === files.length &&
+      references.every(
+        (reference, index) =>
+          JSON.stringify(reference) === JSON.stringify(files[index]),
+      );
+    if (unchanged) return question;
+    const cleaned = { ...question, learnerFileResponse: references };
+    changed.push(cleaned);
+    return cleaned;
+  });
+  return { questions: next, changed };
+};
+
+/** Persisted drafts from before file answers were references only. */
+export const referenceOnlyStoredDrafts = (persisted: unknown): unknown => {
+  if (!persisted || typeof persisted !== "object") return persisted;
+  const state = persisted as { questions?: unknown };
+  if (!Array.isArray(state.questions)) return persisted;
+  const questions = (state.questions as unknown[]).filter(
+    (question): question is QuestionWithFiles =>
+      !!question && typeof question === "object",
+  );
+  return { ...state, questions: withSubmittableFiles(questions).questions };
+};
 
 export const useLearnerStore = createWithEqualityFn<
   LearnerState & LearnerActions
@@ -603,8 +649,12 @@ export const useLearnerStore = createWithEqualityFn<
               if (q.id === questionId) {
                 return {
                   ...q,
-                  learnerFileResponse: q.learnerFileResponse?.filter(
-                    (f) => f.filename !== file.filename,
+                  // A stored object is identified by its key; an entry
+                  // without one (saved by an older client) by its name.
+                  learnerFileResponse: q.learnerFileResponse?.filter((f) =>
+                    file.key
+                      ? f.key !== file.key
+                      : Boolean(f.key) || f.filename !== file.filename,
                   ),
                 };
               }
@@ -731,6 +781,17 @@ export const useLearnerStore = createWithEqualityFn<
             return { questions: updatedQuestions };
           });
           get().setQuestionStatus(questionId);
+        },
+        dropUnsubmittableFiles: () => {
+          const { questions, changed } = withSubmittableFiles(get().questions);
+          if (changed.length === 0) return;
+          console.warn("[learner] dropped stored file answers submit refuses", {
+            questionIds: changed.map((question) => question.id),
+          });
+          set({ questions });
+          for (const question of changed) {
+            get().setQuestionStatus(question.id);
+          }
         },
         globalLanguage: "English",
         userPreferedLanguage: null,
@@ -959,6 +1020,19 @@ export const useLearnerStore = createWithEqualityFn<
     {
       name: `learner-${ASSIGNMENT_ID}`,
       storage: createJSONStorage(() => createSafeStorage()),
+      // Version 1: file answers are uploaded-object references only.
+      version: 1,
+      migrate: (persisted) =>
+        referenceOnlyStoredDrafts(persisted) as LearnerState & LearnerActions,
+      onRehydrateStorage: () => (state, error) => {
+        if (error) {
+          console.warn("[learner] stored drafts could not be restored", {
+            error,
+          });
+          return;
+        }
+        state?.dropUnsubmittableFiles();
+      },
       partialize: (state) => ({
         questions: state.questions.map(persistQuestionDraft),
         activeAttemptId: state.activeAttemptId,

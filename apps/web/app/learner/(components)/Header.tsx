@@ -3,6 +3,7 @@
 import {
   selectedChoiceTexts,
   submissionLanguage,
+  supportedSubmissionLanguage,
 } from "@/lib/learner-choice-submission";
 import { useMarkChatStore } from "@/app/chatbot/store/useMarkChatStore";
 import { MarkChatToggleButton } from "@/components/MarkChatToggleButton";
@@ -57,7 +58,7 @@ import {
   isAttemptAlreadySubmittedError,
   isGradingStreamLostError,
 } from "@/lib/learner";
-import { withTextFileContent } from "@/lib/learner-file-content";
+import { toSubmittedFileReferences } from "@/lib/learner-file-response";
 import { isGradingUnableError } from "@/lib/grading-failure";
 
 const TRANSLATION_PREVIEW_DISABLED_TOOLTIP =
@@ -368,9 +369,7 @@ function LearnerHeader() {
                 .filter((choice) => choice !== undefined) || []
             : selectedChoiceTexts(q, userPreferedLanguage).texts,
         learnerAnswerChoice: q.learnerAnswerChoice ?? null,
-        learnerFileResponse: (q.learnerFileResponse || []).map(
-          withTextFileContent,
-        ),
+        learnerFileResponse: toSubmittedFileReferences(q.learnerFileResponse),
       }));
     } catch (error: unknown) {
       const errorMessage =
@@ -422,7 +421,7 @@ function LearnerHeader() {
         activeAttemptId,
         responsesForQuestions,
         role === "author"
-          ? userPreferedLanguage
+          ? supportedSubmissionLanguage(userPreferedLanguage)
           : submissionLanguage(questions, userPreferedLanguage),
         role === "author" ? authorQuestions : undefined,
         role === "author" ? authorAssignmentDetails : undefined,

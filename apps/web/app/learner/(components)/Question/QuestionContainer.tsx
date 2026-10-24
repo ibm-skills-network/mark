@@ -202,11 +202,10 @@ function Component(props: Props) {
       const translation = await translateQuestion(
         assignmentId,
         questionId,
-        question,
-        question.selectedLanguage,
         languages.find((lang) => lang.name === question.selectedLanguage)
           ?.code || "en",
       );
+      if (!translation) return;
 
       setTranslatedQuestion(questionId, translation.translatedQuestion);
       if (translation.translatedChoices) {

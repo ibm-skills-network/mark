@@ -73,10 +73,10 @@ const FileUploadSection = ({
               lastUploadFailedRef.current = false;
               addFileUpload(file, questionId);
             }}
-            onDeleteComplete={(key: string) => {
-              const fileToDelete = learnerFileResponse.find(
-                (file) => file.key === key,
-              );
+            onDeleteComplete={(deleted: learnerFileResponse) => {
+              const fileToDelete = deleted.key
+                ? learnerFileResponse.find((file) => file.key === deleted.key)
+                : deleted;
               if (fileToDelete) {
                 removeFileUpload(fileToDelete, questionId);
               }

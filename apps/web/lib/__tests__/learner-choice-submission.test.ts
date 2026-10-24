@@ -2,6 +2,7 @@ import type { QuestionStore } from "@/config/types";
 import {
   selectedChoiceTexts,
   submissionLanguage,
+  supportedSubmissionLanguage,
 } from "../learner-choice-submission";
 
 const question = (overrides: Partial<QuestionStore>): QuestionStore =>
@@ -85,5 +86,38 @@ describe("submissionLanguage", () => {
 
   it("keeps the preference when the fetch language is unknown", () => {
     expect(submissionLanguage([question({})], "en")).toBe("en");
+  });
+
+  it("falls back to en when the preference is not a supported code", () => {
+    expect(submissionLanguage([question({ learnerChoices: [] })], "xx")).toBe(
+      "en",
+    );
+    expect(submissionLanguage([question({ learnerChoices: [] })], null)).toBe(
+      "en",
+    );
+  });
+
+  it("keeps the preference when the choices were fetched in an unsupported language", () => {
+    expect(
+      submissionLanguage([question({ contentLanguage: "klingon" })], "fr"),
+    ).toBe("fr");
+    expect(
+      submissionLanguage([question({ contentLanguage: "klingon" })], "xx"),
+    ).toBe("en");
+  });
+});
+
+describe("supportedSubmissionLanguage", () => {
+  it("keeps a supported code in the list's spelling", () => {
+    expect(supportedSubmissionLanguage("zh-cn")).toBe("zh-CN");
+    expect(supportedSubmissionLanguage("uk-UA")).toBe("uk-UA");
+    expect(supportedSubmissionLanguage("ja")).toBe("ja");
+  });
+
+  it("maps anything else to en", () => {
+    expect(supportedSubmissionLanguage("uk")).toBe("en");
+    expect(supportedSubmissionLanguage("en-US")).toBe("en");
+    expect(supportedSubmissionLanguage("")).toBe("en");
+    expect(supportedSubmissionLanguage(undefined)).toBe("en");
   });
 });

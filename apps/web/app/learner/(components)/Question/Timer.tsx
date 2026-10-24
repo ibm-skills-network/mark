@@ -1,6 +1,7 @@
 import {
   selectedChoiceTexts,
   submissionLanguage,
+  supportedSubmissionLanguage,
 } from "@/lib/learner-choice-submission";
 import { readAuthorPreviewPayload } from "@/app/learner/utils/authorPreview";
 import type {
@@ -17,6 +18,7 @@ import {
   isGradingStreamLostError,
 } from "@/lib/learner";
 import { isGradingUnableError } from "@/lib/grading-failure";
+import { toSubmittedFileReferences } from "@/lib/learner-file-response";
 import { cn } from "@/lib/strings";
 import { getUser, submitAssignment } from "@/lib/talkToBackend";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
@@ -152,15 +154,7 @@ function Timer(props: Props) {
                 .filter((choice) => choice !== undefined) || []
             : selectedChoiceTexts(q, userPreferedLanguage).texts,
         learnerAnswerChoice: q.learnerAnswerChoice ?? null,
-        learnerFileResponse: (q.learnerFileResponse || []).map((file) => {
-          const extension = file.filename.split(".").pop()?.toLowerCase() || "";
-          if (["jpg", "jpeg", "png", "gif", "svg"].includes(extension)) {
-            return {
-              ...file,
-            };
-          }
-          return file;
-        }),
+        learnerFileResponse: toSubmittedFileReferences(q.learnerFileResponse),
         selectedLanguage: q.selectedLanguage,
       }));
 
@@ -185,7 +179,7 @@ function Timer(props: Props) {
         activeAttemptId,
         responsesForQuestions,
         roleRef.current === "author"
-          ? userPreferedLanguage
+          ? supportedSubmissionLanguage(userPreferedLanguage)
           : submissionLanguage(questions, userPreferedLanguage),
         roleRef.current === "author" ? authorQuestions : undefined,
         roleRef.current === "author" ? authorAssignmentDetails : undefined,
