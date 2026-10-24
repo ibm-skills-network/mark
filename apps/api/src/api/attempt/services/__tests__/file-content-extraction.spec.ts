@@ -3,11 +3,32 @@ import { createHash } from "crypto";
 import { Logger } from "@nestjs/common";
 import { S3Service } from "src/api/files/services/s3.service";
 import { OversizedSubmissionError } from "../../../llm/features/grading/errors/oversized-submission.error";
-import { FileContentExtractionService } from "../file-content-extraction";
+import { LearnerFileUpload } from "../../common/interfaces/attempt.interface";
+import {
+  ExtractedFileContent,
+  FileContentExtractionService,
+} from "../file-content-extraction";
 import { PdfStructureExtractorService } from "../pdf-structure-extractor.service";
 import * as gradingConstants from "../../../llm/features/grading/constants";
 
-const mockS3Service = {} as S3Service;
+const UNCONFIGURED_BUCKET = "someone-elses-bucket";
+const mockS3Service = {
+  isConfiguredUploadBucket: (bucket: string) => bucket !== UNCONFIGURED_BUCKET,
+} as unknown as S3Service;
+
+/** The private members these specs drive directly. */
+interface ExtractionInternals {
+  downloadFileFromCOS(
+    bucket: string | undefined,
+    key: string | undefined,
+    preloadedBuffer?: Buffer,
+  ): Promise<Buffer>;
+  extractSingleFileContent(
+    file: LearnerFileUpload,
+  ): Promise<ExtractedFileContent>;
+}
+const internalsOf = (service: FileContentExtractionService) =>
+  service as unknown as ExtractionInternals;
 const mockPdfExtractor = {} as PdfStructureExtractorService;
 
 function createService(): FileContentExtractionService {
@@ -221,76 +242,7 @@ describe("FileContentExtractionService - binary file handling", () => {
   });
 });
 
-describe("FileContentExtractionService - existing .ipynb content handling", () => {
-  let service: FileContentExtractionService;
-
-  beforeEach(() => {
-    service = createService();
-  });
-
-  it("parses existing ipynb JSON content to include code cells and outputs", async () => {
-    const notebook = {
-      nbformat: 4,
-      nbformat_minor: 5,
-      metadata: {
-        language_info: { name: "python" },
-      },
-      cells: [
-        {
-          cell_type: "code",
-          source: ['print("hello")\n'],
-          execution_count: 1,
-          outputs: [
-            {
-              output_type: "stream",
-              name: "stdout",
-              text: ["hello\n"],
-            },
-          ],
-          metadata: {},
-        },
-        {
-          cell_type: "markdown",
-          source: ["## Notes\n", "Some explanation."],
-          metadata: {},
-        },
-      ],
-    };
-
-    const result = await (service as any).extractSingleFileContent({
-      filename: "analysis.ipynb",
-      content: JSON.stringify(notebook),
-      fileType: "application/x-ipynb+json",
-    });
-
-    expect(result.content).toContain(
-      "=== JUPYTER NOTEBOOK: analysis.ipynb ===",
-    );
-    expect(result.content).toContain("=== CELL 1 [CODE] [1] ===");
-    expect(result.content).toContain('print("hello")');
-    expect(result.content).toContain("--- OUTPUT ---");
-    expect(result.content).toContain("[stdout]:");
-    expect(result.content).toContain("hello");
-    expect(result.content).toContain("=== CELL 2 [MARKDOWN] ===");
-    expect(result.metadata.cellCount).toBe(2);
-    expect(result.metadata.outputCount).toBe(1);
-  });
-
-  it("keeps existing non-JSON ipynb content unchanged", async () => {
-    const existingText = "Notebook summary prepared on client side";
-
-    const result = await (service as any).extractSingleFileContent({
-      filename: "summary.ipynb",
-      content: existingText,
-      fileType: "application/x-ipynb+json",
-    });
-
-    expect(result.content).toBe(existingText);
-    expect(result.extractedText).toBeUndefined();
-  });
-});
-
-describe("FileContentExtractionService - inline content that arrived parsed", () => {
+describe("FileContentExtractionService - content sent with the file is never graded", () => {
   let service: FileContentExtractionService;
 
   beforeEach(() => {
@@ -304,47 +256,72 @@ describe("FileContentExtractionService - inline content that arrived parsed", ()
     cells: [
       {
         cell_type: "code",
-        source: ["total = 2 + 3\n", "print(total)\n"],
+        source: ['print("hello")\n'],
         execution_count: 1,
-        outputs: [{ output_type: "stream", name: "stdout", text: ["5\n"] }],
+        outputs: [{ output_type: "stream", name: "stdout", text: ["hello\n"] }],
         metadata: {},
       },
     ],
   };
 
-  it("extracts notebook cells from an object-valued content instead of the error placeholder", async () => {
+  it("parses a notebook from its stored bytes, not from inline content", async () => {
+    const download = jest
+      .spyOn(internalsOf(service), "downloadFileFromCOS")
+      .mockResolvedValue(Buffer.from(JSON.stringify(notebook)));
+
+    const result = await internalsOf(service).extractSingleFileContent({
+      filename: "analysis.ipynb",
+      content: "Notebook summary prepared on client side",
+      fileType: "application/x-ipynb+json",
+      bucket: "learner-bucket",
+      key: "1/learner@example.com/3/abc-analysis.ipynb",
+    });
+
+    expect(download).toHaveBeenCalledWith(
+      "learner-bucket",
+      "1/learner@example.com/3/abc-analysis.ipynb",
+      undefined,
+    );
+    expect(result.content).toContain(
+      "=== JUPYTER NOTEBOOK: analysis.ipynb ===",
+    );
+    expect(result.content).toContain('print("hello")');
+    expect(result.content).not.toContain("prepared on client side");
+  });
+
+  it.each([
+    [
+      "an unconfigured bucket",
+      UNCONFIGURED_BUCKET,
+      "1/l@example.com/3/a.ipynb",
+    ],
+    ["a traversal key", "learner-bucket", "1/l@example.com/3/../../x/a.ipynb"],
+    ["a key with a backslash", "learner-bucket", "1\\..\\x.ipynb"],
+  ])("never reads storage for %s", async (_label, bucket, key) => {
+    const download = jest.spyOn(internalsOf(service), "downloadFileFromCOS");
+
+    await expect(
+      internalsOf(service).extractSingleFileContent({
+        filename: "analysis.ipynb",
+        fileType: "application/x-ipynb+json",
+        bucket,
+        key,
+      }),
+    ).rejects.toThrow("Invalid file reference");
+    expect(download).not.toHaveBeenCalled();
+  });
+
+  it("does not grade a file that has only inline content", async () => {
     const [result] = await service.extractContentFromFiles([
       {
         filename: "lab.ipynb",
-        // The request decoder turns notebook JSON text into an object.
-        content: notebook as unknown as string,
+        content: JSON.stringify(notebook),
         githubUrl: "https://github.com/learner/repo/blob/main/lab.ipynb",
       },
     ]);
 
-    expect(result.error).toBeUndefined();
-    expect(result.content).not.toContain("could not be processed");
-    expect(result.content).toContain("=== JUPYTER NOTEBOOK: lab.ipynb ===");
-    expect(result.content).toContain("=== CELL 1 [CODE] [1] ===");
-    expect(result.content).toContain("total = 2 + 3");
-    expect(result.content).toContain("5");
-    expect((service as any).logger.warn).toHaveBeenCalledWith(
-      expect.stringContaining("non_string_content"),
-      expect.objectContaining({ filename: "lab.ipynb", contentType: "object" }),
-    );
-  });
-
-  it("reads an array-valued .json content as its JSON text", async () => {
-    const [result] = await service.extractContentFromFiles([
-      {
-        filename: "rows.json",
-        content: [{ id: 1, name: "a" }] as unknown as string,
-        githubUrl: "https://github.com/learner/repo/blob/main/rows.json",
-      },
-    ]);
-
-    expect(result.error).toBeUndefined();
-    expect(result.content).toContain('"name":"a"');
+    expect(result.error).toBe("Cannot download file: missing bucket or key");
+    expect(result.content).not.toContain('print("hello")');
   });
 });
 
@@ -1166,7 +1143,11 @@ function buildProvenanceService(): {
     if (uploadType === "learner-prod") return ALLOWED_LEARNER_PROD_BUCKET;
     throw new Error(`unexpected upload type ${uploadType}`);
   });
-  (service as any).s3Service = { putObject, getBucketName };
+  (service as unknown as { s3Service: unknown }).s3Service = {
+    putObject,
+    getBucketName,
+    isConfiguredUploadBucket: () => true,
+  };
   const warn = jest.fn();
   const debug = jest.fn();
   const log = jest.fn();
@@ -1285,209 +1266,6 @@ describe("FileContentExtractionService - content provenance shadow mode", () => 
       await flushMicrotasks();
 
       expect(putObject).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  describe("trust-branch telemetry (F5: info level)", () => {
-    it("logs provenance.trust.client.content at INFO with correct length/sha16/hasCosCoordinates and leaves the result unchanged", async () => {
-      delete process.env.ENABLE_CONTENT_PROVENANCE_SHADOW;
-      const clientContent = "the client supplied this exact text";
-      const file = {
-        filename: "answer.txt",
-        content: clientContent,
-        fileType: "text/plain",
-        questionId: 11,
-        recordId: 99,
-      };
-
-      // Flag-off control run for deep-equal comparison.
-      process.env.ENABLE_CONTENT_PROVENANCE_SHADOW = "false";
-      const control = createService();
-      const controlResult = await (control as any).extractSingleFileContent(
-        { ...file },
-        SHADOW_ON,
-      );
-
-      delete process.env.ENABLE_CONTENT_PROVENANCE_SHADOW;
-      const { service, putObject, logs } = buildProvenanceService();
-      const result = await (service as any).extractSingleFileContent(
-        { ...file },
-        SHADOW_ON,
-      );
-      await flushMicrotasks();
-
-      // Zero behavior change: identical extraction result.
-      expect(result).toEqual(controlResult);
-
-      // Steady-state measurement telemetry lands at info, not warn.
-      const payload = findProvenance(
-        logs.log,
-        "provenance.trust.client.content",
-      );
-      expect(payload).toMatchObject({
-        questionId: 11,
-        recordId: 99,
-        filename: "answer.txt",
-        fileType: "text/plain",
-        contentLength: clientContent.length,
-        contentSha16: sha16(clientContent),
-        hasCosCoordinates: false,
-        hasGithubUrl: false,
-      });
-      expect(
-        findProvenance(logs.warn, "provenance.trust.client.content"),
-      ).toBeUndefined();
-
-      // No bucket/key → telemetry only, nothing persisted.
-      expect(putObject).not.toHaveBeenCalled();
-    });
-
-    it("hashes the same string grading receives (sanitized/truncated content)", async () => {
-      delete process.env.ENABLE_CONTENT_PROVENANCE_SHADOW;
-      const clientContent = "plain answer text";
-      const { service, logs } = buildProvenanceService();
-      const result = await (service as any).extractSingleFileContent(
-        {
-          filename: "answer.txt",
-          content: clientContent,
-          fileType: "text/plain",
-          questionId: 1,
-          recordId: 2,
-        },
-        SHADOW_ON,
-      );
-      await flushMicrotasks();
-      const payload = findProvenance(
-        logs.log,
-        "provenance.trust.client.content",
-      );
-      // The hashed string must equal the returned `content` exactly.
-      expect(payload.contentSha16).toBe(sha16(result.content));
-      expect(payload.contentLength).toBe(result.content.length);
-    });
-  });
-
-  describe("divergence comparison (trusted file also has COS coordinates)", () => {
-    const buildFile = () => ({
-      filename: "data.txt",
-      content: "client text",
-      fileType: "text/plain",
-      questionId: 5,
-      recordId: 17,
-      bucket: ALLOWED_LEARNER_BUCKET,
-      key: "1/learner@example.com/5/data.txt",
-    });
-
-    it("reports diverged:false at INFO and persists server-extracted content when re-extraction matches; client content is never persisted", async () => {
-      delete process.env.ENABLE_CONTENT_PROVENANCE_SHADOW;
-      const file = buildFile();
-      const { service, putObject, logs } = buildProvenanceService();
-
-      jest
-        .spyOn(service as any, "downloadFileFromCOS")
-        .mockResolvedValue(Buffer.from("client text"));
-      jest
-        .spyOn(service as any, "extractTextFromBuffer")
-        .mockResolvedValue({ text: "client text" });
-
-      await (service as any).extractSingleFileContent(file, SHADOW_ON);
-      await flushMicrotasks();
-
-      // Non-diverged case logs at info, not warn.
-      const divergence = findProvenance(logs.log, "provenance.divergence");
-      expect(divergence).toMatchObject({
-        questionId: 5,
-        recordId: 17,
-        filename: "data.txt",
-        diverged: false,
-        clientSha16: sha16("client text"),
-        serverSha16: sha16("client text"),
-        clientLength: "client text".length,
-        serverLength: "client text".length,
-      });
-      expect(
-        findProvenance(logs.warn, "provenance.divergence"),
-      ).toBeUndefined();
-
-      expect(putObject).toHaveBeenCalledTimes(1);
-      const putCall = putObject.mock.calls[0][0];
-      expect(putCall.Key).toBe(provenanceArtifactKey(file));
-      expect(putCall.Bucket).toBe(ALLOWED_LEARNER_BUCKET);
-      const body = JSON.parse(putCall.Body);
-      expect(body).toMatchObject({
-        provenance: "server",
-        clientSha16: sha16("client text"),
-        // The artifact's own canonical checksum is the server-extracted text.
-        sha16: sha16("client text"),
-        // Persisted content is the SERVER-extracted text, never client text.
-        content: "client text",
-        diverged: false,
-      });
-    });
-
-    it("reports diverged:true at WARN, normalizing both sides identically, persisting both checksums (F3)", async () => {
-      delete process.env.ENABLE_CONTENT_PROVENANCE_SHADOW;
-      const file = buildFile();
-      const { service, putObject, logs } = buildProvenanceService();
-
-      jest
-        .spyOn(service as any, "downloadFileFromCOS")
-        .mockResolvedValue(Buffer.from("server bytes"));
-      // Raw server text carries CRLF; after sanitizeAndTruncate it normalizes.
-      jest
-        .spyOn(service as any, "extractTextFromBuffer")
-        .mockResolvedValue({ text: "server extracted text DIFFERENT" });
-
-      await (service as any).extractSingleFileContent(file, SHADOW_ON);
-      await flushMicrotasks();
-
-      // Real divergence is a warn-worthy anomaly.
-      const divergence = findProvenance(logs.warn, "provenance.divergence");
-      expect(divergence.diverged).toBe(true);
-      expect(divergence.clientSha16).toBe(sha16("client text"));
-      // serverSha16 is computed from the SAME normalization the client side
-      // uses (sanitizeAndTruncate), so the checksum is comparable.
-      const normalizedServer = (service as any).sanitizeAndTruncate(
-        "server extracted text DIFFERENT",
-      );
-      expect(divergence.serverSha16).toBe(sha16(normalizedServer));
-
-      const body = JSON.parse(putObject.mock.calls[0][0].Body);
-      expect(body.diverged).toBe(true);
-      expect(body.clientSha16).toBe(sha16("client text"));
-      expect(body.sha16).toBe(sha16(normalizedServer));
-    });
-
-    it("computes diverged:false when client and server differ only by CRLF/whitespace normalization (F3 symmetric hash)", async () => {
-      delete process.env.ENABLE_CONTENT_PROVENANCE_SHADOW;
-      // Client sends LF-normalized content (what grading hashes); the raw
-      // server extraction carries CRLF. Pre-fix this produced a false
-      // diverged:true. After the fix both sides normalize, so they match.
-      const file = {
-        filename: "data.txt",
-        content: "line one\nline two",
-        fileType: "text/plain",
-        questionId: 5,
-        recordId: 17,
-        bucket: ALLOWED_LEARNER_BUCKET,
-        key: "1/learner@example.com/5/data.txt",
-      };
-      const { service, logs } = buildProvenanceService();
-
-      jest
-        .spyOn(service as any, "downloadFileFromCOS")
-        .mockResolvedValue(Buffer.from("raw"));
-      jest
-        .spyOn(service as any, "extractTextFromBuffer")
-        .mockResolvedValue({ text: "line one\r\nline two" });
-
-      await (service as any).extractSingleFileContent(file, SHADOW_ON);
-      await flushMicrotasks();
-
-      const divergence =
-        findProvenance(logs.log, "provenance.divergence") ??
-        findProvenance(logs.warn, "provenance.divergence");
-      expect(divergence.diverged).toBe(false);
     });
   });
 
@@ -1822,28 +1600,6 @@ describe("FileContentExtractionService - content provenance shadow mode", () => 
         "provenance/1/learner@example.com/7/report.pdf.json",
       );
     });
-
-    it("a trust-branch file with NO key/bucket produces zero putObject calls (telemetry only)", async () => {
-      delete process.env.ENABLE_CONTENT_PROVENANCE_SHADOW;
-      const { service, putObject, logs } = buildProvenanceService();
-
-      // Real trust-branch payload: inline content, no storage coordinates.
-      await (service as any).extractSingleFileContent(
-        {
-          filename: "answer.txt",
-          content: "the learner typed this answer",
-          fileType: "text/plain",
-        },
-        SHADOW_ON,
-      );
-      await flushMicrotasks();
-
-      expect(putObject).not.toHaveBeenCalled();
-      // Telemetry still fires (at info).
-      expect(
-        findProvenance(logs.log, "provenance.trust.client.content"),
-      ).toBeDefined();
-    });
   });
 });
 
@@ -2146,6 +1902,7 @@ describe("compiled artifacts remain submissions, not source text", () => {
         filename: "program.exe",
         content: "DO_NOT_GRADE_BINARY_STRINGS",
         fileType: "application/octet-stream",
+        buffer: Buffer.from([0x4d, 0x5a, 0x90, 0x00]),
       },
     ]);
     expect(result.error).toBeUndefined();
@@ -2236,6 +1993,7 @@ it("accepts a requested binary using storage metadata without downloading its co
   const storage = {
     getObjectMetadata: jest.fn().mockResolvedValue({ ContentLength: 4096 }),
     getObject: jest.fn(),
+    isConfiguredUploadBucket: jest.fn().mockReturnValue(true),
   };
   const service = new FileContentExtractionService(
     storage as any,

@@ -1,5 +1,6 @@
 import { LearnerResponseType } from "@/app/learner/[assignmentId]/successPage/Question";
 import type { QuestionStore } from "@/config/types";
+import { isUnsupportedQuestion } from "@/lib/unsupported-questions";
 import { isLearnerUrlSubmittable } from "@/lib/url-response";
 import { hasRichTextContent } from "rich-text";
 import { type ClassValue, clsx } from "clsx";
@@ -146,6 +147,9 @@ const hasPresentationResponse = (
 };
 
 export const hasLearnerResponse = (question: QuestionStore): boolean => {
+  // Nothing is sent for an unsupported question, so a leftover draft on one
+  // is not an answer.
+  if (isUnsupportedQuestion(question)) return false;
   const hasText = hasRichTextContent(question.learnerTextResponse);
   const hasUrl = Boolean(question.learnerUrlResponse?.trim());
   const hasChoices = (question.learnerChoices?.length ?? 0) > 0;
@@ -169,6 +173,7 @@ export const hasLearnerResponse = (question: QuestionStore): boolean => {
 
 export const editedQuestionsOnly = (questions: QuestionStore[]) =>
   questions.filter((q) => {
+    if (isUnsupportedQuestion(q)) return false;
     const hasText = hasRichTextContent(q.learnerTextResponse);
     // Presence, not validity: a link the learner typed is an answer even when
     // it does not parse. Treating it as unanswered used to trip the
@@ -246,7 +251,16 @@ export const getSubmitButtonStatus = (
     return { disabled: true, reason: "File upload in progress..." };
   }
 
-  const questionsWithResponses = questions.filter(hasLearnerResponse);
+  // Unsupported questions are not graded and never block submitting. An
+  // attempt made only of them can be submitted as it is.
+  const gradableQuestions = questions.filter(
+    (question) => !isUnsupportedQuestion(question),
+  );
+  if (gradableQuestions.length === 0) {
+    return { disabled: false, reason: null };
+  }
+
+  const questionsWithResponses = gradableQuestions.filter(hasLearnerResponse);
 
   if (questionsWithResponses.length === 0) {
     return { disabled: true, reason: "No questions have been answered" };
@@ -281,7 +295,7 @@ export const getSubmitButtonStatus = (
 
   if (requireAllQuestions) {
     const optionalQuestionSet = new Set(optionalQuestionIds ?? []);
-    const requiredQuestions = questions.filter(
+    const requiredQuestions = gradableQuestions.filter(
       (question) => !optionalQuestionSet.has(question.id),
     );
     const requiredResponses = questionsWithResponses.filter(
@@ -342,6 +356,9 @@ export const buildSubmitWarning = (
   },
 ): SubmitWarning | null => {
   const optional = new Set(options.optionalQuestionIds ?? []);
+  for (const question of questions) {
+    if (isUnsupportedQuestion(question)) optional.add(question.id);
+  }
   const isAnswered = (question: QuestionStore) =>
     editedQuestionsOnly([question]).length > 0;
   const uploadFailed = (question: QuestionStore) =>

@@ -1,0 +1,1030 @@
+openapi: 3.1.0
+info:
+  title: Mark learner submit routes
+  version: 1.0.0
+  description: |
+    Authoritative contract for the routes a learner uses between the first
+    question render and the results page: the submit, its grading progress
+    stream, the completed-attempt read, the grading side routes and
+    on-demand question translation. Same conventions as
+    `learner-load.openapi.yaml` (gateway `user-session` header, ISO-8601 UTC
+    timestamps with milliseconds, integer ids, whole-number floats as
+    integers, strict attempt-route id parsing answered with 403).
+
+    Differences from the legacy wire format:
+    - No base64 response encoding on the submit result or the completed
+      attempt. Requests are still base64-decoded server-side
+      (`learnerTextResponse`, `learnerChoices` items,
+      `learnerFileResponse[].content`), because the web client encodes them.
+    - Everything an assignment hides is `null`, never omitted and never a
+      sentinel such as `-1`.
+    - `isCorrect`/`feedback` on choices are decided by the server from
+      `correctAnswerVisibility`; when they are shown, `feedback` is always
+      present (`null` when the author gave none). Choice `points`, `answer`
+      and author comments are never sent.
+    - The grade is computed over every question served to the attempt;
+      unanswered served questions count as 0.
+    - Questions with response type PRESENTATION, VIDEO, AUDIO or
+      LIVE_RECORDING are no longer graded: they are left out of the grade
+      (submit and completed read alike) and of `requireAllQuestions`, and a
+      non-empty answer to one is refused. An attempt whose served questions
+      are all of these types cannot be submitted (422 NO_GRADABLE_QUESTIONS).
+    - Feedback on a MULTIPLE_CORRECT or TRUE_FALSE question names the correct
+      options or answer only when the answer key is revealed
+      (`correctAnswerVisibility`).
+    - Uploaded files must be the learner's own uploads for that question.
+    - The GitHub file picker and its `/v1/github/*` routes no longer exist.
+
+servers:
+  - url: /api/v2
+
+components:
+  parameters:
+    assignmentId:
+      name: assignmentId
+      in: path
+      required: true
+      description: Parsed strictly (`String(Number(x)) === x`, positive, <= 2^31-1); failure -> 403.
+      schema: { type: integer, minimum: 1, maximum: 2147483647 }
+    attemptId:
+      name: attemptId
+      in: path
+      required: true
+      description: Parsed strictly like `assignmentId`; failure -> 403.
+      schema: { type: integer, minimum: 1, maximum: 2147483647 }
+    questionId:
+      name: id
+      in: path
+      required: true
+      description: Parsed strictly; failure -> 403.
+      schema: { type: integer, minimum: 1 }
+    gradingJobId:
+      name: gradingJobId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+
+  headers:
+    RetryAfter:
+      schema: { type: string, enum: ["1"] }
+
+  schemas:
+    Error:
+      type: object
+      required: [statusCode, message]
+      properties:
+        statusCode: { type: integer }
+        message:
+          description: A string, or for DTO validation failures a list of strings.
+          oneOf:
+            - { type: string }
+            - { type: array, items: { type: string } }
+        error:
+          { type: string, description: Nest-style reason phrase, optional. }
+        code:
+          type: string
+          description: Machine-readable code where the client branches on it.
+          enum:
+            - AI_TEMPORARILY_DISABLED
+            - ATTEMPT_ALREADY_SUBMITTED
+            - ATTEMPT_CLOSED_AT_TIME_LIMIT
+            - UNSUPPORTED_RESPONSE_TYPE
+            - INVALID_FILE_REFERENCE
+            - NO_GRADABLE_QUESTIONS
+        attemptId:
+          { type: integer, description: Only on the 409 attempt-closed bodies. }
+      additionalProperties: true
+
+    CorrectAnswerVisibility:
+      type: string
+      enum: [NEVER, ALWAYS, ON_PASS]
+    QuestionType:
+      type: string
+      enum:
+        [
+          TEXT,
+          SINGLE_CORRECT,
+          MULTIPLE_CORRECT,
+          TRUE_FALSE,
+          URL,
+          UPLOAD,
+          LINK_FILE,
+        ]
+    ResponseType:
+      type: string
+      enum:
+        [
+          REPO,
+          CODE,
+          ESSAY,
+          REPORT,
+          PRESENTATION,
+          VIDEO,
+          AUDIO,
+          IMAGES,
+          SPREADSHEET,
+          LIVE_RECORDING,
+          OTHER,
+        ]
+
+    LearnerFileReference:
+      description: A file the learner uploaded through `/v1/files`. No other keys are accepted.
+      type: object
+      required: [filename, key, bucket]
+      properties:
+        filename: { type: string, minLength: 1, maxLength: 255 }
+        key:
+          type: string
+          minLength: 1
+          maxLength: 1024
+          description: |
+            Must start with `<assignmentId>/<userId>/<questionId>/` and have
+            no empty, `.` or `..` segments, backslashes or control
+            characters, else 400 INVALID_FILE_REFERENCE.
+        bucket:
+          type: string
+          minLength: 1
+          maxLength: 255
+          description: Must be a configured learner bucket, else 400 INVALID_FILE_REFERENCE at grading.
+        fileType: { type: [string, "null"], maxLength: 255 }
+        content:
+          type: [string, "null"]
+          maxLength: 255
+          description: Ignored unless `"InCos"`; inline content is never graded.
+      additionalProperties: false
+
+    SubmittedResponse:
+      description: |
+        One answer. The web client sends one item for every question it shows,
+        answered or not, with `""`, `null` or `[]` in the fields it did not
+        fill; empty values are valid. Unknown keys are stripped.
+      type: object
+      required: [id]
+      properties:
+        id:
+          {
+            type: integer,
+            minimum: 1,
+            maximum: 2147483647,
+            description: Question id.,
+          }
+        learnerTextResponse:
+          type: string
+          maxLength: 200000
+          description: Base64-encoded by the web client; decoded server-side before validation.
+        learnerUrlResponse: { type: string, maxLength: 2048 }
+        learnerChoices:
+          type: array
+          maxItems: 50
+          description: Texts of the selected choices (base64-encoded per item by the web client).
+          items: { type: string, maxLength: 5000 }
+        learnerAnswerChoice: { type: [boolean, "null"] }
+        learnerFileResponse:
+          type: array
+          maxItems: 20
+          items: { $ref: "#/components/schemas/LearnerFileReference" }
+        learnerPresentationResponse:
+          type: "null"
+          description: Present and non-null -> 400.
+
+    SubmitRequest:
+      type: object
+      required: [submitted, responsesForQuestions]
+      properties:
+        submitted: { type: boolean, const: true }
+        responsesForQuestions:
+          type: array
+          maxItems: 200
+          items: { $ref: "#/components/schemas/SubmittedResponse" }
+        language:
+          type: string
+          maxLength: 16
+          description: |
+            Language the learner answered in; stored as the attempt's
+            `preferredLanguage` (default `en`). Must be a code from the
+            supported language list (matched case-insensitively, same list as
+            `TranslationRequest`), else 400 `["Unsupported language"]`.
+      description: |
+        Other top-level keys are stripped. `authorQuestions` and
+        `authorAssignmentDetails` are read only for authors (preview), which
+        this contract does not cover.
+
+    SubmitQueued:
+      type: object
+      required: [gradingJobId, message]
+      properties:
+        gradingJobId: { type: string, format: uuid }
+        message: { type: string }
+      additionalProperties: false
+
+    SubmitQuestionFeedback:
+      type: object
+      required: [id, questionId, totalPoints, feedback]
+      properties:
+        id: { type: integer, description: Id of the stored question response. }
+        questionId: { type: integer }
+        totalPoints:
+          type: [number, "null"]
+          description: Points earned. Null when `showQuestionScore` is false.
+        feedback:
+          type: [array, "null"]
+          description: |
+            Grading feedback entries. Null when `showSubmissionFeedback` is
+            false. When the learner did not get a MULTIPLE_CORRECT question
+            fully right, the last entry ends with "The correct option(s)
+            were: ..."; for a wrong TRUE_FALSE answer, "Incorrect." is
+            followed by "The correct answer is True/False." Both are in the
+            submit's language and only appear when the answer key is
+            revealed: ALWAYS, or ON_PASS with this submit's grade at or above
+            the passing grade.
+          items: { type: object, additionalProperties: true }
+      additionalProperties: false
+
+    SubmitResult:
+      description: |
+        The graded submit, inline from the PATCH (deterministic-only
+        attempts) or as the SSE `finalize` frame's `result`. An attempt found
+        past its deadline when grading starts is closed at 0 and answered with
+        every show flag false, `correctAnswerVisibility` NEVER, all scores
+        null and `feedbacksForQuestions` empty.
+      type: object
+      required:
+        - id
+        - submitted
+        - grade
+        - totalPointsEarned
+        - totalPossiblePoints
+        - passed
+        - showAssignmentScore
+        - showSubmissionFeedback
+        - showQuestions
+        - showQuestionScore
+        - showPassFailIndicator
+        - correctAnswerVisibility
+        - feedbacksForQuestions
+      properties:
+        id: { type: integer }
+        submitted: { type: boolean, const: true }
+        grade:
+          type: [number, "null"]
+          description: 0-1 fraction over the served questions. Null when `showAssignmentScore` is false.
+        totalPointsEarned:
+          {
+            type: [number, "null"],
+            description: Null when `showAssignmentScore` is false.,
+          }
+        totalPossiblePoints:
+          {
+            type: [number, "null"],
+            description: Null when `showAssignmentScore` is false.,
+          }
+        passed:
+          type: [boolean, "null"]
+          description: Null unless `showPassFailIndicator` is true and a grade exists. Computed even when the score is hidden.
+        showAssignmentScore: { type: boolean }
+        showSubmissionFeedback: { type: boolean }
+        showQuestions: { type: boolean }
+        showQuestionScore: { type: boolean }
+        showPassFailIndicator: { type: boolean }
+        correctAnswerVisibility:
+          { $ref: "#/components/schemas/CorrectAnswerVisibility" }
+        feedbacksForQuestions:
+          type: array
+          description: One entry per graded question. Empty when `showQuestions` is false.
+          items: { $ref: "#/components/schemas/SubmitQuestionFeedback" }
+      additionalProperties: false
+
+    SubmissionStatus:
+      type: object
+      required:
+        [
+          id,
+          submitted,
+          closedAtTimeLimit,
+          acceptingSubmissions,
+          expiresAt,
+          serverNow,
+        ]
+      properties:
+        id: { type: integer }
+        submitted: { type: boolean }
+        closedAtTimeLimit:
+          type: boolean
+          description: True when the attempt was submitted by being closed at its time limit.
+        acceptingSubmissions:
+          type: boolean
+          description: Not submitted and not past `expiresAt` + 30 s grace, judged on `serverNow`.
+        expiresAt: { type: [string, "null"], format: date-time }
+        serverNow:
+          type: string
+          format: date-time
+          description: The server clock when this response was built.
+      additionalProperties: false
+
+    CompletedChoice:
+      type: object
+      required: [id, choice]
+      properties:
+        id: { type: [integer, "null"] }
+        choice: { type: string }
+        isCorrect:
+          type: boolean
+          description: Only when visibility allows (ALWAYS; ON_PASS with a passing grade) and stored as a boolean.
+        feedback:
+          type: [string, "null"]
+          description: Present exactly when `isCorrect` may be shown; null when the author gave none.
+      additionalProperties: false
+
+    CompletedResponse:
+      type: object
+      required: [learnerResponse, points, feedback]
+      properties:
+        learnerResponse:
+          description: |
+            The stored answer as a JSON value: a string (TEXT, URL), an array
+            of choice texts (SINGLE_CORRECT, MULTIPLE_CORRECT), a boolean
+            (TRUE_FALSE), a file list (UPLOAD), or `""` for an unanswered
+            served question. A stored value that is not JSON is served as
+            the raw string.
+        points:
+          type: [number, "null"]
+          description: Never above the question's `totalPoints`. Null when `showQuestionScore` is false.
+        feedback:
+          type: [array, "null"]
+          description: |
+            Feedback entries (`feedback`, optional `highlighting`,
+            `annotatedPdfUrl`, `structuredFeedback`). Null when
+            `showSubmissionFeedback` is false. For a MULTIPLE_CORRECT question
+            not answered fully right, the last entry ends with "The correct
+            option(s) were: ..."; for a wrong TRUE_FALSE answer, with "The
+            correct answer is True/False." Either appears only when choices
+            carry `isCorrect`; while they do not, the sentence is removed even
+            from older stored feedback.
+          items: { type: object, additionalProperties: true }
+      additionalProperties: false
+
+    CompletedQuestion:
+      type: object
+      required:
+        [
+          id,
+          question,
+          type,
+          responseType,
+          totalPoints,
+          choices,
+          scoring,
+          response,
+        ]
+      properties:
+        id: { type: integer }
+        question:
+          type: [string, "null"]
+          description: The served text (variant when one was picked), translated to the attempt's `preferredLanguage` when a stored translation exists.
+        type: { $ref: "#/components/schemas/QuestionType" }
+        responseType:
+          oneOf:
+            [{ $ref: "#/components/schemas/ResponseType" }, { type: "null" }]
+        totalPoints: { type: number }
+        choices:
+          type: [array, "null"]
+          description: In the attempt's frozen order when it has one. Null when the question has no choices.
+          items: { $ref: "#/components/schemas/CompletedChoice" }
+        scoring:
+          type: [object, "null"]
+          description: The stored scoring object only when `showRubricsToLearner` is true; otherwise null.
+          additionalProperties: true
+        response:
+          description: The newest stored response for this question, or null when there is none.
+          oneOf:
+            [
+              { $ref: "#/components/schemas/CompletedResponse" },
+              { type: "null" },
+            ]
+      additionalProperties: false
+
+    CompletedAttempt:
+      type: object
+      required:
+        - id
+        - assignmentId
+        - submitted
+        - createdAt
+        - expiresAt
+        - preferredLanguage
+        - comments
+        - serverNow
+        - grade
+        - totalPointsEarned
+        - totalPossiblePoints
+        - passed
+        - passingGrade
+        - showAssignmentScore
+        - showSubmissionFeedback
+        - showQuestions
+        - showQuestionScore
+        - showPassFailIndicator
+        - correctAnswerVisibility
+        - questions
+      properties:
+        id: { type: integer }
+        assignmentId: { type: integer }
+        submitted: { type: boolean, const: true }
+        createdAt: { type: string, format: date-time }
+        expiresAt:
+          type: [string, "null"]
+          format: date-time
+          description: The submit time for a graded attempt (overwritten at commit).
+        preferredLanguage: { type: [string, "null"] }
+        comments: { type: [string, "null"] }
+        serverNow: { type: string, format: date-time }
+        grade:
+          type: [number, "null"]
+          description: |
+            0-1 fraction. The stored grade, or the served-set ratio when a
+            response was stored above its question's maximum. Null when
+            `showAssignmentScore` is false.
+        totalPointsEarned:
+          {
+            type: [number, "null"],
+            description: Null when `showAssignmentScore` is false.,
+          }
+        totalPossiblePoints:
+          {
+            type: [number, "null"],
+            description: Over the served questions,
+            media response types excluded (as on submit). Null when `showAssignmentScore` is false.,
+          }
+        passed:
+          {
+            type: [boolean, "null"],
+            description: Null unless `showPassFailIndicator` is true and a grade exists.,
+          }
+        passingGrade: { type: integer, description: Percent 0-100, default 50. }
+        showAssignmentScore: { type: boolean }
+        showSubmissionFeedback: { type: boolean }
+        showQuestions: { type: boolean }
+        showQuestionScore: { type: boolean }
+        showPassFailIndicator: { type: boolean }
+        correctAnswerVisibility:
+          $ref: "#/components/schemas/CorrectAnswerVisibility"
+          description: From the assignment's current version; NEVER when it has none.
+        questions:
+          type: array
+          description: In the served order. Empty when `showQuestions` is false.
+          items: { $ref: "#/components/schemas/CompletedQuestion" }
+      additionalProperties: false
+
+    GradingStateQuestion:
+      type: object
+      required: [id, displayOrder, status]
+      properties:
+        id: { type: integer }
+        displayOrder: { type: integer }
+        status: { type: string }
+        slowType: { type: string }
+      additionalProperties: true
+
+    GradingFrame:
+      description: |
+        `data` of `update`, `finalize` and `error` frames. `result` is a JSON
+        **string**: on `update` it holds `{gradingState}`; on `finalize` it
+        holds a `SubmitResult`. Nothing on the stream is base64-encoded.
+      type: object
+      required: [jobId, status, progress, percentage, done, timestamp]
+      properties:
+        jobId: { type: string, format: uuid }
+        status:
+          {
+            type: string,
+            enum: [Pending, Processing, In Progress, Completed, Failed],
+          }
+        progress: { type: string, maxLength: 255 }
+        percentage: { type: number, minimum: 0, maximum: 100 }
+        currentQuestion:
+          {
+            type: integer,
+            description: Absent on the first frame after a reconnect.,
+          }
+        totalQuestions:
+          {
+            type: integer,
+            description: Absent on the first frame after a reconnect.,
+          }
+        result:
+          type: string
+          description: |
+            JSON text. `update`: `{"gradingState":{"questions":[GradingStateQuestion],"total","completed","inFlight","failed","hasSlowInFlight"}}`.
+            `finalize`: a `SubmitResult`.
+        failure:
+          type: object
+          description: Only on `error` frames. `{kind, issues[]}`; the client treats some kinds as learner-fixable.
+          additionalProperties: true
+        done: { type: boolean }
+        timestamp: { type: string, format: date-time }
+      additionalProperties: false
+
+    HeartbeatFrame:
+      type: object
+      required: [heartbeat, jobId, timestamp]
+      properties:
+        heartbeat: { type: boolean, const: true }
+        jobId: { type: string, format: uuid }
+        timestamp: { type: string, format: date-time }
+      additionalProperties: false
+
+    NotifySubscribed:
+      type: object
+      required: [success, message]
+      properties:
+        success: { type: boolean, const: true }
+        message:
+          {
+            type: string,
+            description: "`You will receive an email at <session userId> when grading is complete`",
+          }
+      additionalProperties: false
+
+    GradeSyncStatus:
+      type: object
+      required:
+        [
+          id,
+          status,
+          grade,
+          retryCount,
+          maxRetries,
+          lastError,
+          nextRetryAt,
+          completedAt,
+          createdAt,
+          errorLogs,
+          canRetry,
+        ]
+      properties:
+        id: { type: integer }
+        status:
+          {
+            type: string,
+            enum: [PENDING, IN_PROGRESS, SUCCESS, FAILED, SCHEDULED],
+          }
+        grade: { type: number }
+        retryCount: { type: integer }
+        maxRetries: { type: integer }
+        lastError: { type: [string, "null"] }
+        nextRetryAt: { type: [string, "null"], format: date-time }
+        completedAt: { type: [string, "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        errorLogs:
+          type: array
+          description: The five newest error log rows.
+          items: { type: object, additionalProperties: true }
+        canRetry: { type: boolean }
+      additionalProperties: false
+
+    TranslationRequest:
+      type: object
+      required: [selectedLanguageCode]
+      properties:
+        selectedLanguageCode:
+          type: string
+          maxLength: 16
+          description: |
+            A code from the supported language list (`en, id, de, es, fr, it,
+            hu, nl, pl, pt, sv, tr, el, kk, ru, uk-UA, ar, hi, th, ko, zh-CN,
+            zh-TW, ja`), matched case-insensitively and stored in the list's
+            spelling. The display name used in the prompt is derived from it.
+      description: Other keys (`selectedLanguage`, `question`) are ignored and stripped.
+
+    TranslationChoice:
+      type: object
+      required: [id, choice]
+      properties:
+        id: { type: [integer, "null"] }
+        choice: { type: string }
+      additionalProperties: false
+
+    TranslationResult:
+      type: object
+      required: [translatedQuestion]
+      properties:
+        translatedQuestion: { type: string }
+        translatedChoices:
+          type: array
+          description: Absent when the question has no choices. Learners get `{id, choice}` only.
+          items: { $ref: "#/components/schemas/TranslationChoice" }
+      additionalProperties: false
+
+  responses:
+    Unauthorized:
+      description: No usable `user-session` header.
+      content:
+        { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
+    Forbidden:
+      description: Role not allowed, no AssignmentGroup link, author on another assignment, or malformed id.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            { statusCode: 403, message: Forbidden resource, error: Forbidden }
+    AttemptNotFound:
+      description: Attempt missing, not owned by the learner, or (on `/completed`) not submitted. One body for all.
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example:
+            {
+              statusCode: 404,
+              message: Attempt not found or not owned by the user,
+              error: Not Found,
+            }
+    Unavailable:
+      description: Temporary outage (database, or the LLM on the translation route). Safe to retry.
+      headers: { Retry-After: { $ref: "#/components/headers/RetryAfter" } }
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { statusCode: 503, message: Service temporarily unavailable }
+
+paths:
+  /assignments/{assignmentId}/attempts/{attemptId}:
+    patch:
+      operationId: submitAttempt
+      summary: Submit an attempt for grading
+      description: |
+        Roles learner, author (author preview not covered). Access: the
+        attempt must be the learner's, on this assignment, with a current
+        group link.
+
+        Order for a learner:
+        1. An in-flight grading job for this attempt -> 200 `SubmitQueued`
+           with that job's id; the new payload is discarded.
+        2. Attempt submitted -> 409 ATTEMPT_ALREADY_SUBMITTED, or
+           ATTEMPT_CLOSED_AT_TIME_LIMIT when it was closed at its limit.
+           Past `expiresAt` + 30 s grace -> the attempt is closed at 0, then
+           409 ATTEMPT_CLOSED_AT_TIME_LIMIT.
+        3. The payload is checked against the grading rules below before
+           anything is written or queued, so every 400/422 they describe
+           comes back on this request (and is checked again at grading).
+        4. AI grading disabled and the assignment has an AI-graded question
+           -> 409 AI_TEMPORARILY_DISABLED; nothing is written.
+        5. Attempts whose pinned version holds only SINGLE_CORRECT,
+           MULTIPLE_CORRECT and TRUE_FALSE questions are graded inline
+           (200 `SubmitResult`); all others are queued (200 `SubmitQueued`,
+           then follow the SSE route).
+
+        Grading (both paths): the served set is `attempt.questionOrder`, else
+        `assignment.questionOrder`, else the pinned version's question ids.
+        An unserved or duplicated id -> 400. Questions are graded against the
+        attempt's pinned version (the selected variant overrides content,
+        choices, answer and scoring). A served question without a response is
+        graded as empty (0 points, "no response" feedback). Media response
+        types are excluded; a non-empty answer to one -> 400
+        UNSUPPORTED_RESPONSE_TYPE. When every served question is of a media
+        type there is nothing to grade -> 422 NO_GRADABLE_QUESTIONS; no grade
+        is written and nothing is sent to the LMS. `requireAllQuestions` ->
+        422 when a required served question is unanswered. File references
+        outside the learner's prefix or buckets, or malformed keys -> 400
+        INVALID_FILE_REFERENCE. An unsupported `language` -> 400.
+      parameters:
+        - $ref: "#/components/parameters/assignmentId"
+        - $ref: "#/components/parameters/attemptId"
+      requestBody:
+        required: true
+        content:
+          {
+            application/json:
+              { schema: { $ref: "#/components/schemas/SubmitRequest" } },
+          }
+      responses:
+        "200":
+          description: Queued for grading, or graded inline.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - { $ref: "#/components/schemas/SubmitQueued" }
+                  - { $ref: "#/components/schemas/SubmitResult" }
+        "400":
+          description: Invalid body, unserved or duplicate question ids, a learner-fixable grading refusal, an unsupported question type, or a file that is not the learner's upload.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                unsupportedResponseType:
+                  value:
+                    {
+                      statusCode: 400,
+                      code: UNSUPPORTED_RESPONSE_TYPE,
+                      message: This question type is no longer supported.,
+                      error: Bad Request,
+                    }
+                invalidFileReference:
+                  value:
+                    {
+                      statusCode: 400,
+                      code: INVALID_FILE_REFERENCE,
+                      message: Invalid file reference.,
+                      error: Bad Request,
+                    }
+                validation:
+                  value:
+                    {
+                      statusCode: 400,
+                      message:
+                        [
+                          "responsesForQuestions.0.learnerUrlResponse must be shorter than or equal to 2048 characters",
+                        ],
+                      error: Bad Request,
+                    }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/AttemptNotFound" }
+        "409":
+          description: Attempt already closed, AI grading switched off, or a concurrent submit won.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                alreadySubmitted:
+                  value:
+                    {
+                      statusCode: 409,
+                      error: Conflict,
+                      code: ATTEMPT_ALREADY_SUBMITTED,
+                      message: This attempt has already been submitted.,
+                      attemptId: 71,
+                    }
+                closedAtTimeLimit:
+                  value:
+                    {
+                      statusCode: 409,
+                      error: Conflict,
+                      code: ATTEMPT_CLOSED_AT_TIME_LIMIT,
+                      message: This attempt was already closed at its time limit.,
+                      attemptId: 71,
+                    }
+                aiDisabled:
+                  value:
+                    {
+                      statusCode: 409,
+                      code: AI_TEMPORARILY_DISABLED,
+                      message: This activity is temporarily out of service. Please try again later.,
+                    }
+        "422":
+          description: Nothing gradable was served, required questions unanswered, or a source that cannot be processed (inline path).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              examples:
+                noGradableQuestions:
+                  value:
+                    {
+                      statusCode: 422,
+                      code: NO_GRADABLE_QUESTIONS,
+                      message: This assignment has no questions that can be graded.,
+                      error: Unprocessable Entity,
+                    }
+                requiredUnanswered:
+                  value:
+                    {
+                      statusCode: 422,
+                      message: All required questions must be answered before submitting (2 unanswered).,
+                      error: Unprocessable Entity,
+                    }
+        "500":
+          {
+            description: Enqueue failure or an unexpected error. Not retried by the client.,
+          }
+        "503": { $ref: "#/components/responses/Unavailable" }
+
+  /assignments/{assignmentId}/attempts/{attemptId}/submission-status:
+    get:
+      operationId: getSubmissionStatus
+      summary: Whether the attempt still accepts a submit
+      description: |
+        Role learner. Access: the attempt guard (ownership and group link);
+        the read is also scoped to the route assignment and the session's
+        user. Called on every question mount and when the tab regains focus,
+        so `serverNow` is read fresh on each request. Plain JSON, never
+        base64-encoded.
+      parameters:
+        - $ref: "#/components/parameters/assignmentId"
+        - $ref: "#/components/parameters/attemptId"
+      responses:
+        "200":
+          content:
+            {
+              application/json:
+                { schema: { $ref: "#/components/schemas/SubmissionStatus" } },
+            }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/AttemptNotFound" }
+
+  /assignments/{assignmentId}/attempts/{attemptId}/grading/{gradingJobId}/status-stream:
+    get:
+      operationId: streamGradingStatus
+      summary: Grading progress as server-sent events
+      description: |
+        Roles learner, author. No attempt access guard: the job (from Redis)
+        must belong to the session's user and, when it has one, to the route
+        attempt; `assignmentId` is not checked and ids are not parsed
+        strictly.
+
+        Frames (`event: <name>\nid: <n>\ndata: <json>\n\n`):
+        - `update` (`GradingFrame`) while Pending / Processing / In Progress.
+          The first frame is the current job state.
+        - `heartbeat` (`HeartbeatFrame`) every 10 s.
+        - `finalize` (`GradingFrame`, status Completed) with `result` = a
+          `SubmitResult` as a JSON string; the stream then closes.
+        - `error` (`GradingFrame`, status Failed, with `failure`); the stream
+          then closes. An error after the headers are sent arrives as an
+          `error` event with plain-text data.
+      parameters:
+        - $ref: "#/components/parameters/assignmentId"
+        - $ref: "#/components/parameters/attemptId"
+        - $ref: "#/components/parameters/gradingJobId"
+      responses:
+        "200":
+          content:
+            text/event-stream:
+              schema:
+                oneOf:
+                  - { $ref: "#/components/schemas/GradingFrame" }
+                  - { $ref: "#/components/schemas/HeartbeatFrame" }
+        "400":
+          description: The job belongs to another user or attempt.
+          content:
+            {
+              application/json:
+                { schema: { $ref: "#/components/schemas/Error" } },
+            }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: Unknown or expired job id.
+          content:
+            {
+              application/json:
+                { schema: { $ref: "#/components/schemas/Error" } },
+            }
+
+  /assignments/{assignmentId}/attempts/{attemptId}/completed:
+    get:
+      operationId: getCompletedAttempt
+      summary: A submitted attempt for the results page
+      description: |
+        Roles learner, author. Access: learners must own the attempt (a GET
+        is allowed without a current group link, as on the attempt read);
+        authors need the group link and only see attempts of the route
+        assignment. The attempt must be submitted; an open attempt reads as
+        not found.
+
+        Every visibility rule is applied here; the client renders what it
+        gets. `isCorrect`/`feedback` on choices only for ALWAYS, or ON_PASS
+        with `grade >= passingGrade/100` (the clamped grade, even when the
+        score is hidden). Response `points` null when `showQuestionScore` is
+        false, `feedback` null when `showSubmissionFeedback` is false,
+        `questions` empty when `showQuestions` is false, score fields null
+        when `showAssignmentScore` is false.
+
+        Text is translated to the attempt's `preferredLanguage` (set at
+        submit), not to a `lang` query parameter; feedback is never
+        translated.
+      parameters:
+        - $ref: "#/components/parameters/assignmentId"
+        - $ref: "#/components/parameters/attemptId"
+      responses:
+        "200":
+          content:
+            {
+              application/json:
+                { schema: { $ref: "#/components/schemas/CompletedAttempt" } },
+            }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/AttemptNotFound" }
+        "500":
+          {
+            description: A served question's maximum points cannot be resolved.,
+          }
+        "503": { $ref: "#/components/responses/Unavailable" }
+
+  /assignments/{assignmentId}/attempts/{attemptId}/notify:
+    post:
+      operationId: notifyWhenGraded
+      summary: Email the learner when grading completes
+      description: |
+        Role learner. Access: ownership and group link. The body is ignored;
+        the address is the session's `userId`. Upserts the attempt's
+        GradingProgress with `notifyOnComplete`.
+      parameters:
+        - $ref: "#/components/parameters/assignmentId"
+        - $ref: "#/components/parameters/attemptId"
+      responses:
+        "201":
+          content:
+            {
+              application/json:
+                { schema: { $ref: "#/components/schemas/NotifySubscribed" } },
+            }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/AttemptNotFound" }
+
+  /assignments/{assignmentId}/attempts/{attemptId}/grade-sync-status:
+    get:
+      operationId: getGradeSyncStatus
+      summary: State of the grade passback to the LMS
+      description: |
+        Roles learner, author. Access: ownership (learners) and group link.
+        The newest LtiGradeSync row for the attempt with its five newest
+        error logs, or an empty 200 body when there is none. The stored
+        session cookie is never returned.
+      parameters:
+        - $ref: "#/components/parameters/assignmentId"
+        - $ref: "#/components/parameters/attemptId"
+      responses:
+        "200":
+          description: Sync status, or an empty body.
+          content:
+            {
+              application/json:
+                { schema: { $ref: "#/components/schemas/GradeSyncStatus" } },
+            }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/AttemptNotFound" }
+
+  /assignments/{assignmentId}/questions/{id}/translations:
+    post:
+      operationId: translateQuestion
+      summary: Translate a question's authored text and choices
+      description: |
+        Roles author, learner. Access: group link; authors only on their
+        launch assignment; the question must belong to the assignment and
+        not be deleted. Limited to 60 requests per user per 60 s (counted
+        after the access check), enough for a language toggle across every
+        question of one assignment.
+
+        Serves the stored question-level translation (`variantId` null) when
+        its source text still matches the question; otherwise replaces it
+        with a fresh LLM translation. Variant translations are never read or
+        removed here. When two first requests race, both get the row that
+        was stored first.
+      parameters:
+        - $ref: "#/components/parameters/assignmentId"
+        - $ref: "#/components/parameters/questionId"
+      requestBody:
+        required: true
+        content:
+          {
+            application/json:
+              { schema: { $ref: "#/components/schemas/TranslationRequest" } },
+          }
+      responses:
+        "201":
+          content:
+            {
+              application/json:
+                { schema: { $ref: "#/components/schemas/TranslationResult" } },
+            }
+        "400":
+          description: Missing or unsupported language code.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                {
+                  statusCode: 400,
+                  message: [Unsupported language],
+                  error: Bad Request,
+                }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404":
+          description: Assignment missing, or question not in the assignment or deleted.
+          content:
+            {
+              application/json:
+                { schema: { $ref: "#/components/schemas/Error" } },
+            }
+        "429":
+          description: More than 10 translation requests in 60 s.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                {
+                  statusCode: 429,
+                  message: "ThrottlerException: Too Many Requests",
+                }
+        "503":
+          description: The LLM failed or AI features are switched off. Retry after the header's delay.
+          headers: { Retry-After: { $ref: "#/components/headers/RetryAfter" } }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example:
+                { statusCode: 503, message: Service temporarily unavailable }

@@ -2,6 +2,7 @@ import {
   getLanguageCode,
   getLanguageName,
 } from "@/app/Helpers/getLanguageName";
+import { isUnsupportedQuestion } from "@/lib/unsupported-questions";
 import RichTextViewer from "@/components/rich-text/RichTextViewer";
 import { QuestionDisplayType, QuestionStore, Scoring } from "@/config/types";
 import { cn } from "@/lib/strings";
@@ -58,7 +59,8 @@ function Component(props: Props) {
   const optionalQuestionIds = assignmentDetails?.optionalQuestionIds ?? [];
   const requiredQuestion =
     assignmentDetails?.requireAllQuestions &&
-    !optionalQuestionIds.includes(questionId);
+    !optionalQuestionIds.includes(questionId) &&
+    !isUnsupportedQuestion(question);
   const questionControls = assignmentDetails?.questionControls;
   const assignmentId = useLearnerOverviewStore((state) => state.assignmentId);
   const [activeQuestionNumber, setActiveQuestionNumber] = useLearnerStore(
@@ -200,11 +202,10 @@ function Component(props: Props) {
       const translation = await translateQuestion(
         assignmentId,
         questionId,
-        question,
-        question.selectedLanguage,
         languages.find((lang) => lang.name === question.selectedLanguage)
           ?.code || "en",
       );
+      if (!translation) return;
 
       setTranslatedQuestion(questionId, translation.translatedQuestion);
       if (translation.translatedChoices) {

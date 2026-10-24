@@ -9,12 +9,12 @@ describe("learner file content", () => {
   it("turns a parsed notebook back into its JSON text", () => {
     const file = withTextFileContent({
       filename: "lab.ipynb",
-      githubUrl: "https://github.com/learner/repo/blob/main/lab.ipynb",
+      key: "7/learner@example.com/7/lab.ipynb",
       content: notebook as unknown as string,
     });
     expect(typeof file.content).toBe("string");
     expect(JSON.parse(file.content)).toEqual(notebook);
-    expect(file.githubUrl).toContain("lab.ipynb");
+    expect(file.key).toContain("lab.ipynb");
   });
 
   it("keeps string content, including the storage marker", () => {

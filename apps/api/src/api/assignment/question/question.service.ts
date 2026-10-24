@@ -5,6 +5,7 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
@@ -22,6 +23,15 @@ import {
 import type { JobScopedCache } from "../../attempt/services/grading/job-scoped-cache";
 import { BaseQuestionResponseDto } from "./dto/base.question.response.dto";
 import { CreateUpdateQuestionRequestDto } from "./dto/create.update.question.request.dto";
+
+/**
+ * Same body the exceptions filter sends for a temporary outage, so clients
+ * handle every retryable 503 alike.
+ */
+export const TRANSLATION_UNAVAILABLE_BODY = {
+  statusCode: 503,
+  message: "Service temporarily unavailable",
+} as const;
 
 type PrismaTransactionalClient = Omit<
   PrismaService,
@@ -398,30 +408,29 @@ export class QuestionService {
     return { feedback };
   }
   /**
-   * Generate translations for the relevant parts of a question (text and choices) if not already present in the database.
-   * @param assignmentId The ID of the assignment (context for LLM).
-   * @param question The question DTO whose text is to be translated.
-   * @param languageCode The target language code (e.g., "fr", "es").
-   * @param language The target language name (e.g., "French", "Spanish").
-   * @returns The translated question text and choices (if applicable).
+   * The stored translation of a question's authored text and choices, made
+   * with the LLM on first request. A stored row whose source text no longer
+   * matches the question is replaced. Only question-level rows are read or
+   * written (`variantId: null`); variant translations are never touched.
+   *
+   * @param assignmentId The assignment the question belongs to (LLM usage context).
+   * @param question The question to translate.
+   * @param language A supported catalogue language (code and display name).
+   * @throws ServiceUnavailableException when the LLM call fails or AI is switched off.
    */
   async generateTranslationIfNotExists(
     assignmentId: number,
     question: QuestionDto,
-    languageCode: string,
-    language: string,
+    language: { code: string; name: string },
   ): Promise<{ translatedQuestion: string; translatedChoices?: Choice[] }> {
     if (!question) {
       throw new NotFoundException(`Question DTO not provided or is invalid.`);
     }
 
     const questionId = question.id;
+    const where = { questionId, variantId: null, languageCode: language.code };
     const existingTranslation = await this.prisma.translation.findFirst({
-      where: {
-        questionId,
-        variantId: undefined,
-        languageCode,
-      },
+      where,
     });
 
     if (existingTranslation) {
@@ -429,60 +438,125 @@ export class QuestionService {
         existingTranslation.untranslatedText === question.question &&
         existingTranslation.translatedText
       ) {
-        return {
-          translatedQuestion: existingTranslation.translatedText,
-          translatedChoices: existingTranslation.translatedChoices
-            ? (existingTranslation.translatedChoices as unknown as Choice[])
-            : undefined,
-        };
-      } else {
-        await this.prisma.translation.deleteMany({
-          where: {
-            questionId,
-            variantId: undefined,
-            languageCode,
-          },
+        this.logger.debug("Question translation served from store", {
+          assignment_id: assignmentId,
+          question_id: questionId,
+          language_code: language.code,
         });
+        return this.storedTranslation(existingTranslation);
       }
+      await this.prisma.translation.deleteMany({ where });
     }
 
-    const translatedQuestion =
-      await this.llmFacadeService.generateQuestionTranslation(
-        assignmentId,
-        question.question,
-        language,
-      );
-
+    let translatedQuestion: string;
     let translatedChoices: Choice[] | undefined;
-
-    if (question.choices && question.choices.length > 0) {
-      translatedChoices =
-        await this.llmFacadeService.generateChoicesTranslation(
-          question.choices,
+    try {
+      this.logger.info("Generating question translation", {
+        assignment_id: assignmentId,
+        question_id: questionId,
+        language_code: language.code,
+      });
+      translatedQuestion =
+        await this.llmFacadeService.generateQuestionTranslation(
           assignmentId,
-          language,
+          question.question,
+          language.name,
         );
+      if (question.choices && question.choices.length > 0) {
+        translatedChoices =
+          (await this.llmFacadeService.generateChoicesTranslation(
+            question.choices,
+            assignmentId,
+            language.name,
+          )) ?? undefined;
+      }
+    } catch (error: unknown) {
+      // LLM outage, timeout or the AI kill switch: all are temporary from
+      // the learner's side, so answer with a retryable 503.
+      this.logger.error("Question translation failed", {
+        assignment_id: assignmentId,
+        question_id: questionId,
+        language_code: language.code,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      throw new ServiceUnavailableException(TRANSLATION_UNAVAILABLE_BODY);
     }
 
-    await this.prisma.translation.create({
-      data: {
-        questionId,
-        variantId: undefined,
-        languageCode,
-        translatedText: translatedQuestion,
-        untranslatedText: question.question,
-        translatedChoices: translatedChoices
-          ? JSON.parse(JSON.stringify(translatedChoices))
-          : undefined,
-        untranslatedChoices: question.choices
-          ? JSON.parse(JSON.stringify(question.choices))
-          : undefined,
-      },
-    });
+    try {
+      await this.prisma.translation.create({
+        data: {
+          questionId,
+          variantId: null,
+          languageCode: language.code,
+          translatedText: translatedQuestion,
+          untranslatedText: question.question,
+          translatedChoices: translatedChoices
+            ? (JSON.parse(
+                JSON.stringify(translatedChoices),
+              ) as Prisma.InputJsonValue)
+            : undefined,
+          untranslatedChoices: question.choices
+            ? (JSON.parse(
+                JSON.stringify(question.choices),
+              ) as Prisma.InputJsonValue)
+            : undefined,
+        },
+      });
+    } catch (error: unknown) {
+      // A concurrent first request stored the same translation first; serve
+      // the row that won rather than failing this one.
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === "P2002"
+      ) {
+        const winner = await this.prisma.translation.findFirst({ where });
+        if (winner?.translatedText) {
+          this.logger.info("Question translation race resolved to stored row", {
+            assignment_id: assignmentId,
+            question_id: questionId,
+            language_code: language.code,
+          });
+          return this.storedTranslation(winner);
+        }
+      }
+      this.logger.error("Storing question translation failed", {
+        assignment_id: assignmentId,
+        question_id: questionId,
+        language_code: language.code,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      throw error;
+    }
 
     return {
       translatedQuestion,
       translatedChoices,
+    };
+  }
+
+  private storedTranslation(row: {
+    translatedText: string;
+    translatedChoices: Prisma.JsonValue;
+  }): { translatedQuestion: string; translatedChoices?: Choice[] } {
+    let choices: unknown = row.translatedChoices;
+    if (typeof choices === "string") {
+      try {
+        choices = JSON.parse(choices) as unknown;
+      } catch (error: unknown) {
+        // Unparsable stored choices: serve the text without them.
+        this.logger.debug("Unparsable stored translated choices", {
+          error: error instanceof Error ? error.message : String(error),
+        });
+        choices = undefined;
+      }
+    }
+    return {
+      translatedQuestion: row.translatedText,
+      translatedChoices: Array.isArray(choices)
+        ? (choices as Choice[])
+        : undefined,
     };
   }
 

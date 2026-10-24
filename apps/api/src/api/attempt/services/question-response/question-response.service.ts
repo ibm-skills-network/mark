@@ -15,7 +15,7 @@ import {
   InternalServerErrorException,
   NotFoundException,
 } from "@nestjs/common";
-import { QuestionType } from "@prisma/client";
+import { Question, QuestionType } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import {
   authorAssignmentDetailsDTO,
@@ -59,6 +59,16 @@ import {
   findQuestionTranslation,
 } from "../../common/utils/translation-language.util";
 import { LocalizationService } from "../../common/utils/localization.service";
+import {
+  applyVariantToQuestion,
+  isVersionOnlyQuestion,
+} from "../../common/utils/grading-question-source.util";
+import {
+  findAuthorFileReferenceDenial,
+  findLearnerFileReferenceDenial,
+  InvalidLearnerFileReferenceException,
+} from "../../common/utils/learner-file-reference.util";
+import { S3Service } from "../../../files/services/s3.service";
 import { GradingFactoryService } from "../grading-factory.service";
 import {
   buildTranslationCacheKey,
@@ -999,79 +1009,6 @@ export class QuestionResponseService {
   }
 
   /**
-   * Create a question response (used by autoSave — writes immediately)
-   */
-  async createQuestionResponse(
-    assignmentAttemptId: number,
-    createQuestionResponseAttemptRequestDto: CreateQuestionResponseAttemptRequestDto,
-    role: UserRole,
-    assignmentId: number,
-    language: string,
-    authorQuestions?: QuestionDto[],
-    assignmentDetails?: authorAssignmentDetailsDTO,
-    preTranslatedQuestions?: Map<number, QuestionDto>,
-    tx?: PrismaTransactionalClient,
-    userId?: string,
-  ): Promise<CreateQuestionResponseAttemptResponseDto> {
-    const questionId = createQuestionResponseAttemptRequestDto.id;
-
-    createQuestionResponseAttemptRequestDto.language = language;
-
-    let question: QuestionDto;
-    let assignmentContext: {
-      assignmentInstructions: string;
-      questionAnswerContext: QuestionAnswerContext[];
-    };
-
-    if (role === UserRole.LEARNER) {
-      ({ question, assignmentContext } = await this.getLearnerQuestion(
-        questionId,
-        assignmentAttemptId,
-        assignmentId,
-        preTranslatedQuestions,
-        tx,
-        undefined,
-        language,
-      ));
-    } else if (role === UserRole.AUTHOR) {
-      ({ question, assignmentContext } = this.getAuthorQuestion(
-        questionId,
-        authorQuestions,
-        assignmentDetails,
-      ));
-    } else {
-      throw new BadRequestException(`Unsupported user role: ${role}`);
-    }
-
-    const { learnerResponse, responseDto } = await this.gradeQuestionNoSave(
-      question,
-      createQuestionResponseAttemptRequestDto,
-      assignmentContext,
-      assignmentId,
-      language,
-      role,
-      assignmentAttemptId,
-      userId,
-    );
-
-    if (role !== UserRole.AUTHOR) {
-      await this.saveResponseToDatabase(
-        assignmentAttemptId,
-        questionId,
-        learnerResponse,
-        responseDto,
-        role,
-        tx,
-      );
-    }
-
-    responseDto.questionId = questionId;
-    responseDto.question = question.question;
-
-    return responseDto;
-  }
-
-  /**
    * Grade a single question without writing to the database.
    * Used by both the gradeQuestionsForLearner Phase 2 and the legacy submitQuestions.
    */
@@ -1122,6 +1059,23 @@ export class QuestionResponseService {
       responseDto.questionId = questionId;
       responseDto.question = question.question;
       return { learnerResponse, responseDto };
+    }
+
+    if (role === UserRole.LEARNER) {
+      this.assertLearnerFilesBelongToQuestion(
+        requestDto.learnerFileResponse,
+        assignmentId,
+        assignmentAttemptId,
+        questionId,
+        userId,
+      );
+    } else {
+      this.assertAuthorPreviewFilesInScope(
+        requestDto.learnerFileResponse,
+        assignmentId,
+        questionId,
+        userId,
+      );
     }
 
     const gradingContext: GradingContext = {
@@ -1292,6 +1246,69 @@ export class QuestionResponseService {
     }
 
     return { learnerResponse, responseDto };
+  }
+
+  /**
+   * Grading reads uploaded files from storage by the coordinates in the
+   * answer, so they must point at this learner's own upload for this
+   * question: a learner bucket and a key under
+   * `<assignmentId>/<userId>/<questionId>/`.
+   */
+  private assertLearnerFilesBelongToQuestion(
+    files: CreateQuestionResponseAttemptRequestDto["learnerFileResponse"],
+    assignmentId: number,
+    assignmentAttemptId: number,
+    questionId: number,
+    userId: string | undefined,
+  ): void {
+    if (!Array.isArray(files) || files.length === 0) {
+      return;
+    }
+    const denial = findLearnerFileReferenceDenial(files, {
+      assignmentId,
+      userId: userId ?? "",
+      questionId,
+      allowedBuckets: S3Service.learnerUploadBuckets(),
+    });
+    if (denial) {
+      this.logger.warn("grading.file_reference.rejected", {
+        assignment_id: assignmentId,
+        attempt_id: assignmentAttemptId,
+        user_id: userId,
+        question_id: questionId,
+        denial_reason: denial,
+      });
+      throw new InvalidLearnerFileReferenceException();
+    }
+  }
+
+  /**
+   * Author preview grades files by the coordinates in the request too, so
+   * they must be the author's own uploads: the author bucket and a key under
+   * `authors/<userId>/`. Anything else could read an arbitrary object.
+   */
+  private assertAuthorPreviewFilesInScope(
+    files: CreateQuestionResponseAttemptRequestDto["learnerFileResponse"],
+    assignmentId: number,
+    questionId: number,
+    userId: string | undefined,
+  ): void {
+    if (!Array.isArray(files) || files.length === 0) {
+      return;
+    }
+    const denial = findAuthorFileReferenceDenial(files, {
+      userId: userId ?? "",
+      allowedBuckets: S3Service.authorUploadBuckets(),
+    });
+    if (denial) {
+      this.logger.warn("grading.preview_file_reference.rejected", {
+        assignment_id: assignmentId,
+        user_id: userId,
+        question_id: questionId,
+        denial_reason: denial,
+      });
+      throw new InvalidLearnerFileReferenceException();
+    }
   }
 
   /**
@@ -1608,39 +1625,38 @@ export class QuestionResponseService {
       (qv) => qv.questionId === questionId,
     );
 
-    let question: QuestionDto;
-
-    if (variantMapping && variantMapping.questionVariant !== null) {
-      const variant = variantMapping.questionVariant;
-      const baseQuestion = variant.variantOf;
-
-      question = {
-        id: baseQuestion.id,
-        question: variant.variantContent,
-        type: baseQuestion.type,
-        assignmentId: baseQuestion.assignmentId,
-        maxWords: variant.maxWords ?? baseQuestion.maxWords,
-        maxCharacters: variant.maxCharacters ?? baseQuestion.maxCharacters,
-        scoring: (this.parseJsonField(variant.scoring) ??
-          this.parseJsonField(baseQuestion.scoring)) as ScoringDto,
-        choices: (this.parseJsonField(variant.choices) ??
-          this.parseJsonField(baseQuestion.choices)) as Choice[],
-        answer: baseQuestion.answer ?? variant.answer,
-        alreadyInBackend: true,
-        totalPoints: baseQuestion.totalPoints,
-        responseType: baseQuestion.responseType,
-        gradingContextQuestionIds: baseQuestion.gradingContextQuestionIds ?? [],
-        videoPresentationConfig: baseQuestion.videoPresentationConfig
-          ? (this.parseJsonField(
-              baseQuestion.videoPresentationConfig,
-            ) as VideoPresentationConfig)
-          : null,
-      };
-    } else {
-      question = await this.questionService.findOne(questionId, tx, cache);
+    // An attempt pinned to an assignment version is graded against that
+    // version's question, the one the learner was shown; the live row only
+    // stands in for attempts without a pinned version.
+    const pinnedQuestion = cache?.pinnedQuestions?.get(questionId);
+    const baseQuestion: QuestionDto =
+      pinnedQuestion ??
+      (variantMapping?.questionVariant
+        ? this.liveBaseQuestion(variantMapping.questionVariant.variantOf)
+        : await this.questionService.findOne(questionId, tx, cache));
+    if (cache?.pinnedQuestions && !pinnedQuestion) {
+      this.logger.warn("grading.question.not_in_pinned_version", {
+        assignment_id: assignmentId,
+        attempt_id: assignmentAttemptId,
+        question_id: questionId,
+      });
     }
 
-    if (language && language !== "en") {
+    let question: QuestionDto =
+      variantMapping && variantMapping.questionVariant !== null
+        ? applyVariantToQuestion(baseQuestion, variantMapping.questionVariant)
+        : baseQuestion;
+
+    if (language && language !== "en" && isVersionOnlyQuestion(baseQuestion)) {
+      // Its id is a version row's, not a question's: a translation looked up
+      // by it could belong to an unrelated question.
+      this.logger.warn("grading.translation.skipped_version_only_question", {
+        assignment_id: assignmentId,
+        attempt_id: assignmentAttemptId,
+        question_id: questionId,
+        language,
+      });
+    } else if (language && language !== "en") {
       const variantId = variantMapping?.questionVariant?.id ?? null;
       const key = buildTranslationCacheKey(language, questionId, variantId);
       let translation = cache?.translations.get(key);
@@ -1667,6 +1683,30 @@ export class QuestionResponseService {
     );
 
     return { question, assignmentContext };
+  }
+
+  /** A variant's live base question, for attempts without a pinned version. */
+  private liveBaseQuestion(baseQuestion: Question): QuestionDto {
+    return {
+      id: baseQuestion.id,
+      question: baseQuestion.question,
+      type: baseQuestion.type,
+      assignmentId: baseQuestion.assignmentId,
+      maxWords: baseQuestion.maxWords,
+      maxCharacters: baseQuestion.maxCharacters,
+      scoring: this.parseJsonField(baseQuestion.scoring) as ScoringDto,
+      choices: this.parseJsonField(baseQuestion.choices) as Choice[],
+      answer: baseQuestion.answer,
+      alreadyInBackend: true,
+      totalPoints: baseQuestion.totalPoints,
+      responseType: baseQuestion.responseType,
+      gradingContextQuestionIds: baseQuestion.gradingContextQuestionIds ?? [],
+      videoPresentationConfig: baseQuestion.videoPresentationConfig
+        ? (this.parseJsonField(
+            baseQuestion.videoPresentationConfig,
+          ) as VideoPresentationConfig)
+        : null,
+    };
   }
 
   /**
@@ -1735,8 +1775,11 @@ export class QuestionResponseService {
     }
 
     let gradingContextQuestionIds: number[];
+    const pinnedQuestion = cache?.pinnedQuestions?.get(questionId);
     const cachedQuestion = cache?.questions.get(questionId);
-    if (cachedQuestion) {
+    if (pinnedQuestion) {
+      gradingContextQuestionIds = pinnedQuestion.gradingContextQuestionIds;
+    } else if (cachedQuestion) {
       gradingContextQuestionIds = cachedQuestion.gradingContextQuestionIds;
     } else {
       const fetched = await prisma.question.findUnique({
@@ -1758,14 +1801,29 @@ export class QuestionResponseService {
       };
     }
 
-    const contextQuestions = await prisma.question.findMany({
-      where: {
-        id: {
-          in: gradingContextQuestionIds,
-        },
-      },
-      select: { id: true, question: true, type: true },
-    });
+    const pinnedContextQuestions = cache?.pinnedQuestions
+      ? gradingContextQuestionIds
+          .map((id) => cache.pinnedQuestions?.get(id))
+          .filter((q): q is QuestionDto => q !== undefined)
+          .map((q) => ({ id: q.id, question: q.question, type: q.type }))
+      : [];
+    const pinnedContextIds = new Set(pinnedContextQuestions.map((q) => q.id));
+    const unpinnedContextIds = gradingContextQuestionIds.filter(
+      (id) => !pinnedContextIds.has(id),
+    );
+    const contextQuestions = [
+      ...pinnedContextQuestions,
+      ...(unpinnedContextIds.length > 0
+        ? await prisma.question.findMany({
+            where: {
+              id: {
+                in: unpinnedContextIds,
+              },
+            },
+            select: { id: true, question: true, type: true },
+          })
+        : []),
+    ];
 
     // Build the response lookup: prefer in-memory (Phase 2) over DB
     const responsesByQuestionId: Record<number, string> = {};

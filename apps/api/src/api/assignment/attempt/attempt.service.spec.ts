@@ -1,27 +1,16 @@
 /* eslint-disable */
-import { HttpService } from "@nestjs/axios";
-import {
-  NotFoundException,
-  UnprocessableEntityException,
-} from "@nestjs/common";
+import { NotFoundException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
-import { LtiSyncStatus } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
-import { GithubRateLimitedError } from "src/api/llm/features/grading/errors/github-rate-limited.error";
 import { UserRole } from "../../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../../database/prisma.service";
-import { LlmFacadeService } from "../../llm/llm-facade.service";
-import { QuestionService } from "../question/question.service";
 import { AssignmentServiceV1 } from "../v1/services/assignment.service";
 import { AttemptServiceV1 } from "./attempt.service";
-import { AttemptHelper } from "./helper/attempts.helper";
-import { LtiGradeSyncService } from "../../attempt/services/lti-grade-sync.service";
 import { GradingKillSwitchService } from "../../ai-feature-flags/grading-kill-switch.service";
 
 describe("AttemptServiceV1 - Auto-Grade Expired Attempts", () => {
   let service: AttemptServiceV1;
   let prismaService: PrismaService;
-  let ltiGradeSyncService: any;
 
   const mockPrismaService = {
     assignmentAttempt: {
@@ -51,21 +40,11 @@ describe("AttemptServiceV1 - Auto-Grade Expired Attempts", () => {
     },
   };
 
-  const mockLtiGradeSyncService = {
-    createAndSync: jest.fn(),
-  };
-
   const mockGradingKillSwitch = {
     assertGradingAllowed: jest.fn(),
     assignmentUsesAiGrading: jest.fn(),
   };
 
-  const mockHttpService = {
-    put: jest.fn(),
-  };
-
-  const mockLlmFacadeService = {};
-  const mockQuestionService = {};
   const mockAssignmentService = {
     findOne: jest.fn(),
   };
@@ -84,11 +63,7 @@ describe("AttemptServiceV1 - Auto-Grade Expired Attempts", () => {
       providers: [
         AttemptServiceV1,
         { provide: PrismaService, useValue: mockPrismaService },
-        { provide: HttpService, useValue: mockHttpService },
-        { provide: LlmFacadeService, useValue: mockLlmFacadeService },
-        { provide: QuestionService, useValue: mockQuestionService },
         { provide: AssignmentServiceV1, useValue: mockAssignmentService },
-        { provide: LtiGradeSyncService, useValue: mockLtiGradeSyncService },
         {
           provide: GradingKillSwitchService,
           useValue: mockGradingKillSwitch,
@@ -99,7 +74,6 @@ describe("AttemptServiceV1 - Auto-Grade Expired Attempts", () => {
 
     service = module.get<AttemptServiceV1>(AttemptServiceV1);
     prismaService = module.get<PrismaService>(PrismaService);
-    ltiGradeSyncService = mockLtiGradeSyncService;
 
     jest.clearAllMocks();
   });
@@ -366,231 +340,6 @@ describe("AttemptServiceV1 - Auto-Grade Expired Attempts", () => {
     });
   });
 
-  describe("updateAssignmentAttempt - Timeout Grading", () => {
-    it("should grade late submission with saved responses", async () => {
-      const attemptId = 1;
-      const assignmentId = 1;
-
-      const mockAttempt = {
-        id: attemptId,
-        assignmentId,
-        expiresAt: new Date(Date.now() - 60_000),
-        submitted: false,
-      };
-
-      const savedResponses = [
-        { questionId: 1, points: 8 },
-        { questionId: 2, points: 7 },
-      ];
-
-      const mockQuestions = [
-        { id: 1, totalPoints: 10, isDeleted: false },
-        { id: 2, totalPoints: 10, isDeleted: false },
-      ];
-
-      mockPrismaService.assignmentAttempt.findUnique.mockResolvedValue(
-        mockAttempt,
-      );
-      mockPrismaService.questionResponse.findMany.mockResolvedValue(
-        savedResponses,
-      );
-      mockPrismaService.question.findMany.mockResolvedValue(mockQuestions);
-
-      const updateDto = {
-        submitted: true,
-        responsesForQuestions: [],
-      };
-
-      const request = {
-        userSession: { userId: "user-123", role: "learner" as const },
-      };
-
-      const result = await service.updateAssignmentAttempt(
-        attemptId,
-        assignmentId,
-        updateDto as any,
-        "auth-cookie",
-        false,
-        request as any,
-      );
-
-      expect(result.grade).toBe(0.75);
-      expect(result.totalPointsEarned).toBe(15);
-      expect(result.totalPossiblePoints).toBe(20);
-      expect(result.message).toContain("saved responses have been graded");
-    });
-
-    it("should give zero grade for late submission with no saved responses", async () => {
-      const attemptId = 1;
-      const assignmentId = 1;
-
-      const mockAttempt = {
-        id: attemptId,
-        assignmentId,
-        expiresAt: new Date(Date.now() - 60_000),
-        submitted: false,
-      };
-
-      mockPrismaService.assignmentAttempt.findUnique.mockResolvedValue(
-        mockAttempt,
-      );
-      mockPrismaService.questionResponse.findMany.mockResolvedValue([]);
-      mockPrismaService.question.findMany.mockResolvedValue([
-        { id: 1, totalPoints: 10, isDeleted: false },
-      ]);
-
-      const updateDto = {
-        submitted: true,
-        responsesForQuestions: [],
-      };
-
-      const request = {
-        userSession: { userId: "user-123", role: "learner" as const },
-      };
-
-      const result = await service.updateAssignmentAttempt(
-        attemptId,
-        assignmentId,
-        updateDto as any,
-        "auth-cookie",
-        false,
-        request as any,
-      );
-
-      expect(result.grade).toBe(0);
-      expect(result.totalPointsEarned).toBe(0);
-      expect(result.message).toContain("The attempt deadline has passed");
-    });
-
-    it("should allow submission within 30-second grace period", async () => {
-      const attemptId = 1;
-      const assignmentId = 1;
-
-      const mockAttempt = {
-        id: attemptId,
-        assignmentId,
-        expiresAt: new Date(Date.now() - 20_000),
-        submitted: false,
-        questionVariants: [],
-      };
-
-      mockPrismaService.assignmentAttempt.findUnique.mockResolvedValue(
-        mockAttempt,
-      );
-      mockPrismaService.assignmentAttempt.update.mockResolvedValue({
-        ...mockAttempt,
-        submitted: true,
-      });
-      mockPrismaService.assignment.findUnique.mockResolvedValue({
-        showAssignmentScore: true,
-        showSubmissionFeedback: true,
-        showQuestionScore: true,
-        showQuestions: true,
-        currentVersion: { correctAnswerVisibility: "NEVER" },
-        questions: [],
-      });
-
-      const updateDto = {
-        submitted: true,
-        responsesForQuestions: [],
-      };
-
-      const request = {
-        userSession: { userId: "user-123", role: "learner" as const },
-      };
-
-      await service.updateAssignmentAttempt(
-        attemptId,
-        assignmentId,
-        updateDto as any,
-        "auth-cookie",
-        false,
-        request as any,
-      );
-
-      expect(
-        mockPrismaService.questionResponse.findMany,
-      ).not.toHaveBeenCalled();
-    });
-  });
-
-  describe("queueGradeSyncAsync - LTI Grade Sync Integration", () => {
-    it("should queue grade sync using LtiGradeSyncService", async () => {
-      mockLtiGradeSyncService.createAndSync.mockResolvedValue({
-        success: true,
-        syncId: 1,
-        status: LtiSyncStatus.SUCCESS,
-      });
-
-      await service["queueGradeSyncAsync"](
-        123,
-        "user-456",
-        789,
-        0.85,
-        "auth-cookie",
-      );
-
-      expect(mockLtiGradeSyncService.createAndSync).toHaveBeenCalledWith({
-        attemptId: 123,
-        userId: "user-456",
-        assignmentId: 789,
-        grade: 0.85,
-        authCookie: "auth-cookie",
-      });
-    });
-
-    it("should fallback to legacy method if service unavailable", async () => {
-      const moduleWithoutService = await Test.createTestingModule({
-        providers: [
-          AttemptServiceV1,
-          { provide: PrismaService, useValue: mockPrismaService },
-          { provide: HttpService, useValue: mockHttpService },
-          { provide: LlmFacadeService, useValue: mockLlmFacadeService },
-          { provide: QuestionService, useValue: mockQuestionService },
-          { provide: AssignmentServiceV1, useValue: mockAssignmentService },
-          {
-            provide: GradingKillSwitchService,
-            useValue: mockGradingKillSwitch,
-          },
-          { provide: WINSTON_MODULE_PROVIDER, useValue: mockLogger },
-        ],
-      }).compile();
-
-      const serviceWithoutLtiSync =
-        moduleWithoutService.get<AttemptServiceV1>(AttemptServiceV1);
-
-      mockHttpService.put.mockReturnValue({
-        toPromise: jest.fn().mockResolvedValue({ status: 200 }),
-      });
-
-      await serviceWithoutLtiSync["queueGradeSyncAsync"](
-        123,
-        "user-456",
-        789,
-        0.85,
-        "auth-cookie",
-      );
-
-      expect(mockHttpService.put).toHaveBeenCalled();
-    });
-
-    it("should not throw error if grade sync fails", async () => {
-      mockLtiGradeSyncService.createAndSync.mockRejectedValue(
-        new Error("Network error"),
-      );
-
-      await expect(
-        service["queueGradeSyncAsync"](
-          123,
-          "user-456",
-          789,
-          0.85,
-          "auth-cookie",
-        ),
-      ).resolves.not.toThrow();
-    });
-  });
-
   describe("getAssignmentAttempt - assignment hydration", () => {
     const baseAttempt = {
       id: 555,
@@ -828,256 +577,6 @@ describe("AttemptServiceV1 - Auto-Grade Expired Attempts", () => {
       );
     });
   });
-
-  describe("getLearnerAssignmentAttempt - correct answer visibility", () => {
-    const completedAttempt = () => ({
-      id: 555,
-      assignmentId: 42,
-      grade: 0.9,
-      questionOrder: [7],
-      questionResponses: [],
-      questionVariants: [],
-      comments: null,
-    });
-
-    const completedQuestion = () => ({
-      id: 7,
-      assignmentId: 42,
-      question: "Pick one",
-      type: "SINGLE_CORRECT",
-      totalPoints: 1,
-      answer: "the answer",
-      choices: [{ choice: "A", isCorrect: true, points: 1, feedback: "right" }],
-      scoring: null,
-      isDeleted: false,
-    });
-
-    const completedAssignment = () => ({
-      id: 42,
-      languageCode: null,
-      questions: [],
-      questionOrder: [],
-      displayOrder: "DEFINED",
-      passingGrade: 70,
-      showAssignmentScore: true,
-      showSubmissionFeedback: true,
-      showQuestionScore: true,
-      showQuestions: true,
-      showPassFailIndicator: true,
-      questionControls: null,
-      currentVersion: {
-        correctAnswerVisibility: "NEVER",
-        questionControls: null,
-      },
-    });
-
-    const mockCompleted = (
-      attempt: ReturnType<typeof completedAttempt>,
-      assignment: ReturnType<typeof completedAssignment>,
-    ) => {
-      mockPrismaService.assignmentAttempt.findUnique.mockResolvedValue(attempt);
-      mockPrismaService.question.findMany.mockResolvedValue([
-        completedQuestion(),
-      ]);
-      mockPrismaService.assignment.findUnique.mockResolvedValue(assignment);
-    };
-
-    // The gate used to read assignmentAttempt.grade after the score-hiding
-    // step deleted it, so `undefined < passingGrade` was false and NEVER
-    // assignments with a hidden score leaked isCorrect and feedback on the
-    // completed route. (question.answer never survives this route's mapper.)
-    it("hides correct answers under NEVER even when the score is hidden", async () => {
-      mockCompleted(completedAttempt(), {
-        ...completedAssignment(),
-        showAssignmentScore: false,
-      });
-
-      const result = await service.getLearnerAssignmentAttempt(555);
-
-      const [question] = result.questions;
-      expect(question.choices[0].isCorrect).toBeUndefined();
-      expect(question.choices[0].feedback).toBeUndefined();
-    });
-
-    it("hides correct answers under NEVER regardless of the grade", async () => {
-      mockCompleted(completedAttempt(), completedAssignment());
-
-      const result = await service.getLearnerAssignmentAttempt(555);
-
-      expect(result.questions[0].choices[0].isCorrect).toBeUndefined();
-    });
-
-    // ON_PASS previously never matched the gate at all, so failing learners
-    // saw the correct answers on the completed route.
-    it("hides correct answers under ON_PASS when the grade is below the passing grade", async () => {
-      mockCompleted(
-        { ...completedAttempt(), grade: 0.5 },
-        {
-          ...completedAssignment(),
-          currentVersion: {
-            correctAnswerVisibility: "ON_PASS",
-            questionControls: null,
-          },
-        },
-      );
-
-      const result = await service.getLearnerAssignmentAttempt(555);
-
-      expect(result.questions[0].choices[0].isCorrect).toBeUndefined();
-    });
-
-    it("shows correct answers under ON_PASS when the grade meets the passing grade", async () => {
-      mockCompleted(completedAttempt(), {
-        ...completedAssignment(),
-        currentVersion: {
-          correctAnswerVisibility: "ON_PASS",
-          questionControls: null,
-        },
-      });
-
-      const result = await service.getLearnerAssignmentAttempt(555);
-
-      const [question] = result.questions;
-      expect(question.choices[0].isCorrect).toBe(true);
-      expect(question.choices[0].feedback).toBe("right");
-    });
-
-    it("shows correct answers under ALWAYS", async () => {
-      mockCompleted(completedAttempt(), {
-        ...completedAssignment(),
-        currentVersion: {
-          correctAnswerVisibility: "ALWAYS",
-          questionControls: null,
-        },
-      });
-
-      const result = await service.getLearnerAssignmentAttempt(555);
-
-      expect(result.questions[0].choices[0].isCorrect).toBe(true);
-    });
-  });
-
-  describe("getAssignmentContext - v1 URL context enrichment", () => {
-    const callGetAssignmentContext = () =>
-      (
-        service as unknown as {
-          getAssignmentContext: (
-            assignmentId: number,
-            questionId: number,
-            assignmentAttemptId: number,
-            role: UserRole,
-          ) => Promise<{
-            assignmentInstructions: string;
-            questionAnswerContext: { question: string; answer: string }[];
-          }>;
-        }
-      ).getAssignmentContext(42, 10, 555, UserRole.LEARNER);
-
-    beforeEach(() => {
-      mockPrismaService.assignment.findUnique.mockResolvedValue({
-        instructions: "do the assignment",
-      });
-      mockPrismaService.question.findUnique.mockResolvedValue({
-        gradingContextQuestionIds: [30],
-      });
-      mockPrismaService.question.findMany.mockResolvedValue([
-        { id: 30, question: "Link your repo", type: "URL" },
-      ]);
-      mockPrismaService.questionResponse.findMany.mockResolvedValue([
-        {
-          questionId: 30,
-          learnerResponse: "https://github.com/octocat/hello-world",
-        },
-      ]);
-    });
-
-    it("degrades to the raw response (no fetched content) when the context URL fetch is rate-limited, instead of failing the caller", async () => {
-      const fetchSpy = jest
-        .spyOn(AttemptHelper, "fetchPlainTextFromUrl")
-        .mockRejectedValue(
-          new GithubRateLimitedError({
-            owner: "octocat",
-            repo: "hello-world",
-            requestUrl: "https://api.github.com/repos/octocat/hello-world",
-          }),
-        );
-
-      const context = await callGetAssignmentContext();
-
-      expect(context.questionAnswerContext).toEqual([
-        {
-          question: "Link your repo",
-          answer: "https://github.com/octocat/hello-world",
-        },
-      ]);
-
-      fetchSpy.mockRestore();
-    });
-
-    it("still includes the fetched content when the URL fetch succeeds", async () => {
-      const fetchSpy = jest
-        .spyOn(AttemptHelper, "fetchPlainTextFromUrl")
-        .mockResolvedValue({ body: "# Readme", isFunctional: true });
-
-      const context = await callGetAssignmentContext();
-
-      expect(context.questionAnswerContext[0].answer).toContain("# Readme");
-
-      fetchSpy.mockRestore();
-    });
-  });
-
-  describe("createQuestionResponse - images in text answers", () => {
-    const PNG =
-      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
-
-    const capture = async (type: string, learnerTextResponse: string) => {
-      const stop = new Error("stop after capture");
-      const processSpy = jest
-        .spyOn(service as any, "processQuestionResponse")
-        .mockRejectedValue(stop);
-
-      await expect(
-        service.createQuestionResponse(
-          9,
-          7,
-          { learnerTextResponse } as any,
-          UserRole.AUTHOR,
-          3,
-          "en",
-          [{ id: 7, type, question: "Paste the output" } as any],
-        ),
-      ).rejects.toBe(stop);
-
-      const sent = (processSpy.mock.calls[0][1] as any).learnerTextResponse;
-      processSpy.mockRestore();
-      return sent as string;
-    };
-
-    it("removes pasted images from a TEXT answer before grading", async () => {
-      const sent = await capture(
-        "TEXT",
-        `<p>result: 42</p><p><img src="${PNG}"></p>`,
-      );
-
-      expect(sent).toContain("result: 42");
-      expect(sent).not.toMatch(/<img|data:image/i);
-      expect(mockLogger.child().warn).toHaveBeenCalledWith(
-        expect.stringContaining("image"),
-        expect.objectContaining({
-          assignmentId: 3,
-          assignmentAttemptId: 9,
-          questionId: 7,
-          removedImageCount: 1,
-        }),
-      );
-    });
-
-    it("leaves other question types alone", async () => {
-      const html = `<p><img src="${PNG}"></p>`;
-      expect(await capture("UPLOAD", html)).toBe(html);
-    });
-  });
 });
 
 describe("AttemptServiceV1 - server clock and blank expired submissions", () => {
@@ -1124,14 +623,7 @@ describe("AttemptServiceV1 - server clock and blank expired submissions", () => 
       providers: [
         AttemptServiceV1,
         { provide: PrismaService, useValue: mockPrismaService },
-        { provide: HttpService, useValue: { put: jest.fn() } },
-        { provide: LlmFacadeService, useValue: {} },
-        { provide: QuestionService, useValue: {} },
         { provide: AssignmentServiceV1, useValue: mockAssignmentService },
-        {
-          provide: LtiGradeSyncService,
-          useValue: { createAndSync: jest.fn() },
-        },
         { provide: GradingKillSwitchService, useValue: mockGradingKillSwitch },
         {
           provide: WINSTON_MODULE_PROVIDER,
@@ -1174,52 +666,5 @@ describe("AttemptServiceV1 - server clock and blank expired submissions", () => 
     const parsed = Date.parse(result.serverNow as string);
     expect(parsed).toBeGreaterThanOrEqual(before);
     expect(parsed).toBeLessThanOrEqual(after);
-  });
-
-  it("warns with the attempt, learner and assignment when an expired attempt is submitted with nothing answered", async () => {
-    mockGradingKillSwitch.assertGradingAllowed.mockResolvedValue(undefined);
-    mockPrismaService.assignmentAttempt.findUnique.mockResolvedValue({
-      id: 777,
-      userId: "learner@example.com",
-      assignmentId: 3663,
-      submitted: false,
-      expiresAt: new Date(Date.now() - 60_000),
-      questionVariants: [],
-    });
-    mockPrismaService.questionResponse.findMany.mockResolvedValue([]);
-    mockPrismaService.question.findMany.mockResolvedValue([]);
-    mockPrismaService.assignmentAttempt.update.mockResolvedValue({});
-
-    const result = await service.updateAssignmentAttempt(
-      777,
-      3663,
-      {
-        submitted: true,
-        responsesForQuestions: [
-          {
-            id: 1,
-            learnerTextResponse: "",
-            learnerChoices: [],
-            learnerFileResponse: [],
-          },
-          { id: 2, learnerTextResponse: "<p><br></p>" },
-        ],
-      } as any,
-      "cookie",
-      false,
-      {
-        userSession: { userId: "learner@example.com", role: UserRole.LEARNER },
-      } as any,
-    );
-
-    const warning = warn.mock.calls
-      .map((call) => JSON.stringify(call))
-      .join(" ");
-    expect(warning).toContain("777");
-    expect(warning).toContain("learner@example.com");
-    expect(warning).toContain("3663");
-
-    // Submission semantics unchanged: the expired attempt is still closed out.
-    expect(result).toMatchObject({ id: 777, submitted: true, success: true });
   });
 });

@@ -3,11 +3,9 @@ import { useLearnerStore, type learnerFileResponse } from "../learner";
 
 jest.mock("@/lib/talkToBackend", () => ({ getUser: jest.fn() }));
 
-const githubFile: learnerFileResponse = {
+const droppedFile: learnerFileResponse = {
   filename: "check-packaging.mjs",
   content: "console.log('unrelated submission');",
-  githubUrl:
-    "https://raw.githubusercontent.com/example/project/main/check-packaging.mjs",
 };
 const storedFile: learnerFileResponse = {
   filename: "answer.py",
@@ -29,7 +27,7 @@ describe("learner file source metadata", () => {
     });
   });
 
-  it.each([githubFile, storedFile])(
+  it.each([droppedFile, storedFile])(
     "preserves source metadata when selecting $filename in file/link mode",
     (file) => {
       useLearnerStore.getState().onModeChange("file", [file], 7);
@@ -46,9 +44,9 @@ describe("learner file source metadata", () => {
   );
 
   it("preserves metadata for direct file selection and mixed sources", () => {
-    useLearnerStore.getState().onFileChange([githubFile, storedFile], 7);
+    useLearnerStore.getState().onFileChange([droppedFile, storedFile], 7);
     expect(useLearnerStore.getState().questions[0].learnerFileResponse).toEqual(
-      [githubFile, storedFile],
+      [droppedFile, storedFile],
     );
   });
 
@@ -56,7 +54,7 @@ describe("learner file source metadata", () => {
     const notebook = { cells: [{ cell_type: "code", source: ["x = 1"] }] };
     const parsed = {
       filename: "lab.ipynb",
-      githubUrl: "https://github.com/learner/repo/blob/main/lab.ipynb",
+      key: "7/learner@example.com/7/lab.ipynb",
       content: notebook,
     } as unknown as learnerFileResponse;
 

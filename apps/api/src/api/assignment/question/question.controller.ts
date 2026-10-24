@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
@@ -11,9 +12,13 @@ import {
   Post,
   Put,
   Req,
+  Res,
+  ServiceUnavailableException,
   UseGuards,
 } from "@nestjs/common";
 import { ApiBody, ApiOperation, ApiResponse, ApiTags } from "@nestjs/swagger";
+import { SkipThrottle, Throttle } from "@nestjs/throttler";
+import { Response } from "express";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
 import {
@@ -31,7 +36,12 @@ import {
 import { BaseQuestionResponseDto } from "./dto/base.question.response.dto";
 import { CreateUpdateQuestionRequestDto } from "./dto/create.update.question.request.dto";
 import { GetQuestionResponseDto } from "./dto/get.question.response.dto";
+import {
+  QuestionTranslationRequestDto,
+  resolveSupportedLanguage,
+} from "./dto/question-translation.request.dto";
 import { AssignmentQuestionAccessControlGuard } from "./guards/assignment.question.access.control.guard";
+import { UserThrottlerGuard } from "../../files/guards/user-throttler.guard";
 import { QuestionService } from "./question.service";
 
 @ApiTags("Questions")
@@ -41,7 +51,7 @@ import { QuestionService } from "./question.service";
   version: "2",
 })
 export class QuestionController {
-  private logger;
+  private logger: Logger;
   constructor(
     @Inject(WINSTON_MODULE_PROVIDER) private parentLogger: Logger,
     private readonly questionService: QuestionService,
@@ -208,45 +218,88 @@ export class QuestionController {
   }
   @Post(":id/translations")
   @Roles(UserRole.AUTHOR, UserRole.LEARNER)
-  @UseGuards(AssignmentQuestionAccessControlGuard)
+  // Access first, so only requests that may translate count against the
+  // per-user limit. Every miss is a paid LLM call.
+  @UseGuards(AssignmentQuestionAccessControlGuard, UserThrottlerGuard)
+  // Every registered throttler applies; only the default one is meant here.
+  @SkipThrottle({ strict: true })
+  @Throttle({ default: { limit: 60, ttl: 60_000 } })
   @ApiOperation({ summary: "Request a translation for a question" })
-  @ApiBody({
-    type: Object,
-    description:
-      "Provide selectedLanguage and selectedLanguageCode for the translation request",
-  })
-  @ApiResponse({ status: 200, type: Object })
+  @ApiBody({ type: QuestionTranslationRequestDto })
+  @ApiResponse({ status: 201, type: Object })
+  @ApiResponse({ status: 400, description: "Unsupported language code" })
   @ApiResponse({ status: 404, description: "Question not found" })
+  @ApiResponse({ status: 429, description: "Too many translation requests" })
+  @ApiResponse({
+    status: 503,
+    description: "Translation temporarily unavailable; retry after 1 s",
+  })
   async getOrCreateTranslation(
-    @Param("id") questionId: number,
-    @Body()
-    body: {
-      selectedLanguage: string;
-      selectedLanguageCode: string;
-    },
+    @Param("assignmentId") assignmentId: string,
+    @Param("id") questionId: string,
+    @Body() body: QuestionTranslationRequestDto,
     @Req() request: UserSessionRequest,
+    @Res({ passthrough: true }) response: Response,
   ): Promise<{
     translatedQuestion: string;
     translatedChoices?: Choice[] | { id: number | null; choice: string }[];
   }> {
-    const { selectedLanguage, selectedLanguageCode } = body;
     const { userSession } = request;
+    const logContext = {
+      assignment_id: Number(assignmentId),
+      question_id: Number(questionId),
+      user_id: userSession.userId,
+      role: userSession.role,
+    };
+    // The DTO has already refused codes outside the catalogue.
+    const language = resolveSupportedLanguage(body.selectedLanguageCode);
+    if (!language) {
+      this.logger.warn("Question translation refused", {
+        ...logContext,
+        denial_reason: "unsupported_language",
+      });
+      throw new BadRequestException("Unsupported language");
+    }
+    this.logger.info("Question translation requested", {
+      ...logContext,
+      language_code: language.code,
+    });
 
     const question = await this.questionService.findOneForTranslation(
       Number(questionId),
     );
 
-    const { translatedQuestion, translatedChoices } =
-      await this.questionService.generateTranslationIfNotExists(
+    let translation: {
+      translatedQuestion: string;
+      translatedChoices?: Choice[];
+    };
+    try {
+      translation = await this.questionService.generateTranslationIfNotExists(
         question.assignmentId,
         question,
-        selectedLanguageCode,
-        selectedLanguage,
+        language,
       );
+    } catch (error: unknown) {
+      if (error instanceof ServiceUnavailableException) {
+        response.setHeader("Retry-After", "1");
+      }
+      this.logger.warn("Question translation failed", {
+        ...logContext,
+        language_code: language.code,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      throw error;
+    }
 
+    this.logger.info("Question translation served", {
+      ...logContext,
+      language_code: language.code,
+    });
+
+    const { translatedQuestion, translatedChoices } = translation;
     if (userSession.role === UserRole.LEARNER) {
       const safeChoices = translatedChoices?.map((choice) => ({
-        id: choice.id || null,
+        id: typeof choice.id === "number" ? choice.id : null,
         choice: choice.choice,
       }));
       return { translatedQuestion, translatedChoices: safeChoices };

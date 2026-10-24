@@ -1,5 +1,9 @@
 /* eslint-disable unicorn/no-null */
-import { Injectable, InternalServerErrorException } from "@nestjs/common";
+import {
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+} from "@nestjs/common";
 import {
   AssignmentAttempt,
   QuestionVariant,
@@ -18,6 +22,10 @@ import {
   findQuestionTranslation,
 } from "../../common/utils/translation-language.util";
 import { TranslatedContent } from "../../common/utils/attempt-questions-mapper.util";
+import {
+  applyVariantToQuestion,
+  isVersionOnlyQuestion,
+} from "../../common/utils/grading-question-source.util";
 import {
   buildTranslationCacheKey,
   type JobScopedCache,
@@ -41,6 +49,8 @@ function toLanguageFamily(language?: string): string {
 }
 @Injectable()
 export class TranslationService {
+  private readonly logger = new Logger(TranslationService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly questionService: QuestionService,
@@ -75,10 +85,21 @@ export class TranslationService {
 
       let question: QuestionDto;
 
-      question = await (variantMapping &&
-      variantMapping.questionVariant !== null
-        ? this.getQuestionFromVariant(variantMapping, cache)
-        : this.questionService.findOne(questionId, undefined, cache));
+      // Same source as grading: the attempt's pinned question when it has
+      // one, else the live row.
+      const pinnedQuestion = cache?.pinnedQuestions?.get(questionId);
+      if (variantMapping && variantMapping.questionVariant !== null) {
+        question = pinnedQuestion
+          ? applyVariantToQuestion(
+              pinnedQuestion,
+              variantMapping.questionVariant,
+            )
+          : await this.getQuestionFromVariant(variantMapping, cache);
+      } else {
+        question =
+          pinnedQuestion ??
+          (await this.questionService.findOne(questionId, undefined, cache));
+      }
 
       question = await this.applyTranslationToQuestion(
         question,
@@ -217,6 +238,14 @@ export class TranslationService {
     if (!language || language === "en") {
       return question;
     }
+    if (isVersionOnlyQuestion(question)) {
+      // Its id is a version row's, not a question's: a translation looked up
+      // by it could belong to an unrelated question.
+      this.logger.warn(
+        `translation.skipped_version_only_question question_id=${question.id} language=${language}`,
+      );
+      return question;
+    }
 
     const variantId = variantMapping?.questionVariant?.id ?? null;
     // Cache key encodes (language, questionId, variantId). A variant-keyed
@@ -263,22 +292,16 @@ export class TranslationService {
       cache,
     );
 
-    return {
-      id: baseQuestion.id,
-      question: variant.variantContent,
-      type: baseQuestion.type,
-      assignmentId: baseQuestion.assignmentId,
-      maxWords: variant.maxWords ?? baseQuestion.maxWords,
-      maxCharacters: variant.maxCharacters ?? baseQuestion.maxCharacters,
-      scoring: (this.parseJsonField(variant.scoring) ??
-        this.parseJsonField(baseQuestion.scoring)) as ScoringDto,
-      choices: (this.parseJsonField(variant.choices) ??
-        this.parseJsonField(baseQuestion.choices)) as Choice[],
-      answer: variant.answer ?? baseQuestion.answer,
-      alreadyInBackend: true,
-      totalPoints: baseQuestion.totalPoints,
-      gradingContextQuestionIds: baseQuestion.gradingContextQuestionIds ?? [],
-    };
+    return applyVariantToQuestion(
+      {
+        ...baseQuestion,
+        scoring: this.parseJsonField(baseQuestion.scoring) as ScoringDto,
+        choices: this.parseJsonField(baseQuestion.choices) as Choice[],
+        gradingContextQuestionIds: baseQuestion.gradingContextQuestionIds ?? [],
+        alreadyInBackend: true,
+      },
+      variant,
+    );
   }
 
   /**

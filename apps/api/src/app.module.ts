@@ -49,7 +49,6 @@ export class AppModule implements NestModule {
       .apply(UserSessionMiddleware)
       .forRoutes(
         { path: "/v1/assignments{/*splat}", method: RequestMethod.ALL },
-        { path: "/v1/github{/*splat}", method: RequestMethod.ALL },
         { path: "/v1/user-session", method: RequestMethod.GET },
         { path: "/v1/reports{/*splat}", method: RequestMethod.ALL },
         { path: "/v1/chats{/*splat}", method: RequestMethod.ALL },

@@ -110,6 +110,7 @@ it("keeps COS outages retryable instead of treating them as corrupt learner file
   const extractor = new FileContentExtractionService(
     {
       getObject: jest.fn().mockRejectedValue(new Error("storage unavailable")),
+      isConfiguredUploadBucket: () => true,
     } as never,
     {} as never,
   );

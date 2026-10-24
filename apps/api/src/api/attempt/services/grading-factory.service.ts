@@ -1,5 +1,5 @@
 /* eslint-disable unicorn/no-null */
-import { Injectable } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { QuestionType } from "@prisma/client";
 import { IGradingStrategy } from "../common/interfaces/grading-strategy.interface";
 import { ChoiceGradingStrategy } from "../common/strategies/choice-grading.strategy";
@@ -12,10 +12,10 @@ import {
 /** The minimal slice of an uploaded file that routing decisions read. */
 export interface SubmittedFileForRouting {
   filename?: string;
-  githubUrl?: string;
 }
-import { PresentationGradingStrategy } from "../common/strategies/presentation-grading.strategy";
 import { TextGradingStrategy } from "../common/strategies/text-grading.strategy";
+import { isMediaResponseType } from "../common/utils/grading-question-source.util";
+import { UnsupportedResponseTypeException } from "../common/utils/learner-file-reference.util";
 import { TrueFalseGradingStrategy } from "../common/strategies/true-false-grading.strategy";
 import { UrlGradingStrategy } from "../common/strategies/url-grading.strategy";
 
@@ -24,11 +24,12 @@ import { UrlGradingStrategy } from "../common/strategies/url-grading.strategy";
  */
 @Injectable()
 export class GradingFactoryService {
+  private readonly logger = new Logger(GradingFactoryService.name);
+
   constructor(
     private readonly textGradingStrategy: TextGradingStrategy,
     private readonly fileGradingStrategy: FileGradingStrategy,
     private readonly urlGradingStrategy: UrlGradingStrategy,
-    private readonly presentationGradingStrategy: PresentationGradingStrategy,
     private readonly choiceGradingStrategy: ChoiceGradingStrategy,
     private readonly trueFalseGradingStrategy: TrueFalseGradingStrategy,
     private readonly imageGradingStrategy: ImageGradingStrategy,
@@ -42,6 +43,9 @@ export class GradingFactoryService {
    *   an all-image submission reach the vision strategy even on questions
    *   whose declared responseType is a document type
    * @returns The appropriate grading strategy
+   * @throws UnsupportedResponseTypeException (400) for a media response type,
+   *   which is no longer graded. Learner submits refuse these earlier; author
+   *   previews reach this check with whatever the client sent.
    */
   getStrategy(
     questionType: QuestionType | undefined,
@@ -53,6 +57,12 @@ export class GradingFactoryService {
         "No grading strategy available for undefined question type",
       );
     }
+    if (isMediaResponseType(responseType)) {
+      this.logger.warn(
+        `grading.strategy.refused_media_response_type questionType=${questionType} responseType=${responseType}`,
+      );
+      throw new UnsupportedResponseTypeException();
+    }
     switch (questionType) {
       case QuestionType.TEXT: {
         return this.textGradingStrategy;
@@ -60,11 +70,6 @@ export class GradingFactoryService {
 
       case QuestionType.UPLOAD: {
         if (
-          responseType === "LIVE_RECORDING" ||
-          responseType === "PRESENTATION"
-        ) {
-          return this.presentationGradingStrategy;
-        } else if (
           responseType === "IMAGES" ||
           this.isImageOnlySubmission(learnerFiles)
         ) {
@@ -108,9 +113,6 @@ export class GradingFactoryService {
       return false;
     }
     return learnerFiles.every((file) => {
-      if (file.githubUrl) {
-        return false;
-      }
       const extension = file.filename?.split(".").pop()?.toLowerCase() ?? "";
       return GRADABLE_IMAGE_EXTENSIONS.has(extension);
     });

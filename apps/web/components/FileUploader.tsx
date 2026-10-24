@@ -32,7 +32,12 @@ interface FileUploaderProps {
   context?: UploadContext;
   onUploadComplete?: (fileData: learnerFileResponse) => void;
   onUploadError?: (error: unknown, file: File) => void;
-  onDeleteComplete?: (key: string) => void;
+  /**
+   * Called once a file is removed: after its stored object is deleted, or
+   * straight away for an entry with no stored object (one saved by an older
+   * client), which has nothing to delete in storage.
+   */
+  onDeleteComplete?: (file: learnerFileResponse) => void;
   onUploadStateChange?: (isUploading: boolean) => void;
   maxFileSize?: number;
   acceptedFileTypes?: { [key: string]: string[] };
@@ -154,6 +159,8 @@ const FileUploader: React.FC<FileUploaderProps> = ({
 
   const handleDeleteFile = async (file: learnerFileResponse) => {
     if (!file.key) {
+      setExistingFiles((prev) => prev.filter((f) => f !== file));
+      onDeleteComplete?.(file);
       return;
     }
 
@@ -169,9 +176,10 @@ const FileUploader: React.FC<FileUploaderProps> = ({
       setExistingFiles((prev) => prev.filter((f) => f.key !== file.key));
 
       if (onDeleteComplete) {
-        onDeleteComplete(file.key);
+        onDeleteComplete(file);
       }
     } catch (error) {
+      console.warn("[upload] file delete failed", { key: file.key, error });
       setDeleteStatus((prev) => ({ ...prev, [file.key]: "error" }));
     }
   };

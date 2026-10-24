@@ -239,6 +239,17 @@ describe("plain JSON attempt reads", () => {
     expect(attempts?.[0]?.grade).toBeNull();
   });
 
+  it("getCompletedAttempt asks the client not to transform the response", async () => {
+    const completed = { id: 7, questions: [], grade: null };
+    apiClient.get.mockResolvedValue(completed);
+
+    await expect(getCompletedAttempt(1, 7)).resolves.toEqual(completed);
+    expect(apiClient.get).toHaveBeenCalledWith(
+      expect.stringContaining("/1/attempts/7/completed"),
+      expect.objectContaining({ transformResponse: false }),
+    );
+  });
+
   it("getAttempt asks the client not to transform the response", async () => {
     apiClient.get.mockResolvedValue({ ...attemptRow, questions: [] });
 

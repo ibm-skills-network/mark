@@ -40,10 +40,6 @@ import { GradingAuditService } from "../../services/question-response/grading-au
 import { LearnerFileUpload } from "../interfaces/attempt.interface";
 import { GradingContext } from "../interfaces/grading-context.interface";
 import { LocalizationService } from "../utils/localization.service";
-import {
-  LearnerFileContentTooLargeError,
-  normalizeLearnerFileContent,
-} from "../utils/learner-file-content.util";
 import { AbstractGradingStrategy } from "./abstract-grading.strategy";
 
 @Injectable()
@@ -92,11 +88,9 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
       );
     }
 
+    // Files are graded from storage only, so each one needs its coordinates.
     for (const file of requestDto.learnerFileResponse) {
-      const hasStorageMetadata = file.key && file.bucket && file.filename;
-      const hasGithubMetadata = file.githubUrl && file.filename;
-
-      if (!hasStorageMetadata && !hasGithubMetadata) {
+      if (!file.key || !file.bucket || !file.filename) {
         throw new BadRequestException(
           `Invalid file metadata for ${file.filename || "unknown file"}`,
         );
@@ -248,7 +242,9 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
   }
 
   /**
-   * Extract the file response from the request
+   * Extract the file response from the request. Only where each file is
+   * stored is kept: content the client sent alongside is never graded, the
+   * file is read back from storage instead.
    */
   async extractLearnerResponse(
     requestDto: CreateQuestionResponseAttemptRequestDto,
@@ -256,38 +252,13 @@ export class FileGradingStrategy extends AbstractGradingStrategy<
     const files = requestDto.learnerFileResponse;
     if (!Array.isArray(files)) return files;
 
-    // Content is persisted with the response and read back as text by
-    // extraction and regrades, so a parsed JSON value is stored as its text.
-    return files.map((file) => {
-      const raw: unknown = file.content;
-      if (typeof raw === "string" || raw === undefined || raw === null) {
-        return file;
-      }
-
-      let normalized: ReturnType<typeof normalizeLearnerFileContent>;
-      try {
-        normalized = normalizeLearnerFileContent(raw);
-      } catch (error) {
-        if (error instanceof LearnerFileContentTooLargeError) {
-          this.logger?.warn("file_response.content_too_large", {
-            filename: file.filename,
-            serializedLength: error.length,
-            reason: error.reason,
-          });
-          throw new BadRequestException("Invalid file response");
-        }
-        throw error;
-      }
-
-      this.logger?.warn("file_response.non_string_content", {
-        filename: file.filename,
-        hasGithubUrl: Boolean(file.githubUrl),
-        hasStorageKey: Boolean(file.key),
-        contentType: normalized.originalType,
-        serializedLength: normalized.content?.length ?? 0,
-      });
-      return { ...file, content: normalized.content ?? "" };
-    });
+    return files.map((file) => ({
+      filename: file.filename,
+      key: file.key,
+      bucket: file.bucket,
+      fileType: file.fileType,
+      content: "InCos",
+    }));
   }
 
   /**

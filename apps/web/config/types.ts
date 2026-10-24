@@ -32,7 +32,6 @@ export interface LearnerFileResponse {
   key?: string;
   bucket?: string;
   fileType?: string;
-  githubUrl?: string;
 }
 export interface EnhancedFileObject {
   id: string;
@@ -209,36 +208,6 @@ export type QuestionAttemptRequest = {
   learnerFileResponse?: learnerFileResponse[] | undefined;
   learnerPresentationResponse?: PresentationQuestionResponse;
 };
-export type RepoType = {
-  id: number;
-  name: string;
-  full_name: string;
-  private: boolean;
-  owner: {
-    login: string;
-  };
-  license?: {
-    key?: string;
-    name?: string;
-    spdx_id?: string;
-    url?: string;
-    node_id?: string;
-  };
-  default_branch?: string;
-};
-export type RepoContentItem = {
-  type: "file" | "dir" | "symlink" | "submodule";
-  name: string;
-  path: string;
-  sha: string;
-  url: string;
-  download_url: string | null;
-  repo: RepoType;
-  owner: {
-    login: string;
-  };
-};
-
 export type AuthorAssignmentState = {
   assignmentId: number;
   assignmentType: AssignmentTypeEnum;
@@ -302,16 +271,6 @@ export type UpdateQuestionStateParams = {
 
 export type QuestionAttemptRequestWithId = QuestionAttemptRequest & {
   id: number;
-};
-/**
- * This is the type of the response from the backend when submitting a question attempt
- */
-export type QuestionAttemptResponse = {
-  id: number;
-  questionId: number;
-  question: string;
-  totalPoints?: number;
-  feedback?: Feedback[];
 };
 
 export type QuestionStatus =
@@ -455,9 +414,11 @@ export type QuestionResponse = {
   assignmentAttemptId: number;
   questionId: number;
 
-  learnerResponse: string;
-  points: number;
-  feedback: Feedback[];
+  learnerResponse?: string;
+  /** Null when the author hides per-question scores. */
+  points: number | null;
+  /** Null when the author hides submission feedback. */
+  feedback: Feedback[] | null;
   learnerAnswerChoice?: boolean;
 };
 export interface BaseQuestion {
@@ -819,15 +780,104 @@ export type UpdateAssignmentQuestionsResponse = BaseBackendResponse & {
   questions?: Question[];
 };
 
-export interface SubmitAssignmentResponse extends BaseBackendResponse {
-  grade?: number;
-  passed?: boolean;
-  showPassFailIndicator?: boolean;
+/**
+ * Visibility flags the server applied to a graded attempt. Every gated value
+ * next to them is already `null` (or absent) when hidden, so the client only
+ * uses these to choose what to say about a hidden value.
+ */
+export interface AttemptVisibility {
+  showAssignmentScore: boolean;
   showSubmissionFeedback: boolean;
-  feedbacksForQuestions?: QuestionAttemptResponse[];
-  totalPointsEarned: number;
-  totalPossiblePoints: number;
-  gradingJobId?: string;
+  showQuestions: boolean;
+  showQuestionScore: boolean;
+  showPassFailIndicator: boolean;
+  correctAnswerVisibility: CorrectAnswerVisibility;
+}
+
+/** One graded question in a submit result. */
+export interface SubmitQuestionFeedback {
+  id: number;
+  questionId: number;
+  /** Points earned; null when per-question scores are hidden. */
+  totalPoints: number | null;
+  /** Null when submission feedback is hidden. */
+  feedback: Feedback[] | null;
+}
+
+/**
+ * The graded attempt returned by the submit PATCH (graded inline) and by the
+ * grading stream's `finalize` frame. Plain JSON; `null` means hidden.
+ */
+export interface SubmitResult extends AttemptVisibility {
+  id: number;
+  submitted: true;
+  /** 0..1 ratio; null when the assignment score is hidden. */
+  grade: number | null;
+  totalPointsEarned: number | null;
+  totalPossiblePoints: number | null;
+  /** Null unless the pass/fail indicator is on and a grade exists. */
+  passed: boolean | null;
+  feedbacksForQuestions: SubmitQuestionFeedback[];
+}
+
+/** The submit PATCH answer when grading was queued instead of run inline. */
+export interface QueuedSubmitResponse {
+  gradingJobId: string;
+  message?: string;
+}
+
+/** A choice as the completed-attempt read serves it. */
+export interface CompletedAttemptChoice {
+  id: number | null;
+  choice: string;
+  /** Present only when the server allows correct answers to be shown. */
+  isCorrect?: boolean;
+  /** Present only when the server allows correct answers to be shown. */
+  feedback?: string | null;
+}
+
+/** The newest graded response to a question in a completed attempt. */
+export interface CompletedAttemptResponse {
+  learnerResponse: unknown;
+  /** Null when per-question scores are hidden. */
+  points: number | null;
+  /** Null when submission feedback is hidden. */
+  feedback: Feedback[] | null;
+}
+
+export interface CompletedAttemptQuestion {
+  id: number;
+  question: string | null;
+  type: QuestionType;
+  responseType?: ResponseType | null;
+  totalPoints: number;
+  choices: CompletedAttemptChoice[] | null;
+  scoring: Scoring | null;
+  response: CompletedAttemptResponse | null;
+}
+
+/**
+ * `GET .../attempts/:attemptId/completed`. Plain JSON; the server applies
+ * every visibility rule, so `null` means hidden and `questions` is empty when
+ * the questions are hidden.
+ */
+export interface CompletedAttempt extends AttemptVisibility {
+  id: number;
+  assignmentId: number;
+  submitted: true;
+  createdAt: string;
+  expiresAt: string | null;
+  preferredLanguage: string | null;
+  comments: string | null;
+  serverNow: string;
+  /** 0..1 ratio; null when the assignment score is hidden. */
+  grade: number | null;
+  totalPointsEarned: number | null;
+  totalPossiblePoints: number | null;
+  /** Null unless the pass/fail indicator is on and a grade exists. */
+  passed: boolean | null;
+  passingGrade: number | null;
+  questions: CompletedAttemptQuestion[];
 }
 
 export type LearnerAssignmentState =

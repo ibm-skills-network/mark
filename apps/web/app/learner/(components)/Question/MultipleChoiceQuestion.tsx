@@ -14,14 +14,8 @@ function MultipleChoiceQuestion({
   const [addChoice, removeChoice] = useLearnerStore((state) => [
     state.addChoice,
     state.removeChoice,
-    state.activeAttemptId,
   ]);
   const { choices, learnerChoices } = question;
-
-  // useAutoSaveResponse(assignmentId, activeAttemptId, question.id, {
-  //   enabled: true,
-  //   debounceMs: 500,
-  // });
 
   const handleChoiceClick = (choiceIndex: number) => {
     if (isSingleCorrect) {

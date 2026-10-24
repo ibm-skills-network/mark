@@ -41,7 +41,7 @@ import TipsView from "./TipsView";
 import SecurityMonitor from "../SecurityMonitor";
 import VersionMismatchBanner from "../VersionMismatchBanner";
 import { clearAssignmentLocalStorage } from "@/app/learner/utils/localStorage";
-import { withTextFileContent } from "@/lib/learner-file-content";
+import { toSubmittedFileReferences } from "@/lib/learner-file-response";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
   attempt: AssignmentAttemptWithQuestions;
@@ -234,10 +234,16 @@ const hydrateQuestionResponse = (question: QuestionStore): QuestionStore => {
     !question.learnerFileResponse &&
     !hasPresentation
   ) {
-    if (isLearnerFileResponseArray(parsedResponse)) {
-      updated.learnerFileResponse = parsedResponse.map(withTextFileContent);
-    } else if (isLearnerFileResponse(parsedResponse)) {
-      updated.learnerFileResponse = [withTextFileContent(parsedResponse)];
+    // Drafts saved by older clients can hold repository entries or the
+    // file's full text; keep only references to uploaded objects, which is
+    // all the submit route accepts.
+    const draftFiles = isLearnerFileResponseArray(parsedResponse)
+      ? toSubmittedFileReferences(parsedResponse)
+      : isLearnerFileResponse(parsedResponse)
+        ? toSubmittedFileReferences([parsedResponse])
+        : [];
+    if (draftFiles.length > 0) {
+      updated.learnerFileResponse = draftFiles;
     }
   }
 

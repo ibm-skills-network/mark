@@ -18,12 +18,23 @@ import { LocalizationService } from "../../common/utils/localization.service";
 import { GradingFactoryService } from "../grading-factory.service";
 import { GradingRateLimiterService } from "../grading-rate-limiter.service";
 import { QuestionDto } from "../../../assignment/dto/update.questions.request.dto";
+import { questionDtoFromVersion } from "../../common/utils/grading-question-source.util";
 import { CreateQuestionResponseAttemptRequestDto } from "../../../assignment/attempt/dto/question-response/create.question.response.attempt.request.dto";
 import { CreateQuestionResponseAttemptResponseDto } from "../../../assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
 import {
   GradedItem,
   QuestionResponseService,
 } from "./question-response.service";
+
+/** The private grading-context loader some specs stub or call directly. */
+interface GradingContextSource {
+  getAssignmentContext(...arguments_: unknown[]): Promise<{
+    assignmentInstructions: string;
+    questionAnswerContext: { question: string; answer: string }[];
+  }>;
+}
+const asContextSource = (service: QuestionResponseService) =>
+  service as unknown as GradingContextSource;
 
 const mockRateLimiter = {
   schedule: jest.fn(async (_name: string, op: () => Promise<any>) => op()),
@@ -138,6 +149,187 @@ describe("QuestionResponseService", () => {
     );
     expect(result.question.type).toBe(QuestionType.SINGLE_CORRECT);
     expect(mockQuestionService.findOne).not.toHaveBeenCalled();
+  });
+
+  const getLearnerQuestion = (cache: unknown) =>
+    (
+      service as unknown as {
+        getLearnerQuestion: (
+          questionId: number,
+          assignmentAttemptId: number,
+          assignmentId: number,
+          preTranslatedQuestions: undefined,
+          tx: undefined,
+          cache: unknown,
+        ) => Promise<{ question: QuestionDto }>;
+      }
+    ).getLearnerQuestion(10383, 289110, 2991, undefined, undefined, cache);
+
+  const pinnedQuestion = {
+    id: 10383,
+    assignmentId: 2991,
+    question: "Pinned wording",
+    type: QuestionType.SINGLE_CORRECT,
+    responseType: "OTHER",
+    totalPoints: 2,
+    choices: [{ choice: "Pinned right", isCorrect: true, points: 2 }],
+    answer: null,
+    gradingContextQuestionIds: [],
+  } as unknown as QuestionDto;
+
+  const pinnedCache = () => ({
+    questions: new Map(),
+    translations: new Map(),
+    pinnedQuestions: new Map([[10383, pinnedQuestion]]),
+  });
+
+  it("grades a pinned attempt against its version's question, not the live row", async () => {
+    mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+      id: 289110,
+      questionVariants: [],
+    });
+    jest
+      .spyOn(asContextSource(service), "getAssignmentContext")
+      .mockResolvedValue({
+        assignmentInstructions: "",
+        questionAnswerContext: [],
+      });
+
+    const { question } = await getLearnerQuestion(pinnedCache());
+
+    expect(question.question).toBe("Pinned wording");
+    expect(question.totalPoints).toBe(2);
+    expect(question.choices).toEqual(pinnedQuestion.choices);
+    expect(mockQuestionService.findOne).not.toHaveBeenCalled();
+  });
+
+  it("lets the drawn variant override the pinned question's content and answer key", async () => {
+    mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+      id: 289110,
+      questionVariants: [
+        {
+          questionId: 10383,
+          questionVariant: {
+            id: 2060,
+            questionId: 10383,
+            variantContent: "Variant wording",
+            choices: [{ choice: "Variant right", isCorrect: true, points: 2 }],
+            maxWords: null,
+            maxCharacters: null,
+            scoring: null,
+            answer: null,
+            // The live base row differs from the pinned version and must
+            // not be read.
+            variantOf: { id: 10383, totalPoints: 99, type: QuestionType.TEXT },
+          },
+        },
+      ],
+    });
+    jest
+      .spyOn(asContextSource(service), "getAssignmentContext")
+      .mockResolvedValue({
+        assignmentInstructions: "",
+        questionAnswerContext: [],
+      });
+
+    const { question } = await getLearnerQuestion(pinnedCache());
+
+    expect(question.question).toBe("Variant wording");
+    expect(question.choices).toEqual([
+      { choice: "Variant right", isCorrect: true, points: 2 },
+    ]);
+    expect(question.totalPoints).toBe(2);
+    expect(question.type).toBe(QuestionType.SINGLE_CORRECT);
+  });
+
+  it("falls back to the live question only when the attempt has no pinned version", async () => {
+    mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+      id: 289110,
+      questionVariants: [],
+    });
+    mockQuestionService.findOne.mockResolvedValue({
+      ...pinnedQuestion,
+      question: "Live wording",
+    });
+    jest
+      .spyOn(asContextSource(service), "getAssignmentContext")
+      .mockResolvedValue({
+        assignmentInstructions: "",
+        questionAnswerContext: [],
+      });
+
+    const { question } = await getLearnerQuestion({
+      questions: new Map(),
+      translations: new Map(),
+    });
+
+    expect(question.question).toBe("Live wording");
+    expect(mockQuestionService.findOne).toHaveBeenCalledWith(
+      10383,
+      undefined,
+      expect.anything(),
+    );
+  });
+
+  it("does not look up a translation for a pinned question with no source question id", async () => {
+    mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+      id: 289110,
+      questionVariants: [],
+    });
+    jest
+      .spyOn(asContextSource(service), "getAssignmentContext")
+      .mockResolvedValue({
+        assignmentInstructions: "",
+        questionAnswerContext: [],
+      });
+    const findMany = jest.fn();
+    const versionOnly = questionDtoFromVersion(
+      {
+        id: 10383,
+        assignmentVersionId: 9,
+        authorComment: null,
+        questionId: null,
+        totalPoints: 2,
+        type: QuestionType.TEXT,
+        responseType: null,
+        question: "Version wording",
+        maxWords: null,
+        scoring: null,
+        choices: null,
+        randomizedChoices: null,
+        answer: null,
+        gradingContextQuestionIds: [],
+        maxCharacters: null,
+        videoPresentationConfig: null,
+        liveRecordingConfig: null,
+        displayOrder: null,
+        createdAt: new Date(0),
+      },
+      2991,
+    );
+
+    const { question } = await (
+      service as unknown as {
+        getLearnerQuestion: (
+          ...arguments_: unknown[]
+        ) => Promise<{ question: QuestionDto }>;
+      }
+    ).getLearnerQuestion(
+      10383,
+      289110,
+      2991,
+      undefined,
+      { ...mockPrisma, translation: { findMany } },
+      {
+        questions: new Map(),
+        translations: new Map(),
+        pinnedQuestions: new Map([[10383, versionOnly]]),
+      },
+      "fr",
+    );
+
+    expect(question.question).toBe("Version wording");
+    expect(findMany).not.toHaveBeenCalled();
   });
 });
 
@@ -774,6 +966,54 @@ describe("QuestionResponseService — getAssignmentContext with in-memory respon
     );
   });
 
+  it("reads grading context from the pinned version when the attempt has one", async () => {
+    mockPrisma.assignment.findUnique.mockResolvedValue({ instructions: "" });
+    mockPrisma.questionResponse.findMany.mockResolvedValue([]);
+    const cache = {
+      questions: new Map(),
+      translations: new Map(),
+      pinnedQuestions: new Map([
+        [
+          20,
+          {
+            id: 20,
+            question: "Graded",
+            type: QuestionType.TEXT,
+            gradingContextQuestionIds: [30],
+          },
+        ],
+        [
+          30,
+          {
+            id: 30,
+            question: "Pinned context?",
+            type: QuestionType.TEXT,
+            gradingContextQuestionIds: [],
+          },
+        ],
+      ]),
+    };
+
+    const ctx = await asContextSource(service).getAssignmentContext(
+      5,
+      20,
+      10,
+      undefined,
+      new Map([[30, JSON.stringify("answer")]]),
+      cache,
+    );
+
+    expect(mockPrisma.question.findUnique).not.toHaveBeenCalled();
+    expect(mockPrisma.question.findMany).not.toHaveBeenCalled();
+    expect(ctx.questionAnswerContext).toEqual([
+      expect.objectContaining({
+        question: "Pinned context?",
+        questionId: 30,
+        answer: JSON.stringify("answer"),
+      }),
+    ]);
+  });
+
   it("throws NotFoundException when the assignment is not found", async () => {
     mockPrisma.assignment.findUnique.mockResolvedValue(null);
 
@@ -931,35 +1171,162 @@ describe("QuestionResponseService — gradeQuestionNoSave error handling", () =>
     await expect(callGradeQuestionNoSave()).rejects.toBe(rateLimited);
   });
 
-  it("surfaces GithubRateLimitedError out of the public createQuestionResponse entry point with its class intact", async () => {
-    const rateLimited = new GithubRateLimitedError({
-      owner: "octocat",
-      repo: "hello-world",
-      requestUrl: "https://api.github.com/repos/octocat/hello-world",
-    });
-    mockStrategy.gradeResponse.mockRejectedValue(rateLimited);
-
-    // Author path avoids the DB lookups the learner path needs — the point
-    // here is the error's class survives the createQuestionResponse ->
-    // gradeQuestionNoSave boundary, not the question-loading mechanics.
-    const rejection = await service
-      .createQuestionResponse(
-        10, // assignmentAttemptId
-        { ...requestDto, id: question.id },
-        UserRole.AUTHOR,
+  describe("uploaded file references", () => {
+    const originalBucket = process.env.IBM_COS_LEARNER_BUCKET;
+    const uploadQuestion = {
+      ...question,
+      type: QuestionType.UPLOAD,
+      responseType: "REPORT",
+    };
+    const originalAuthorBucket = process.env.IBM_COS_AUTHOR_BUCKET;
+    const gradeFilesAs = (
+      role: UserRole,
+      userId: string | undefined,
+      files: Record<string, unknown>[],
+    ) =>
+      (
+        service as unknown as {
+          gradeQuestionNoSave: (...args: unknown[]) => Promise<unknown>;
+        }
+      ).gradeQuestionNoSave(
+        uploadQuestion,
+        { id: question.id, language: "en", learnerFileResponse: files },
+        assignmentContext,
         5, // assignmentId
         "en",
-        [question], // authorQuestions
-      )
-      .then(
-        () => {
-          throw new Error("expected createQuestionResponse to reject");
-        },
-        (error: unknown) => error,
+        role,
+        10, // assignmentAttemptId
+        userId,
       );
+    const gradeFiles = (files: Record<string, unknown>[]) =>
+      gradeFilesAs(UserRole.LEARNER, "learner@example.com", files);
 
-    expect(rejection).toBe(rateLimited);
-    expect(rejection).toBeInstanceOf(GithubRateLimitedError);
+    beforeEach(() => {
+      process.env.IBM_COS_LEARNER_BUCKET = "learner-bucket";
+      process.env.IBM_COS_AUTHOR_BUCKET = "author-bucket";
+      mockStrategy.gradeResponse.mockResolvedValue({
+        totalPoints: 5,
+        feedback: [],
+      });
+    });
+
+    afterEach(() => {
+      if (originalBucket === undefined) {
+        delete process.env.IBM_COS_LEARNER_BUCKET;
+      } else {
+        process.env.IBM_COS_LEARNER_BUCKET = originalBucket;
+      }
+      if (originalAuthorBucket === undefined) {
+        delete process.env.IBM_COS_AUTHOR_BUCKET;
+      } else {
+        process.env.IBM_COS_AUTHOR_BUCKET = originalAuthorBucket;
+      }
+    });
+
+    it("grades an author's own preview upload", async () => {
+      await expect(
+        gradeFilesAs(UserRole.AUTHOR, "author@example.com", [
+          {
+            filename: "report.pdf",
+            bucket: "author-bucket",
+            key: "authors/author@example.com/abc-report.pdf",
+          },
+        ]),
+      ).resolves.toBeDefined();
+      expect(mockStrategy.gradeResponse).toHaveBeenCalled();
+    });
+
+    it.each([
+      [
+        "a learner's upload",
+        { bucket: "learner-bucket", key: "5/learner@example.com/7/a.pdf" },
+      ],
+      [
+        "another author's file",
+        { bucket: "author-bucket", key: "authors/other@example.com/a.pdf" },
+      ],
+      [
+        "a traversal out of the author's prefix",
+        {
+          bucket: "author-bucket",
+          key: "authors/author@example.com/../other@example.com/a.pdf",
+        },
+      ],
+      [
+        "an arbitrary bucket",
+        { bucket: "billing-exports", key: "authors/author@example.com/a.csv" },
+      ],
+    ])("refuses %s in author preview", async (_label, file) => {
+      const error: unknown = await gradeFilesAs(
+        UserRole.AUTHOR,
+        "author@example.com",
+        [{ filename: "a.pdf", ...file }],
+      ).catch((caught: unknown) => caught);
+
+      expect(error).toBeInstanceOf(BadRequestException);
+      expect((error as BadRequestException).getResponse()).toMatchObject({
+        code: "INVALID_FILE_REFERENCE",
+      });
+      expect(mockGradingFactoryService.getStrategy).not.toHaveBeenCalled();
+    });
+
+    it("refuses preview files when the author is unknown", async () => {
+      await expect(
+        gradeFilesAs(UserRole.AUTHOR, undefined, [
+          {
+            filename: "a.pdf",
+            bucket: "author-bucket",
+            key: "authors/author@example.com/a.pdf",
+          },
+        ]),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    });
+
+    it("grades the learner's own upload for the question", async () => {
+      await expect(
+        gradeFiles([
+          {
+            filename: "report.pdf",
+            bucket: "learner-bucket",
+            key: "5/learner@example.com/7/abc-report.pdf",
+          },
+        ]),
+      ).resolves.toBeDefined();
+      expect(mockStrategy.gradeResponse).toHaveBeenCalled();
+    });
+
+    it.each([
+      [
+        "another learner's key",
+        { bucket: "learner-bucket", key: "5/other@example.com/7/a.pdf" },
+      ],
+      [
+        "another question's key",
+        { bucket: "learner-bucket", key: "5/learner@example.com/8/a.pdf" },
+      ],
+      [
+        "another assignment's key",
+        { bucket: "learner-bucket", key: "6/learner@example.com/7/a.pdf" },
+      ],
+      [
+        "a bucket that is not a learner bucket",
+        { bucket: "author-bucket", key: "5/learner@example.com/7/a.pdf" },
+      ],
+      ["no storage reference", { content: "inline text" }],
+    ])("refuses %s before any strategy runs", async (_label, file) => {
+      const error: unknown = await gradeFiles([
+        { filename: "a.pdf", ...file },
+      ]).catch((caught: unknown) => caught);
+
+      expect(error).toBeInstanceOf(BadRequestException);
+      expect((error as BadRequestException).getResponse()).toEqual({
+        statusCode: 400,
+        code: "INVALID_FILE_REFERENCE",
+        message: "Invalid file reference.",
+        error: "Bad Request",
+      });
+      expect(mockGradingFactoryService.getStrategy).not.toHaveBeenCalled();
+    });
   });
 
   it("scores a blank answer 0 when the optional answer fields are omitted", async () => {

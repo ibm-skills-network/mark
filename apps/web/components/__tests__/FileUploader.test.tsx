@@ -3,10 +3,17 @@
  */
 
 import { createElement, forwardRef, type ReactNode, type Ref } from "react";
-import { act, fireEvent, render, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { toast } from "sonner";
 
 import FileUploader from "@/components/FileUploader";
+import { deleteFile } from "@/lib/shared";
 import {
   IMAGE_ACCEPT,
   UPLOAD_ACCEPT,
@@ -162,5 +169,58 @@ describe("FileUploader accept filter", () => {
       );
     });
     expect(toast.error).not.toHaveBeenCalled();
+  });
+});
+
+describe("FileUploader uploaded-file list", () => {
+  const stored = {
+    filename: "report.pdf",
+    key: "1/u/2/report.pdf",
+    bucket: "learner-bucket",
+  };
+  // Saved by an older client: a repository file with no stored object.
+  const keyless = { filename: "main.py", content: "print('hi')" };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  const renderList = (onDeleteComplete: jest.Mock) =>
+    render(
+      <FileUploader
+        uploadType="learner"
+        context={{ assignmentId: 1, questionId: 2 }}
+        showUploadedFiles
+        uploadedFiles={[keyless, stored]}
+        onDeleteComplete={onDeleteComplete}
+      />,
+    );
+
+  it("lets the learner remove an entry that has no stored object", async () => {
+    const onDeleteComplete = jest.fn();
+    renderList(onDeleteComplete);
+
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText("Delete file main.py"));
+    });
+
+    expect(deleteFile).not.toHaveBeenCalled();
+    expect(onDeleteComplete).toHaveBeenCalledWith(keyless);
+    expect(screen.queryByText("main.py")).toBeNull();
+    expect(screen.getByText("report.pdf")).toBeTruthy();
+  });
+
+  it("deletes a stored file from storage before reporting it removed", async () => {
+    const onDeleteComplete = jest.fn();
+    (deleteFile as jest.Mock).mockResolvedValue(undefined);
+    renderList(onDeleteComplete);
+
+    await act(async () => {
+      fireEvent.click(screen.getByLabelText("Delete file report.pdf"));
+    });
+
+    expect(deleteFile).toHaveBeenCalledWith("learner", undefined, stored.key);
+    expect(onDeleteComplete).toHaveBeenCalledWith(stored);
+    expect(screen.queryByText("report.pdf")).toBeNull();
   });
 });

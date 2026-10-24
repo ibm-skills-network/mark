@@ -91,6 +91,20 @@ export class AssignmentQuestionAccessControlGuard implements CanActivate {
       }
     }
 
+    // Prisma drops an undefined filter, so a session without a group would
+    // match any group's link. Refuse before querying.
+    const groupId = userSession.groupId;
+    if (typeof groupId !== "string" || groupId.length === 0) {
+      this.logger.warn("question_access_denied: session has no group", {
+        denial_reason: "missing_group_id",
+        assignment_id: assignmentId,
+        user_id: sanitizeForLog(userSession?.userId),
+        method,
+        url: sanitizeForLog(originalUrl),
+      });
+      throw new ForbiddenException("Access denied to this assignment");
+    }
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const queries: any[] = [
       this.prisma.assignment.findUnique({ where: { id: assignmentId } }),
@@ -98,7 +112,7 @@ export class AssignmentQuestionAccessControlGuard implements CanActivate {
       this.prisma.assignmentGroup.findFirst({
         where: {
           assignmentId,
-          groupId: userSession.groupId,
+          groupId,
         },
       }),
     ];
@@ -109,6 +123,7 @@ export class AssignmentQuestionAccessControlGuard implements CanActivate {
           where: {
             id: questionId,
             assignmentId,
+            isDeleted: false,
           },
         }),
       );

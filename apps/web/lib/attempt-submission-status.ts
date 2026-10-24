@@ -62,7 +62,12 @@ export async function getAttemptSubmissionStatus(
   const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/attempts/${attemptId}/submission-status`;
   const sentAt = Date.now();
   try {
-    const body = await apiClient.get<unknown>(endpointURL, { quiet: true });
+    // The route answers plain JSON; the shared decoder would try to
+    // base64-decode its fields.
+    const body = await apiClient.get<unknown>(endpointURL, {
+      quiet: true,
+      transformResponse: false,
+    });
     const receivedAt = Date.now();
     if (!isStatus(body)) {
       console.warn(
