@@ -30,26 +30,21 @@ function acceptsNull(schema: ZodTypeAny): boolean {
 }
 
 /**
- * OpenAI strict structured outputs require every schema field to be present
- * in `required`, so the SDK rejects any Zod schema that uses `.optional()`
- * without `.nullable()` before a request is even sent. Widen each optional
- * field to also accept null for the API call; `normalizeWidenedOutput` maps
- * the nulls the model emits for those fields back to undefined so callers
- * keep the original schema's types. Subtrees that need no widening are
- * returned as-is, so already-compatible schemas pass through unchanged.
+ * OpenAI strict structured outputs require every property to be listed in
+ * `required`. zod 4's JSON Schema emitter (the one LangChain uses for zod 4
+ * schemas) leaves an `.optional()` key out of `required` even when it is also
+ * nullable, so the request is rejected with "'required' is required to be
+ * supplied and to be an array including every key in properties". Replace
+ * each optional field with a required nullable one for the API call;
+ * `normalizeWidenedOutput` maps the nulls the model emits for those fields
+ * back to undefined so callers keep the original schema's types. Subtrees
+ * that need no widening are returned as-is.
  */
 export function widenOptionalsForStrictOutput(schema: ZodTypeAny): ZodTypeAny {
   if (schema instanceof ZodOptional) {
     const inner = schema.unwrap() as ZodTypeAny;
     const widenedInner = widenOptionalsForStrictOutput(inner);
-    if (widenedInner === inner && acceptsNull(inner)) {
-      return schema;
-    }
-    return cloneWith(schema, {
-      innerType: acceptsNull(widenedInner)
-        ? widenedInner
-        : z.nullable(widenedInner),
-    });
+    return acceptsNull(widenedInner) ? widenedInner : z.nullable(widenedInner);
   }
   if (schema instanceof ZodNullable) {
     const inner = schema.unwrap() as ZodTypeAny;
