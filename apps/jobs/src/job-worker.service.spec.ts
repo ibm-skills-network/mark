@@ -184,6 +184,8 @@ describe("JobWorkerService", () => {
   const mockConnection = {
     del: jest.fn(),
     quit: jest.fn(),
+    sadd: jest.fn().mockResolvedValue(1),
+    srem: jest.fn().mockResolvedValue(1),
     set: jest.fn(),
     pipeline: jest.fn(() => mockPipeline),
   };
@@ -312,6 +314,23 @@ describe("JobWorkerService", () => {
       "/tmp/mark-jobs-worker.heartbeat",
       expect.any(String),
     );
+  });
+
+  it("registers the heartbeat key in the index and removes it on shutdown", async () => {
+    await service.onModuleInit();
+
+    const heartbeatKey = mockConnection.set.mock.calls[0]?.[0] as string;
+    expect(mockConnection.sadd).toHaveBeenCalledWith(
+      "mark.jobs.worker.heartbeat.index",
+      heartbeatKey,
+    );
+
+    await service.onModuleDestroy();
+    expect(mockConnection.srem).toHaveBeenCalledWith(
+      "mark.jobs.worker.heartbeat.index",
+      heartbeatKey,
+    );
+    expect(mockConnection.del).toHaveBeenCalledWith(heartbeatKey);
   });
 
   it("creates one worker per queue with the expected concurrency and lifecycle hooks", async () => {

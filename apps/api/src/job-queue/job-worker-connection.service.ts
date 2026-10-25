@@ -7,6 +7,8 @@ import {
 import IORedis from "ioredis";
 import {
   DEFAULT_JOB_WORKER_CONNECT_RETRY_DELAY_MS,
+  DEFAULT_JOB_WORKER_CONNECTED_CHECK_INTERVAL_MS,
+  JOB_WORKER_HEARTBEAT_INDEX_KEY,
   JOB_WORKER_HEARTBEAT_KEY_PREFIX,
 } from "./job-worker-heartbeat.constants";
 import { createRedisConnection } from "./redis.connection";
@@ -104,15 +106,20 @@ export class JobWorkerConnectionService
       return;
     }
 
+    // Poll quickly only while no worker is visible; once connected the
+    // check is a liveness log, not a dependency, so it can idle.
+    const delay = this.connected
+      ? DEFAULT_JOB_WORKER_CONNECTED_CHECK_INTERVAL_MS
+      : this.getRetryDelayMs();
     this.retryTimeout = setTimeout(() => {
       void this.checkJobWorkerConnection();
-    }, this.getRetryDelayMs());
+    }, delay);
   }
 
   private async findActiveWorkerHeartbeat(): Promise<JobWorkerHeartbeat | null> {
-    const keys = await this.scanHeartbeatKeys();
+    const keys = await this.listHeartbeatKeys();
     for (const key of keys) {
-      const rawHeartbeat = await this.getConnection().get(key);
+      const rawHeartbeat = await this.readHeartbeat(key);
       if (!rawHeartbeat) {
         continue;
       }
@@ -128,19 +135,45 @@ export class JobWorkerConnectionService
   }
 
   async getAllWorkerHeartbeats(): Promise<JobWorkerHeartbeat[]> {
-    const keys = await this.scanHeartbeatKeys();
+    const keys = await this.listHeartbeatKeys();
     const heartbeats: JobWorkerHeartbeat[] = [];
     for (const key of keys) {
-      const raw = await this.getConnection().get(key);
+      const raw = await this.readHeartbeat(key);
       if (!raw) continue;
       try {
         heartbeats.push(JSON.parse(raw) as JobWorkerHeartbeat);
       } catch {
-        // Skip a corrupt heartbeat value rather than failing the whole scan.
+        // Skip a corrupt heartbeat value rather than failing the whole read.
         this.logger.warn(`Skipping unparseable worker heartbeat at ${key}`);
       }
     }
     return heartbeats;
+  }
+
+  // Workers register their heartbeat key in a set, so the live list is one
+  // SMEMBERS. An empty set means no worker of this version has registered
+  // yet (or none is running), so fall back to a keyspace scan; the scan is
+  // the expensive path and only runs while the set is empty.
+  private async listHeartbeatKeys(): Promise<string[]> {
+    const indexed = await this.getConnection().smembers(
+      JOB_WORKER_HEARTBEAT_INDEX_KEY,
+    );
+    if (indexed.length > 0) {
+      return indexed;
+    }
+    return this.scanHeartbeatKeys();
+  }
+
+  // A heartbeat key expires on its own when a worker dies without cleaning
+  // up; drop such stale members so the set never grows past the live set.
+  private async readHeartbeat(key: string): Promise<string | null> {
+    const raw = await this.getConnection().get(key);
+    if (raw === null) {
+      await this.getConnection()
+        .srem(JOB_WORKER_HEARTBEAT_INDEX_KEY, key)
+        .catch(() => null);
+    }
+    return raw;
   }
 
   private async scanHeartbeatKeys(): Promise<string[]> {

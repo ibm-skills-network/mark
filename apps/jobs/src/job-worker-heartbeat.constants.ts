@@ -1,5 +1,9 @@
 export const JOB_WORKER_HEARTBEAT_KEY_PREFIX = "mark.jobs.worker.heartbeat";
 
+// Set of live heartbeat keys; must match the api copy of this constant.
+export const JOB_WORKER_HEARTBEAT_INDEX_KEY =
+  "mark.jobs.worker.heartbeat.index";
+
 export const DEFAULT_JOB_WORKER_HEARTBEAT_INTERVAL_MS = 10_000;
 export const DEFAULT_JOB_WORKER_HEARTBEAT_TTL_SECONDS = 30;
 
