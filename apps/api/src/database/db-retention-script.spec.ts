@@ -6,6 +6,13 @@ const retention = require("../../../../scripts/db-retention.js") as {
   parseArgs: (argv: string[]) => Args;
   cutoffFor: (days: number, now: Date) => Date;
   buildSteps: (args: Args, now: Date, sql: SqlTag) => Step[];
+  runSteps: (
+    prisma: FakePrisma,
+    steps: Step[],
+    args: Args,
+    deadline: number,
+  ) => Promise<{ exhausted: boolean; skipped: string[] }>;
+  isUndefinedTable: (error: unknown) => boolean;
   DEFAULTS: Args;
   MIN_DAYS: Record<string, number>;
 };
@@ -16,6 +23,7 @@ type Args = {
   auditDays: number;
   cookieDays: number;
   ltiSyncDays: number;
+  operationDays: number;
   batchSize: number;
   maxSeconds: number;
   pauseMs: number;
@@ -28,9 +36,19 @@ type SqlTag = (
 ) => Statement;
 type Step = {
   name: string;
+  optionalTable?: boolean;
   cutoff: Date;
   count: (cutoff: Date) => Statement;
   apply: (cutoff: Date, limit: number) => Statement;
+};
+
+type FakeTx = {
+  $executeRawUnsafe: jest.Mock;
+  $executeRaw: jest.Mock;
+  $queryRaw: jest.Mock;
+};
+type FakePrisma = {
+  $transaction: (run: (tx: FakeTx) => Promise<unknown>) => Promise<unknown>;
 };
 
 // Stand-in for Prisma.sql: keeps the raw text and the bound values apart so
@@ -65,6 +83,7 @@ describe("db-retention arguments", () => {
       auditDays: 60,
       cookieDays: 7,
       ltiSyncDays: 365,
+      operationDays: 30,
       batchSize: 5000,
       maxSeconds: 1500,
       pauseMs: 200,
@@ -80,12 +99,14 @@ describe("db-retention arguments", () => {
       "--audit-days=90",
       "--batch-size=100",
       "--max-seconds=0",
+      "--operation-days=14",
     ]);
     expect(args.dryRun).toBe(false);
     expect(args.cacheDays).toBe(45);
     expect(args.auditDays).toBe(90);
     expect(args.batchSize).toBe(100);
     expect(args.maxSeconds).toBe(0);
+    expect(args.operationDays).toBe(14);
   });
 
   it("refuses an audit window shorter than the grade-reuse lookback", () => {
@@ -102,6 +123,7 @@ describe("db-retention arguments", () => {
     "--cache-days=0",
     "--cookie-days=0",
     "--lti-sync-days=10",
+    "--operation-days=6",
     "--batch-size=0",
     "--batch-size=2.5",
     "--audit-days=abc",
@@ -126,14 +148,24 @@ describe("db-retention statements", () => {
     expect(byName.grading_audit.cutoff).toEqual(retention.cutoffFor(60, now));
     expect(byName.lti_sync_cookies.cutoff).toEqual(retention.cutoffFor(7, now));
     expect(byName.lti_sync_rows.cutoff).toEqual(retention.cutoffFor(365, now));
+    for (const name of [
+      "operation_outbox",
+      "operation_outbox_dead",
+      "operations",
+    ]) {
+      expect(byName[name].cutoff).toEqual(retention.cutoffFor(30, now));
+    }
   });
 
-  it("blanks cookies before deleting anything, and only touches the four byproduct tables", () => {
+  it("blanks cookies before deleting anything, and sweeps the outbox before operations", () => {
     expect(steps.map((step) => step.name)).toEqual([
       "lti_sync_cookies",
       "grading_cache",
       "grading_audit",
       "lti_sync_rows",
+      "operation_outbox",
+      "operation_outbox_dead",
+      "operations",
     ]);
     for (const step of steps) {
       const { text } = step.apply(step.cutoff, 10);
@@ -146,6 +178,9 @@ describe("db-retention statements", () => {
     ["grading_cache", "GradingCache", "cachedAt", "DELETE"],
     ["grading_audit", "GradingAudit", "timestamp", "DELETE"],
     ["lti_sync_rows", "LtiGradeSync", "updatedAt", "DELETE"],
+    ["operation_outbox", "operation_outbox", "sent_at", "DELETE"],
+    ["operation_outbox_dead", "operation_outbox", "updated_at", "DELETE"],
+    ["operations", "operation", "finished_at", "DELETE"],
   ])("%s is a bounded statement on %s.%s (%s)", (name, table, column, verb) => {
     const step = byName[name];
     const statement = step.apply(step.cutoff, 500);
@@ -164,9 +199,114 @@ describe("db-retention statements", () => {
     expect(count.values).toEqual([step.cutoff]);
   });
 
+  it("never deletes an in-flight operation or outbox row", () => {
+    // finished_at and sent_at are only set on terminal rows.
+    const dead = byName.operation_outbox_dead;
+    expect(dead.apply(dead.cutoff, 1).text).toContain(`"state" = 'dead'`);
+    expect(dead.count(dead.cutoff).text).toContain(`"state" = 'dead'`);
+    expect(byName.operations.apply(now, 1).text).not.toContain("state");
+  });
+
   it("only blanks cookies that are still present", () => {
     const { text } = byName.lti_sync_cookies.apply(new Date(), 1);
     expect(text).toContain(`SET "authCookie" = ''`);
     expect(text).toContain(`"authCookie" <> ''`);
+  });
+});
+
+describe("db-retention on a database without the operation tables", () => {
+  const now = new Date("2026-10-25T03:15:00Z");
+  // Shape of the error Prisma raises for a raw query on a missing relation.
+  const undefinedTable = Object.assign(new Error("Raw query failed"), {
+    code: "P2010",
+    meta: { code: "42P01", message: 'relation "operation" does not exist' },
+  });
+
+  const fakePrisma = (failOn: (text: string) => Error | undefined) => {
+    const tx: FakeTx = {
+      $executeRawUnsafe: jest.fn().mockResolvedValue(0),
+      $executeRaw: jest.fn((statement: Statement) => {
+        const error = failOn(statement.text);
+        return error ? Promise.reject(error) : Promise.resolve(0);
+      }),
+      $queryRaw: jest.fn((statement: Statement) => {
+        const error = failOn(statement.text);
+        return error ? Promise.reject(error) : Promise.resolve([{ n: 0 }]);
+      }),
+    };
+    return { prisma: { $transaction: (run) => run(tx) } as FakePrisma, tx };
+  };
+  const operationTables = (text: string) =>
+    /"operation(_outbox)?"/.test(text) ? undefinedTable : undefined;
+
+  let warn: jest.SpyInstance;
+  beforeEach(() => {
+    jest.spyOn(console, "log").mockImplementation(() => undefined);
+    warn = jest.spyOn(console, "warn").mockImplementation(() => undefined);
+  });
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it("recognises undefined_table and nothing else", () => {
+    expect(retention.isUndefinedTable(undefinedTable)).toBe(true);
+    expect(retention.isUndefinedTable({ code: "42P01" })).toBe(true);
+    expect(
+      retention.isUndefinedTable({ code: "P2010", meta: { code: "57014" } }),
+    ).toBe(false);
+    expect(retention.isUndefinedTable(new Error("boom"))).toBe(false);
+    expect(retention.isUndefinedTable(undefined)).toBe(false);
+  });
+
+  it.each([true, false])(
+    "skips the three operation steps and finishes the rest (dryRun %p)",
+    async (dryRun) => {
+      const args = { ...retention.DEFAULTS, dryRun };
+      const steps = retention.buildSteps(args, now, sql);
+      const { prisma, tx } = fakePrisma(operationTables);
+
+      const summary = await retention.runSteps(prisma, steps, args, 0);
+
+      expect(summary).toEqual({
+        exhausted: false,
+        skipped: ["operation_outbox", "operation_outbox_dead", "operations"],
+      });
+      for (const name of summary.skipped) {
+        expect(warn).toHaveBeenCalledWith(
+          `operations tables not present yet; skipping ${name}`,
+        );
+      }
+      const run = dryRun ? tx.$queryRaw : tx.$executeRaw;
+      expect(run).toHaveBeenCalledTimes(steps.length);
+    },
+  );
+
+  it("still fails the run on any other error in an operation step", async () => {
+    const args = { ...retention.DEFAULTS, dryRun: false };
+    const steps = retention.buildSteps(args, now, sql);
+    const timeout = Object.assign(new Error("canceling statement"), {
+      code: "P2010",
+      meta: { code: "57014" },
+    });
+    const { prisma } = fakePrisma((text) =>
+      text.includes('"operation"') ? timeout : undefined,
+    );
+
+    await expect(retention.runSteps(prisma, steps, args, 0)).rejects.toBe(
+      timeout,
+    );
+  });
+
+  it("does not tolerate a missing table on the older steps", async () => {
+    const args = { ...retention.DEFAULTS, dryRun: false };
+    const steps = retention.buildSteps(args, now, sql);
+    const { prisma } = fakePrisma((text) =>
+      text.includes('"GradingCache"') ? undefinedTable : undefined,
+    );
+
+    await expect(retention.runSteps(prisma, steps, args, 0)).rejects.toBe(
+      undefinedTable,
+    );
+    expect(warn).not.toHaveBeenCalled();
   });
 });

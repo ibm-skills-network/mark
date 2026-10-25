@@ -1,19 +1,17 @@
 //! Mark Rust worker process.
 //!
-//! Foundation release: exposes health probes and idles. It claims no work
-//! unless `MARK_RUST_CONSUME_WORK=true`, and even then there is nothing to
-//! claim yet; the durable operation store arrives with the first workflow.
-//! The point of shipping the idle loop now is to prove the deployment path,
-//! probes, shutdown, and the control switches before any work exists.
+//! Serves health probes and runs the operation loop. It claims nothing
+//! unless `MARK_RUST_CONSUME_WORK=true`, and with no handlers registered it
+//! only polls and reaps: the loop, leases and switches go live before any
+//! job family moves over.
 
 use std::time::Duration;
 
 use axum::Router;
+use mark_ops::worker::{self, Registry, WorkerConfig};
 use mark_platform::health::{DatabaseProbe, HealthState};
 use mark_platform::{db, http, shutdown, telemetry, Config, Role};
-use tracing::{debug, info, warn};
-
-const IDLE_HEARTBEAT: Duration = Duration::from_secs(60);
+use tracing::info;
 
 fn main() -> anyhow::Result<()> {
     let config = Config::from_env(Role::Worker)?;
@@ -35,29 +33,13 @@ async fn run(config: Config) -> anyhow::Result<()> {
 
     let probes = tokio::spawn(http::serve(router, config.bind_addr, config.shutdown_grace));
 
-    if config.controls.consume_work {
-        warn!("consume_work is enabled but no operation types are registered; idling");
-    } else {
-        info!("consume_work is disabled; worker will not claim operations");
-    }
+    let worker_config = WorkerConfig::from_config(&config)?;
+    let registry = Registry::new();
+    let outcome = worker::run(pool.clone(), registry, worker_config, shutdown::signal()).await;
 
-    let idle = async {
-        let mut tick = tokio::time::interval(IDLE_HEARTBEAT);
-        loop {
-            tick.tick().await;
-            debug!(
-                consume_work = config.controls.consume_work,
-                "worker heartbeat"
-            );
-        }
-    };
-
-    tokio::select! {
-        () = idle => {}
-        () = shutdown::signal() => info!("worker loop stopping"),
-    }
-
+    // Let the probe server finish draining even if the loop failed.
     probes.await??;
+    outcome?;
     pool.close().await;
     info!("worker stopped");
     Ok(())

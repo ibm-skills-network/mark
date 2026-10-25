@@ -112,6 +112,7 @@ dbRetention:
   auditDays: 60
   cookieDays: 7
   ltiSyncDays: 365
+  operationDays: 30
   batchSize: 5000
   maxSeconds: 1500
   activeDeadlineSeconds: 1800

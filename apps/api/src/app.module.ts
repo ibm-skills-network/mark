@@ -22,6 +22,7 @@ import { winstonOptions } from "./logger/config";
 import { InternalContractMiddleware } from "./job-queue/internal-contract.middleware";
 import { LoggerMiddleware } from "./logger/logger.middleware";
 import { MessagingModule } from "./messaging/messaging.module";
+import { OperationsModule } from "./operations/operations.module";
 import { routes } from "./routes";
 
 @Module({
@@ -39,6 +40,7 @@ import { routes } from "./routes";
     DatabaseModule,
     FileProcessingBudgetModule,
     JobQueueModule,
+    OperationsModule,
   ],
   providers: [AppService],
 })

@@ -9,6 +9,7 @@ publish.workspace = true
 
 [dependencies]
 mark-platform.workspace = true
+mark-ops.workspace = true
 anyhow.workspace = true
 axum.workspace = true
 tokio.workspace = true

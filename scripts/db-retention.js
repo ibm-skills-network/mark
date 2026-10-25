@@ -14,6 +14,11 @@
  *                  dead weight that still carries a learner token. Rows
  *                  older than --lti-sync-days (365) are deleted outright;
  *                  the grade itself lives on AssignmentAttempt.
+ *   operation        finished rows older than --operation-days (30), with
+ *                    their progress events (cascade). Nothing reads a
+ *                    finished operation once its result is written.
+ *   operation_outbox sent rows, and dead rows last touched, older than
+ *                    --operation-days. In-flight rows are never touched.
  *
  * Never touches attempts, responses or grades.
  *
@@ -24,6 +29,7 @@
  *
  * FLAGS:
  *   --cache-days=30  --audit-days=60  --cookie-days=7  --lti-sync-days=365
+ *   --operation-days=30
  *   --batch-size=5000      rows per statement
  *   --max-seconds=1500     stop (exit 0) once this much time has passed; the
  *                          next run continues. 0 = no limit.
@@ -45,6 +51,7 @@ const MIN_DAYS = {
   auditDays: 7,
   cookieDays: 1,
   ltiSyncDays: 30,
+  operationDays: 7,
 };
 
 const DEFAULTS = {
@@ -53,6 +60,7 @@ const DEFAULTS = {
   auditDays: 60,
   cookieDays: 7,
   ltiSyncDays: 365,
+  operationDays: 30,
   batchSize: 5000,
   maxSeconds: 1500,
   pauseMs: 200,
@@ -82,6 +90,7 @@ function parseArgs(argv) {
     "audit-days": "auditDays",
     "cookie-days": "cookieDays",
     "lti-sync-days": "ltiSyncDays",
+    "operation-days": "operationDays",
     "batch-size": "batchSize",
     "max-seconds": "maxSeconds",
     "pause-ms": "pauseMs",
@@ -156,6 +165,37 @@ function buildSteps(args, now, sql) {
       apply: (cutoff, limit) =>
         sql`DELETE FROM "LtiGradeSync" WHERE id IN (SELECT id FROM "LtiGradeSync" WHERE "updatedAt" < ${cutoff} ORDER BY "updatedAt" LIMIT ${limit} FOR UPDATE SKIP LOCKED)`,
     },
+    // optionalTable: skipped, not failed, on a database that predates the
+    // operation tables. Outbox first: deleting an operation would otherwise
+    // SET NULL on outbox rows about to go anyway.
+    {
+      name: "operation_outbox",
+      optionalTable: true,
+      cutoff: cutoffFor(args.operationDays, now),
+      count: (cutoff) =>
+        sql`SELECT count(*)::int AS n FROM "operation_outbox" WHERE "sent_at" < ${cutoff}`,
+      apply: (cutoff, limit) =>
+        sql`DELETE FROM "operation_outbox" WHERE id IN (SELECT id FROM "operation_outbox" WHERE "sent_at" < ${cutoff} ORDER BY "sent_at" LIMIT ${limit} FOR UPDATE SKIP LOCKED)`,
+    },
+    // Dead rows have no sent_at; there are few, so no index on updated_at.
+    {
+      name: "operation_outbox_dead",
+      optionalTable: true,
+      cutoff: cutoffFor(args.operationDays, now),
+      count: (cutoff) =>
+        sql`SELECT count(*)::int AS n FROM "operation_outbox" WHERE "updated_at" < ${cutoff} AND "state" = 'dead'`,
+      apply: (cutoff, limit) =>
+        sql`DELETE FROM "operation_outbox" WHERE id IN (SELECT id FROM "operation_outbox" WHERE "updated_at" < ${cutoff} AND "state" = 'dead' ORDER BY "updated_at" LIMIT ${limit} FOR UPDATE SKIP LOCKED)`,
+    },
+    {
+      name: "operations",
+      optionalTable: true,
+      cutoff: cutoffFor(args.operationDays, now),
+      count: (cutoff) =>
+        sql`SELECT count(*)::int AS n FROM "operation" WHERE "finished_at" < ${cutoff}`,
+      apply: (cutoff, limit) =>
+        sql`DELETE FROM "operation" WHERE id IN (SELECT id FROM "operation" WHERE "finished_at" < ${cutoff} ORDER BY "finished_at" LIMIT ${limit} FOR UPDATE SKIP LOCKED)`,
+    },
   ];
 }
 
@@ -200,6 +240,54 @@ async function runStep(prisma, step, args, deadline) {
   }
 }
 
+// Postgres undefined_table, surfaced by Prisma raw queries as P2010 with the
+// SQLSTATE in meta.code.
+function isUndefinedTable(error) {
+  return (
+    Boolean(error) &&
+    (error.code === "42P01" ||
+      (error.meta !== undefined && error.meta.code === "42P01"))
+  );
+}
+
+// Runs one step; a missing table is tolerated only on optionalTable steps,
+// so any other failure still fails the run.
+async function runOne(prisma, step, args, deadline) {
+  try {
+    if (args.dryRun) {
+      const [{ n }] = await inTransaction(prisma, 120, (tx) =>
+        tx.$queryRaw(step.count(step.cutoff)),
+      );
+      console.log(
+        `${step.name}: ${n} rows older than ${step.cutoff.toISOString()}`,
+      );
+      return { skipped: false, exhausted: false };
+    }
+    const result = await runStep(prisma, step, args, deadline);
+    console.log(
+      `${step.name}: done, ${result.total} rows in ${result.batches} batches` +
+        (result.exhausted ? " (time budget exhausted, resumes next run)" : ""),
+    );
+    return { skipped: false, exhausted: result.exhausted };
+  } catch (error) {
+    if (step.optionalTable && isUndefinedTable(error)) {
+      console.warn(`operations tables not present yet; skipping ${step.name}`);
+      return { skipped: true, exhausted: false };
+    }
+    throw error;
+  }
+}
+
+async function runSteps(prisma, steps, args, deadline) {
+  const skipped = [];
+  for (const step of steps) {
+    const result = await runOne(prisma, step, args, deadline);
+    if (result.skipped) skipped.push(step.name);
+    if (result.exhausted) return { exhausted: true, skipped };
+  }
+  return { exhausted: false, skipped };
+}
+
 async function main() {
   const args = parseArgs(process.argv);
   // Required lazily so the exported helpers can be unit-tested without a
@@ -215,40 +303,23 @@ async function main() {
   console.log(
     `db-retention ${args.dryRun ? "DRY RUN" : "EXECUTE"} at ${now.toISOString()} ` +
       `(cache ${args.cacheDays}d, audit ${args.auditDays}d, cookies ${args.cookieDays}d, ` +
-      `lti rows ${args.ltiSyncDays}d, batch ${args.batchSize})`,
+      `lti rows ${args.ltiSyncDays}d, operations ${args.operationDays}d, batch ${args.batchSize})`,
   );
 
   await awaitLinkerdProxy();
-  let exhausted = false;
+  let summary;
   try {
-    for (const step of steps) {
-      if (args.dryRun) {
-        const [{ n }] = await inTransaction(prisma, 120, (tx) =>
-          tx.$queryRaw(step.count(step.cutoff)),
-        );
-        console.log(
-          `${step.name}: ${n} rows older than ${step.cutoff.toISOString()}`,
-        );
-        continue;
-      }
-      const result = await runStep(prisma, step, args, deadline);
-      console.log(
-        `${step.name}: done, ${result.total} rows in ${result.batches} batches` +
-          (result.exhausted
-            ? " (time budget exhausted, resumes next run)"
-            : ""),
-      );
-      if (result.exhausted) {
-        exhausted = true;
-        break;
-      }
-    }
+    summary = await runSteps(prisma, steps, args, deadline);
   } finally {
     await prisma.$disconnect();
   }
   const elapsedSec = ((Date.now() - start) / 1000).toFixed(1);
   console.log(
-    `db-retention finished in ${elapsedSec}s${exhausted ? " with work remaining" : ""}`,
+    `db-retention finished in ${elapsedSec}s` +
+      (summary.skipped.length > 0
+        ? ` (skipped: ${summary.skipped.join(", ")})`
+        : "") +
+      (summary.exhausted ? " with work remaining" : ""),
   );
 }
 
@@ -304,4 +375,12 @@ if (require.main === module) {
     });
 }
 
-module.exports = { parseArgs, cutoffFor, buildSteps, DEFAULTS, MIN_DAYS };
+module.exports = {
+  parseArgs,
+  cutoffFor,
+  buildSteps,
+  runSteps,
+  isUndefinedTable,
+  DEFAULTS,
+  MIN_DAYS,
+};

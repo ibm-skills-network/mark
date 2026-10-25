@@ -95,7 +95,41 @@ pub struct Config {
     pub shutdown_grace: Duration,
     pub controls: ExecutionControls,
     pub grading: GradingHandOff,
+    pub worker: WorkerSettings,
 }
+
+/// How much work one worker process takes on. Read only for
+/// [`Role::Worker`]; the API keeps the defaults so a stray worker variable
+/// in its environment cannot stop it from starting.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WorkerSettings {
+    /// `MARK_RUST_WORKER_CREDITS`: memory budget, as the sum of the `cost`
+    /// of the operations running at once.
+    pub credits: u32,
+    /// `MARK_RUST_WORKER_KINDS`: restrict claiming to these operation kinds.
+    /// `None` claims every kind the process has a handler for.
+    pub kinds: Option<Vec<String>>,
+    /// `MARK_RUST_WORKER_LEASE_SECONDS`: how long a claim holds without a
+    /// renewal before another worker may take the operation over.
+    pub lease: Duration,
+}
+
+impl Default for WorkerSettings {
+    fn default() -> Self {
+        Self {
+            credits: 8,
+            kinds: None,
+            lease: Duration::from_secs(60),
+        }
+    }
+}
+
+/// Upper bound on credits; keeps the value well inside the database's
+/// `INTEGER` and rejects typos like an extra zero or two.
+const MAX_WORKER_CREDITS: u32 = 1000;
+/// Renewal runs every third of the lease, so a lease shorter than this would
+/// renew more than once a second.
+const MIN_WORKER_LEASE_SECONDS: u64 = 3;
 
 /// Where learner submits go once the API has accepted them: the legacy API's
 /// internal grading endpoints (queued tiers), the LTI gateway (grade
@@ -188,6 +222,7 @@ impl fmt::Debug for Config {
             .field("shutdown_grace", &self.shutdown_grace)
             .field("controls", &self.controls)
             .field("grading", &self.grading)
+            .field("worker", &self.worker)
             .finish()
     }
 }
@@ -271,6 +306,11 @@ impl Config {
             learner_bucket_prod: env.get("IBM_COS_LEARNER_BUCKET_PROD"),
         };
 
+        let worker = match role {
+            Role::Worker => worker_settings(env)?,
+            Role::Api => WorkerSettings::default(),
+        };
+
         Ok(Self {
             role,
             service_name: env
@@ -290,8 +330,68 @@ impl Config {
             shutdown_grace: Duration::from_millis(parse_or(env, "SHUTDOWN_GRACE_MS", 20_000)?),
             controls,
             grading,
+            worker,
         })
     }
+}
+
+fn worker_settings(env: &impl Source) -> Result<WorkerSettings, ConfigError> {
+    let defaults = WorkerSettings::default();
+    let credits = parse_or(env, "MARK_RUST_WORKER_CREDITS", defaults.credits)?;
+    if credits == 0 || credits > MAX_WORKER_CREDITS {
+        return Err(ConfigError::Invalid {
+            name: "MARK_RUST_WORKER_CREDITS",
+            reason: format!("expected 1..={MAX_WORKER_CREDITS}, got {credits}"),
+        });
+    }
+    let lease_seconds = parse_or(
+        env,
+        "MARK_RUST_WORKER_LEASE_SECONDS",
+        defaults.lease.as_secs(),
+    )?;
+    if lease_seconds < MIN_WORKER_LEASE_SECONDS {
+        return Err(ConfigError::Invalid {
+            name: "MARK_RUST_WORKER_LEASE_SECONDS",
+            reason: format!("expected at least {MIN_WORKER_LEASE_SECONDS}, got {lease_seconds}"),
+        });
+    }
+    Ok(WorkerSettings {
+        credits,
+        kinds: worker_kinds(env)?,
+        lease: Duration::from_secs(lease_seconds),
+    })
+}
+
+/// A comma-separated kind list. A value that lists nothing, or a token with
+/// characters no kind uses, is an error: a typo here must not silently widen
+/// or empty what the worker claims.
+fn worker_kinds(env: &impl Source) -> Result<Option<Vec<String>>, ConfigError> {
+    const NAME: &str = "MARK_RUST_WORKER_KINDS";
+    let Some(raw) = env.get(NAME) else {
+        return Ok(None);
+    };
+    let mut kinds: Vec<String> = Vec::new();
+    for token in raw.split(',').map(str::trim).filter(|t| !t.is_empty()) {
+        let valid = token
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '.' | '-' | '_'));
+        if !valid {
+            return Err(ConfigError::Invalid {
+                name: NAME,
+                reason: format!("invalid kind {token:?}"),
+            });
+        }
+        if !kinds.iter().any(|k| k == token) {
+            kinds.push(token.to_owned());
+        }
+    }
+    if kinds.is_empty() {
+        return Err(ConfigError::Invalid {
+            name: NAME,
+            reason: "no kinds listed".to_owned(),
+        });
+    }
+    Ok(Some(kinds))
 }
 
 /// An optional `http://` or `https://` URL. Anything else is a startup error
@@ -477,6 +577,62 @@ mod tests {
                 ..
             })
         ));
+    }
+
+    #[test]
+    fn worker_settings_default_and_parse() {
+        let cfg = Config::load(Role::Worker, &base()).unwrap();
+        assert_eq!(cfg.worker, WorkerSettings::default());
+        assert_eq!(cfg.worker.credits, 8);
+        assert_eq!(cfg.worker.kinds, None);
+        assert_eq!(cfg.worker.lease, Duration::from_secs(60));
+
+        let mut env = base();
+        env.insert("MARK_RUST_WORKER_CREDITS", "12");
+        env.insert(
+            "MARK_RUST_WORKER_KINDS",
+            " grading.heavy, translate.meta ,,grading.heavy",
+        );
+        env.insert("MARK_RUST_WORKER_LEASE_SECONDS", "90");
+        let cfg = Config::load(Role::Worker, &env).unwrap();
+        assert_eq!(cfg.worker.credits, 12);
+        assert_eq!(
+            cfg.worker.kinds,
+            Some(vec![
+                "grading.heavy".to_owned(),
+                "translate.meta".to_owned()
+            ])
+        );
+        assert_eq!(cfg.worker.lease, Duration::from_secs(90));
+    }
+
+    #[test]
+    fn worker_settings_are_validated() {
+        for (name, value) in [
+            ("MARK_RUST_WORKER_CREDITS", "0"),
+            ("MARK_RUST_WORKER_CREDITS", "eight"),
+            ("MARK_RUST_WORKER_CREDITS", "80000"),
+            ("MARK_RUST_WORKER_LEASE_SECONDS", "2"),
+            ("MARK_RUST_WORKER_LEASE_SECONDS", "-5"),
+            ("MARK_RUST_WORKER_KINDS", " , ,"),
+            ("MARK_RUST_WORKER_KINDS", "grading.heavy,Grading Standard"),
+        ] {
+            let mut env = base();
+            env.insert(name, value);
+            match Config::load(Role::Worker, &env) {
+                Err(ConfigError::Invalid { name: got, .. }) => assert_eq!(got, name, "{value}"),
+                other => panic!("{name}={value}: expected Invalid, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn worker_settings_are_ignored_by_the_api() {
+        let mut env = base();
+        env.insert("MARK_RUST_WORKER_CREDITS", "0");
+        env.insert("MARK_RUST_WORKER_KINDS", "Not Valid");
+        let cfg = Config::load(Role::Api, &env).unwrap();
+        assert_eq!(cfg.worker, WorkerSettings::default());
     }
 
     #[test]

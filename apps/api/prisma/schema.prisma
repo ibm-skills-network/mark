@@ -820,6 +820,72 @@ model LtiSyncErrorLog {
   @@index([timestamp])
 }
 
+/// Durable background work for the Rust worker; rows are written and claimed
+/// with raw SQL. CHECK constraints and partial indexes live only in the
+/// migration because Prisma cannot express them.
+model Operation {
+  id          String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  kind        String
+  key         String
+  payload     Json
+  /// queued | leased | succeeded | failed | dead | cancelled
+  state       String    @default("queued")
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(3) @map("max_attempts")
+  cost        Int       @default(1)
+  runAfter    DateTime  @default(now()) @map("run_after") @db.Timestamptz(6)
+  leaseOwner  String?   @map("lease_owner")
+  leaseUntil  DateTime? @map("lease_until") @db.Timestamptz(6)
+  lastError   String?   @map("last_error")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @map("updated_at") @db.Timestamptz(6)
+  finishedAt  DateTime? @map("finished_at") @db.Timestamptz(6)
+
+  events OperationEvent[]
+  outbox OperationOutbox[]
+
+  @@index([kind, state], map: "operation_kind_state_idx")
+  @@map("operation")
+}
+
+/// Progress log of an operation; seq starts at 1 per operation.
+model OperationEvent {
+  id          BigInt    @id @default(autoincrement())
+  operationId String    @map("operation_id") @db.Uuid
+  operation   Operation @relation(fields: [operationId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  seq         Int
+  at          DateTime  @default(now()) @db.Timestamptz(6)
+  stage       String
+  percent     Int?      @db.SmallInt
+  message     String?
+  data        Json?
+
+  @@unique([operationId, seq], map: "operation_event_operation_id_seq_key")
+  @@map("operation_event")
+}
+
+/// External effects committed in the same transaction as the result they report.
+model OperationOutbox {
+  id          String     @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  operationId String?    @map("operation_id") @db.Uuid
+  operation   Operation? @relation(fields: [operationId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  kind        String
+  payload     Json
+  /// pending | leased | sent | dead
+  state       String     @default("pending")
+  attempts    Int        @default(0)
+  maxAttempts Int        @default(5) @map("max_attempts")
+  runAfter    DateTime   @default(now()) @map("run_after") @db.Timestamptz(6)
+  leaseOwner  String?    @map("lease_owner")
+  leaseUntil  DateTime?  @map("lease_until") @db.Timestamptz(6)
+  lastError   String?    @map("last_error")
+  createdAt   DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime   @default(now()) @map("updated_at") @db.Timestamptz(6)
+  sentAt      DateTime?  @map("sent_at") @db.Timestamptz(6)
+
+  @@map("operation_outbox")
+}
+
 /// Enum representing the status of a report
 enum ReportStatus {
   OPEN /// Report is open and requires attention
