@@ -11937,9 +11937,9 @@ node-xlsx@^0.24.0:
     xlsx "https://cdn.sheetjs.com/xlsx-0.20.2/xlsx-0.20.2.tgz"
 
 nodemailer@^10.0.2:
-  version "10.2.0"
-  resolved "https://registry.yarnpkg.com/nodemailer/-/nodemailer-10.2.0.tgz#92d4e0d6f951c7c529b2893eb2b855859a78dd09"
-  integrity sha512-/XyGw6kX2stMdKGUJdAQmYAeY1FscWfdRydfd2NtK3A3KDfUUXCqZzExSNAt2xhh90X2qLCR+o2Gd48YPJcJwA==
+  version "10.2.1"
+  resolved "https://registry.yarnpkg.com/nodemailer/-/nodemailer-10.2.1.tgz#255f4220fc401ff76ae28ef3b7e67349ea293c88"
+  integrity sha512-ZrDNsPFoDMwefNs7sJwrYiEJ/CG4ClJWDZv05iNJsEBWa8GRDry1QJHTJxsuTAY9eDDKjX4k+q3SxslXJOao7w==
 
 normalize-package-data@^2.5.0:
   version "2.5.0"
