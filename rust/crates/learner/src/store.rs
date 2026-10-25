@@ -979,3 +979,596 @@ pub async fn delete_attempt(conn: &mut PgConnection, attempt_id: i32) -> Result<
         .await
         .map(|_| ())
 }
+
+// ---------------------------------------------------------------- submit and results
+
+/// The base `Assignment` row's settings a submit and its results read, with
+/// the current version's answer visibility.
+#[derive(Debug, Clone, PartialEq)]
+#[allow(clippy::struct_excessive_bools)] // mirrors the selected columns
+pub struct SubmitSettingsRow {
+    pub question_order: Vec<i32>,
+    pub passing_grade: Option<i32>,
+    pub show_assignment_score: bool,
+    pub show_submission_feedback: bool,
+    pub show_questions: bool,
+    pub show_question_score: bool,
+    pub show_pass_fail_indicator: bool,
+    pub require_all_questions: bool,
+    pub optional_question_ids: Vec<i32>,
+    pub current_version_visibility: Option<String>,
+}
+
+pub async fn submit_settings(
+    conn: &mut PgConnection,
+    assignment_id: i32,
+) -> Result<Option<SubmitSettingsRow>> {
+    let row = q(
+        r#"SELECT a."questionOrder", a."passingGrade", a."showAssignmentScore",
+            a."showSubmissionFeedback", a."showQuestions", a."showQuestionScore",
+            a."showPassFailIndicator", a."requireAllQuestions", a."optionalQuestionIds",
+            cv."correctAnswerVisibility"::text AS "currentVisibility"
+       FROM "Assignment" a
+       LEFT JOIN "AssignmentVersion" cv ON cv.id = a."currentVersionId"
+       WHERE a.id = $1"#,
+    )
+    .bind(assignment_id)
+    .fetch_optional(conn)
+    .await?;
+    row.map(|r| {
+        Ok(SubmitSettingsRow {
+            question_order: r
+                .try_get::<Option<Vec<i32>>, _>("questionOrder")?
+                .unwrap_or_default(),
+            passing_grade: r.try_get("passingGrade")?,
+            show_assignment_score: r.try_get("showAssignmentScore")?,
+            show_submission_feedback: r.try_get("showSubmissionFeedback")?,
+            show_questions: r.try_get("showQuestions")?,
+            show_question_score: r.try_get("showQuestionScore")?,
+            show_pass_fail_indicator: r.try_get("showPassFailIndicator")?,
+            require_all_questions: r.try_get("requireAllQuestions")?,
+            optional_question_ids: r
+                .try_get::<Option<Vec<i32>>, _>("optionalQuestionIds")?
+                .unwrap_or_default(),
+            current_version_visibility: r.try_get("currentVisibility")?,
+        })
+    })
+    .transpose()
+}
+
+/// A question row as grading and the results page read it, from
+/// `QuestionVersion` (pinned attempts) or `Question`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct GradingQuestionRow {
+    /// The row's own id (`QuestionVersion.id` or `Question.id`).
+    pub row_id: i32,
+    /// The question the row belongs to; `None` for a version row created
+    /// without one.
+    pub question_id: Option<i32>,
+    /// `Question.assignmentId`; `None` for version rows.
+    pub assignment_id: Option<i32>,
+    pub question: String,
+    pub question_type: String,
+    pub response_type: Option<String>,
+    pub total_points: i32,
+    pub choices: Option<Value>,
+    pub scoring: Option<Value>,
+    pub grading_context_question_ids: Vec<i32>,
+}
+
+impl GradingQuestionRow {
+    /// The id the attempt serves it under.
+    pub fn served_id(&self) -> i32 {
+        self.question_id.unwrap_or(self.row_id)
+    }
+}
+
+fn grading_question_row(r: &PgRow) -> Result<GradingQuestionRow> {
+    Ok(GradingQuestionRow {
+        row_id: r.try_get("id")?,
+        question_id: r.try_get("questionId")?,
+        assignment_id: r.try_get("assignmentId")?,
+        question: r.try_get("question")?,
+        question_type: r.try_get("type")?,
+        response_type: r.try_get("responseType")?,
+        total_points: r.try_get("totalPoints")?,
+        choices: r.try_get("choices")?,
+        scoring: r.try_get("scoring")?,
+        grading_context_question_ids: r
+            .try_get::<Option<Vec<i32>>, _>("gradingContextQuestionIds")?
+            .unwrap_or_default(),
+    })
+}
+
+/// The attempt's pinned version questions, in display order.
+pub async fn pinned_questions(
+    conn: &mut PgConnection,
+    version_id: i32,
+) -> Result<Vec<GradingQuestionRow>> {
+    q(
+        r#"SELECT id, "questionId", NULL::int4 AS "assignmentId", question, type::text AS type,
+            "responseType"::text AS "responseType", "totalPoints", choices, scoring,
+            "gradingContextQuestionIds"
+       FROM "QuestionVersion" WHERE "assignmentVersionId" = $1
+       ORDER BY "displayOrder" ASC NULLS LAST, id ASC"#,
+    )
+    .bind(version_id)
+    .fetch_all(conn)
+    .await?
+    .iter()
+    .map(grading_question_row)
+    .collect()
+}
+
+/// The assignment's live, non-deleted questions.
+pub async fn live_grading_questions(
+    conn: &mut PgConnection,
+    assignment_id: i32,
+) -> Result<Vec<GradingQuestionRow>> {
+    q(
+        r#"SELECT id, id AS "questionId", "assignmentId", question, type::text AS type,
+            "responseType"::text AS "responseType", "totalPoints", choices, scoring,
+            "gradingContextQuestionIds"
+       FROM "Question" WHERE "assignmentId" = $1 AND "isDeleted" = false ORDER BY id"#,
+    )
+    .bind(assignment_id)
+    .fetch_all(conn)
+    .await?
+    .iter()
+    .map(grading_question_row)
+    .collect()
+}
+
+/// Live questions by id, deleted or not, on any assignment.
+pub async fn questions_by_ids(
+    conn: &mut PgConnection,
+    ids: &[i32],
+) -> Result<Vec<GradingQuestionRow>> {
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    q(
+        r#"SELECT id, id AS "questionId", "assignmentId", question, type::text AS type,
+            "responseType"::text AS "responseType", "totalPoints", choices, scoring,
+            "gradingContextQuestionIds"
+       FROM "Question" WHERE id = ANY($1) ORDER BY id"#,
+    )
+    .bind(ids)
+    .fetch_all(conn)
+    .await?
+    .iter()
+    .map(grading_question_row)
+    .collect()
+}
+
+/// A stored question translation with the choices it was made from.
+#[derive(Debug, Clone, PartialEq)]
+pub struct QuestionTranslationRow {
+    pub question_id: Option<i32>,
+    pub variant_id: Option<i32>,
+    pub language_code: String,
+    pub translated_text: String,
+    pub translated_choices: Option<Value>,
+    pub untranslated_choices: Option<Value>,
+}
+
+/// Translations of the given questions (their variant rows included), in
+/// insertion order; `like_pattern` limits the language codes when given.
+pub async fn translations_of_questions(
+    conn: &mut PgConnection,
+    question_ids: &[i32],
+    like_pattern: Option<&str>,
+) -> Result<Vec<QuestionTranslationRow>> {
+    if question_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    q(
+        r#"SELECT "questionId", "variantId", "languageCode", "translatedText",
+            "translatedChoices", "untranslatedChoices"
+       FROM "Translation"
+       WHERE "questionId" = ANY($1) AND ($2::text IS NULL OR "languageCode" ILIKE $2)
+       ORDER BY id"#,
+    )
+    .bind(question_ids)
+    .bind(like_pattern)
+    .fetch_all(conn)
+    .await?
+    .iter()
+    .map(|r| {
+        Ok(QuestionTranslationRow {
+            question_id: r.try_get("questionId")?,
+            variant_id: r.try_get("variantId")?,
+            language_code: r.try_get("languageCode")?,
+            translated_text: r.try_get("translatedText")?,
+            translated_choices: r.try_get("translatedChoices")?,
+            untranslated_choices: r.try_get("untranslatedChoices")?,
+        })
+    })
+    .collect()
+}
+
+/// Close an open attempt at zero because its submit came in past the
+/// deadline. Returns how many rows changed (0: it was already submitted).
+pub async fn close_expired_attempt(
+    conn: &mut PgConnection,
+    attempt_id: i32,
+    comment: &str,
+) -> Result<u64> {
+    q(
+        r#"UPDATE "AssignmentAttempt" SET submitted = true, grade = 0, comments = $2
+       WHERE id = $1 AND submitted = false"#,
+    )
+    .bind(attempt_id)
+    .bind(comment)
+    .execute(conn)
+    .await
+    .map(|r| r.rows_affected())
+}
+
+pub async fn attempt_submitted(conn: &mut PgConnection, attempt_id: i32) -> Result<Option<bool>> {
+    q(r#"SELECT submitted FROM "AssignmentAttempt" WHERE id = $1"#)
+        .bind(attempt_id)
+        .fetch_optional(conn)
+        .await?
+        .map(|r| r.try_get("submitted"))
+        .transpose()
+}
+
+/// One `QuestionResponse` row to write at commit.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ResponseInsert {
+    pub question_id: i32,
+    /// JSON text of the graded value (a text column).
+    pub learner_response: String,
+    pub points: f64,
+    /// JSON text of the feedback array.
+    pub feedback: String,
+    /// JSON text of the jsonb value, which is itself a JSON string holding
+    /// the metadata object, as the legacy backend stores it.
+    pub metadata: Option<String>,
+}
+
+/// Insert the rows in order; returns their ids in the same order.
+pub async fn insert_question_responses(
+    conn: &mut PgConnection,
+    attempt_id: i32,
+    rows: &[ResponseInsert],
+    graded_at: NaiveDateTime,
+) -> Result<Vec<i32>> {
+    if rows.is_empty() {
+        return Ok(Vec::new());
+    }
+    let question_ids: Vec<i32> = rows.iter().map(|r| r.question_id).collect();
+    let learner: Vec<&str> = rows.iter().map(|r| r.learner_response.as_str()).collect();
+    let points: Vec<f64> = rows.iter().map(|r| r.points).collect();
+    let feedback: Vec<&str> = rows.iter().map(|r| r.feedback.as_str()).collect();
+    let metadata: Vec<Option<&str>> = rows.iter().map(|r| r.metadata.as_deref()).collect();
+    let mut ids: Vec<i32> = q(r#"INSERT INTO "QuestionResponse"
+            ("assignmentAttemptId", "questionId", "learnerResponse", points, feedback, metadata, "gradedAt")
+       SELECT $1, t.question_id, t.learner_response, t.points, t.feedback::jsonb, t.metadata::jsonb, $7
+       FROM UNNEST($2::int4[], $3::text[], $4::float8[], $5::text[], $6::text[])
+            WITH ORDINALITY AS t(question_id, learner_response, points, feedback, metadata, ord)
+       ORDER BY t.ord
+       RETURNING id"#)
+    .bind(attempt_id)
+    .bind(&question_ids)
+    .bind(&learner)
+    .bind(&points)
+    .bind(&feedback)
+    .bind(&metadata)
+    .bind(graded_at)
+    .fetch_all(conn)
+    .await?
+    .iter()
+    .map(|r| r.try_get("id"))
+    .collect::<Result<_>>()?;
+    // Ids come from the sequence in insertion order.
+    ids.sort_unstable();
+    Ok(ids)
+}
+
+/// Delete the attempt's responses other than `keep`.
+pub async fn prune_question_responses(
+    conn: &mut PgConnection,
+    attempt_id: i32,
+    keep: &[i32],
+) -> Result<u64> {
+    q(r#"DELETE FROM "QuestionResponse" WHERE "assignmentAttemptId" = $1 AND NOT (id = ANY($2))"#)
+        .bind(attempt_id)
+        .bind(keep)
+        .execute(conn)
+        .await
+        .map(|r| r.rows_affected())
+}
+
+/// Mark the attempt submitted with its grade, if it is still open.
+pub async fn commit_attempt(
+    conn: &mut PgConnection,
+    attempt_id: i32,
+    grade: f64,
+    preferred_language: &str,
+    now: NaiveDateTime,
+) -> Result<u64> {
+    q(r#"UPDATE "AssignmentAttempt"
+       SET submitted = true, "preferredLanguage" = $2, "expiresAt" = $3, grade = $4
+       WHERE id = $1 AND submitted = false"#)
+    .bind(attempt_id)
+    .bind(preferred_language)
+    .bind(now)
+    .bind(grade)
+    .execute(conn)
+    .await
+    .map(|r| r.rows_affected())
+}
+
+/// `GradingProgress` as `markComplete` leaves it once a grade is readable.
+/// Only an existing row is updated; none is created. Returns the rows
+/// changed.
+pub async fn complete_grading_progress(
+    conn: &mut PgConnection,
+    attempt_id: i32,
+    now: NaiveDateTime,
+) -> Result<u64> {
+    q(r#"UPDATE "GradingProgress"
+       SET status = 'COMPLETED', progress = 100, "currentStage" = 'Grading complete!',
+           "completedAt" = $2, "updatedAt" = $2
+       WHERE "attemptId" = $1"#)
+    .bind(attempt_id)
+    .bind(now)
+    .execute(conn)
+    .await
+    .map(|r| r.rows_affected())
+}
+
+/// Ask for an email when grading completes.
+pub async fn enable_grading_notification(
+    conn: &mut PgConnection,
+    attempt_id: i32,
+    email: &str,
+    now: NaiveDateTime,
+) -> Result<()> {
+    q(r#"INSERT INTO "GradingProgress"
+            ("attemptId", "totalQuestions", "notifyOnComplete", "notificationEmail", "createdAt", "updatedAt")
+       VALUES ($1, 0, true, $2, $3, $3)
+       ON CONFLICT ("attemptId") DO UPDATE SET
+            "notifyOnComplete" = true, "notificationEmail" = $2, "updatedAt" = $3"#)
+    .bind(attempt_id)
+    .bind(email)
+    .bind(now)
+    .execute(conn)
+    .await
+    .map(|_| ())
+}
+
+/// Every grade of the learner on the assignment.
+pub async fn attempt_grades(
+    conn: &mut PgConnection,
+    assignment_id: i32,
+    user_id: &str,
+) -> Result<Vec<Option<f64>>> {
+    q(r#"SELECT grade FROM "AssignmentAttempt" WHERE "assignmentId" = $1 AND "userId" = $2"#)
+        .bind(assignment_id)
+        .bind(user_id)
+        .fetch_all(conn)
+        .await?
+        .iter()
+        .map(|r| r.try_get("grade"))
+        .collect()
+}
+
+/// A new `LtiGradeSync`, inserted already claimed.
+#[derive(Debug, Clone)]
+pub struct LtiSyncInsert<'a> {
+    pub attempt_id: i32,
+    pub user_id: &'a str,
+    pub assignment_id: i32,
+    pub grade: f64,
+    pub auth_cookie: &'a str,
+    pub gateway_url: Option<&'a str>,
+    pub now: NaiveDateTime,
+}
+
+pub async fn insert_lti_sync(conn: &mut PgConnection, row: &LtiSyncInsert<'_>) -> Result<i32> {
+    q(r#"INSERT INTO "LtiGradeSync"
+            ("attemptId", "userId", "assignmentId", grade, status, "authCookie", "ltiGatewayUrl",
+             "lastAttemptAt", "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, $4, 'IN_PROGRESS', $5, $6, $7, $7, $7)
+       RETURNING id"#)
+    .bind(row.attempt_id)
+    .bind(row.user_id)
+    .bind(row.assignment_id)
+    .bind(row.grade)
+    .bind(row.auth_cookie)
+    .bind(row.gateway_url.unwrap_or(""))
+    .bind(row.now)
+    .fetch_one(conn)
+    .await?
+    .try_get("id")
+}
+
+pub async fn mark_lti_sync_success(
+    conn: &mut PgConnection,
+    sync_id: i32,
+    now: NaiveDateTime,
+) -> Result<()> {
+    q(r#"UPDATE "LtiGradeSync" SET status = 'SUCCESS', "completedAt" = $2, "updatedAt" = $2 WHERE id = $1"#)
+        .bind(sync_id)
+        .bind(now)
+        .execute(conn)
+        .await
+        .map(|_| ())
+}
+
+pub async fn schedule_lti_sync_retry(
+    conn: &mut PgConnection,
+    sync_id: i32,
+    retry_count: i32,
+    last_error: &str,
+    error_history: &Value,
+    next_retry_at: NaiveDateTime,
+    now: NaiveDateTime,
+) -> Result<()> {
+    q(r#"UPDATE "LtiGradeSync"
+       SET status = 'SCHEDULED', "retryCount" = $2, "lastError" = $3, "errorHistory" = $4,
+           "nextRetryAt" = $5, "updatedAt" = $6
+       WHERE id = $1"#)
+    .bind(sync_id)
+    .bind(retry_count)
+    .bind(last_error)
+    .bind(error_history)
+    .bind(next_retry_at)
+    .bind(now)
+    .execute(conn)
+    .await
+    .map(|_| ())
+}
+
+/// One `LtiSyncErrorLog` row.
+#[derive(Debug, Clone)]
+pub struct LtiErrorLogInsert<'a> {
+    pub sync_id: i32,
+    pub attempt_number: i32,
+    pub error_message: &'a str,
+    pub http_status: Option<i32>,
+    pub response_body: Option<&'a str>,
+    pub metadata: Value,
+    pub now: NaiveDateTime,
+}
+
+pub async fn insert_lti_error_log(
+    conn: &mut PgConnection,
+    row: &LtiErrorLogInsert<'_>,
+) -> Result<i32> {
+    q(r#"INSERT INTO "LtiSyncErrorLog"
+            ("syncId", "attemptNumber", "errorMessage", "httpStatus", "responseBody", metadata, timestamp)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING id"#)
+    .bind(row.sync_id)
+    .bind(row.attempt_number)
+    .bind(row.error_message)
+    .bind(row.http_status)
+    .bind(row.response_body)
+    .bind(&row.metadata)
+    .bind(row.now)
+    .fetch_one(conn)
+    .await?
+    .try_get("id")
+}
+
+pub async fn insert_grade_sync_notification(
+    conn: &mut PgConnection,
+    user_id: &str,
+    title: &str,
+    message: &str,
+    metadata: &str,
+    now: NaiveDateTime,
+) -> Result<()> {
+    q(r#"INSERT INTO "UserNotification" ("userId", type, title, message, metadata, "createdAt", "updatedAt")
+       VALUES ($1, 'GRADE_SYNC', $2, $3, $4, $5, $5)"#)
+    .bind(user_id)
+    .bind(title)
+    .bind(message)
+    .bind(metadata)
+    .bind(now)
+    .execute(conn)
+    .await
+    .map(|_| ())
+}
+
+pub async fn mark_lti_learner_notified(
+    conn: &mut PgConnection,
+    sync_id: i32,
+    now: NaiveDateTime,
+) -> Result<()> {
+    q(r#"UPDATE "LtiGradeSync" SET "learnerNotified" = true, "notificationSentAt" = $2, "updatedAt" = $2
+       WHERE id = $1"#)
+    .bind(sync_id)
+    .bind(now)
+    .execute(conn)
+    .await
+    .map(|_| ())
+}
+
+/// The newest grade sync of an attempt (the session cookie is not read).
+#[derive(Debug, Clone, PartialEq)]
+pub struct LtiSyncRow {
+    pub id: i32,
+    pub status: String,
+    pub grade: f64,
+    pub retry_count: i32,
+    pub max_retries: i32,
+    pub last_error: Option<String>,
+    pub next_retry_at: Option<NaiveDateTime>,
+    pub completed_at: Option<NaiveDateTime>,
+    pub created_at: NaiveDateTime,
+}
+
+pub async fn latest_lti_sync(
+    conn: &mut PgConnection,
+    attempt_id: i32,
+) -> Result<Option<LtiSyncRow>> {
+    q(
+        r#"SELECT id, status::text AS status, grade, "retryCount", "maxRetries", "lastError",
+            "nextRetryAt", "completedAt", "createdAt"
+       FROM "LtiGradeSync" WHERE "attemptId" = $1
+       ORDER BY "createdAt" DESC, id DESC LIMIT 1"#,
+    )
+    .bind(attempt_id)
+    .fetch_optional(conn)
+    .await?
+    .map(|r| {
+        Ok(LtiSyncRow {
+            id: r.try_get("id")?,
+            status: r.try_get("status")?,
+            grade: r.try_get("grade")?,
+            retry_count: r.try_get("retryCount")?,
+            max_retries: r.try_get("maxRetries")?,
+            last_error: r.try_get("lastError")?,
+            next_retry_at: r.try_get("nextRetryAt")?,
+            completed_at: r.try_get("completedAt")?,
+            created_at: r.try_get("createdAt")?,
+        })
+    })
+    .transpose()
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct LtiErrorLogRow {
+    pub id: i32,
+    pub sync_id: i32,
+    pub attempt_number: i32,
+    pub error_message: String,
+    pub error_stack: Option<String>,
+    pub http_status: Option<i32>,
+    pub response_body: Option<String>,
+    pub timestamp: NaiveDateTime,
+    pub metadata: Option<Value>,
+}
+
+/// The five newest error logs of a sync.
+pub async fn lti_error_logs(conn: &mut PgConnection, sync_id: i32) -> Result<Vec<LtiErrorLogRow>> {
+    q(
+        r#"SELECT id, "syncId", "attemptNumber", "errorMessage", "errorStack", "httpStatus",
+            "responseBody", timestamp, metadata
+       FROM "LtiSyncErrorLog" WHERE "syncId" = $1
+       ORDER BY timestamp DESC, id DESC LIMIT 5"#,
+    )
+    .bind(sync_id)
+    .fetch_all(conn)
+    .await?
+    .iter()
+    .map(|r| {
+        Ok(LtiErrorLogRow {
+            id: r.try_get("id")?,
+            sync_id: r.try_get("syncId")?,
+            attempt_number: r.try_get("attemptNumber")?,
+            error_message: r.try_get("errorMessage")?,
+            error_stack: r.try_get("errorStack")?,
+            http_status: r.try_get("httpStatus")?,
+            response_body: r.try_get("responseBody")?,
+            timestamp: r.try_get("timestamp")?,
+            metadata: r.try_get("metadata")?,
+        })
+    })
+    .collect()
+}

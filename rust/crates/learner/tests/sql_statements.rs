@@ -203,5 +203,126 @@ async fn every_statement_prepares_against_the_schema() {
     );
     check!(c, "delete_attempt", store::delete_attempt(c, -1));
 
+    // Submit and results.
+    let responses = vec![store::ResponseInsert {
+        question_id: -1,
+        learner_response: r#"["a"]"#.into(),
+        points: 1.0,
+        feedback: r#"[{"feedback":"x"}]"#.into(),
+        metadata: Some(r#""{\"isCorrect\":true}""#.into()),
+    }];
+    check!(c, "submit_settings", store::submit_settings(c, -1));
+    check!(c, "pinned_questions", store::pinned_questions(c, -1));
+    check!(
+        c,
+        "live_grading_questions",
+        store::live_grading_questions(c, -1)
+    );
+    check!(c, "questions_by_ids", store::questions_by_ids(c, &none));
+    check!(
+        c,
+        "translations_of_questions any",
+        store::translations_of_questions(c, &none, None)
+    );
+    check!(
+        c,
+        "translations_of_questions family",
+        store::translations_of_questions(c, &none, Some("fr%"))
+    );
+    check!(
+        c,
+        "close_expired_attempt",
+        store::close_expired_attempt(c, -1, "closed")
+    );
+    check!(c, "attempt_submitted", store::attempt_submitted(c, -1));
+    check!(
+        c,
+        "insert_question_responses",
+        store::insert_question_responses(c, -1, &responses, now)
+    );
+    check!(
+        c,
+        "prune_question_responses",
+        store::prune_question_responses(c, -1, &none)
+    );
+    check!(
+        c,
+        "commit_attempt",
+        store::commit_attempt(c, -1, 0.5, "en", now)
+    );
+    check!(
+        c,
+        "complete_grading_progress",
+        store::complete_grading_progress(c, -1, now)
+    );
+    check!(
+        c,
+        "enable_grading_notification",
+        store::enable_grading_notification(c, -1, "u@x", now)
+    );
+    check!(c, "attempt_grades", store::attempt_grades(c, -1, "u"));
+    check!(
+        c,
+        "insert_lti_sync",
+        store::insert_lti_sync(
+            c,
+            &store::LtiSyncInsert {
+                attempt_id: -1,
+                user_id: "u",
+                assignment_id: -1,
+                grade: 0.5,
+                auth_cookie: "cookie",
+                gateway_url: Some("http://gateway"),
+                now,
+            }
+        )
+    );
+    check!(
+        c,
+        "mark_lti_sync_success",
+        store::mark_lti_sync_success(c, -1, now)
+    );
+    check!(
+        c,
+        "schedule_lti_sync_retry",
+        store::schedule_lti_sync_retry(
+            c,
+            -1,
+            1,
+            "boom",
+            &serde_json::json!([{"attempt": 1}]),
+            now,
+            now
+        )
+    );
+    check!(
+        c,
+        "insert_lti_error_log",
+        store::insert_lti_error_log(
+            c,
+            &store::LtiErrorLogInsert {
+                sync_id: -1,
+                attempt_number: 1,
+                error_message: "boom",
+                http_status: Some(500),
+                response_body: Some("{}"),
+                metadata: serde_json::json!({"attemptId": -1}),
+                now,
+            }
+        )
+    );
+    check!(
+        c,
+        "insert_grade_sync_notification",
+        store::insert_grade_sync_notification(c, "u", "t", "m", "{}", now)
+    );
+    check!(
+        c,
+        "mark_lti_learner_notified",
+        store::mark_lti_learner_notified(c, -1, now)
+    );
+    check!(c, "latest_lti_sync", store::latest_lti_sync(c, -1));
+    check!(c, "lti_error_logs", store::lti_error_logs(c, -1));
+
     tx.rollback().await.expect("rollback");
 }

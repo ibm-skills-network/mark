@@ -154,6 +154,7 @@ describe("AttemptServiceV2", () => {
       );
 
       expect(result.gradingJobId).toBe("new-job-id");
+      expect(result.reused).toBe(false);
       expect(mockJobStateService.acquireActiveJobLock).toHaveBeenCalledTimes(1);
       expect(mockJobStateService.createJob).toHaveBeenCalledTimes(1);
       // reservedId must be provided so active key is not set twice
@@ -179,6 +180,7 @@ describe("AttemptServiceV2", () => {
       expect(result.gradingJobId).toBe("existing-job-id");
       expect(mockJobStateService.createJob).not.toHaveBeenCalled();
       expect(result.message).toContain("already running");
+      expect(result.reused).toBe(true);
     });
 
     it("passes the same temp uuid as reservedId to createJob after acquiring the lock", async () => {

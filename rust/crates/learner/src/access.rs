@@ -274,6 +274,7 @@ mod tests {
             .role,
             group_id: Some("g".into()),
             assignment_id: assignment,
+            grading_callback_required: false,
         }
     }
 

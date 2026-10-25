@@ -17,6 +17,10 @@ spec:
         kubectl.kubernetes.io/default-container: {{ include "mark.rustApi.name" $ }}
         checksum/secrets: {{ include (print $.Template.BasePath "/rust-api/secret.yaml") $ | sha256sum }}
         checksum/config: {{ include (print $.Template.BasePath "/rust-api/configmap.yaml") $ | sha256sum }}
+        {{- if $.Values.api.enabled }}
+        checksum/api-secrets: {{ include (print $.Template.BasePath "/api/secret.yaml") $ | sha256sum }}
+        checksum/api-config: {{ include (print $.Template.BasePath "/api/configmap.yaml") $ | sha256sum }}
+        {{- end }}
         {{- with .podAnnotations }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -59,6 +63,37 @@ spec:
                 name: {{ include "mark.rustApi.name" $ }}-config
             - secretRef:
                 name: {{ include "mark.rustApi.name" $ }}-secrets
+          {{- if $.Values.api.enabled }}
+          # Shared with mark-api; a key set under rustApi.config or rustApi.secrets wins.
+          env:
+            {{- if not (hasKey .secrets "JOB_QUEUE_SECRET") }}
+            - name: JOB_QUEUE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mark.api.name" $ }}-secrets
+                  key: JOB_QUEUE_SECRET
+            {{- end }}
+            {{- range $key := list "IBM_COS_LEARNER_BUCKET" "IBM_COS_LEARNER_BUCKET_PROD" }}
+            {{- if not (hasKey $.Values.rustApi.secrets $key) }}
+            - name: {{ $key }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mark.api.name" $ }}-secrets
+                  key: {{ $key }}
+                  optional: true
+            {{- end }}
+            {{- end }}
+            {{- range $key := list "GRADING_LTI_GATEWAY_URL" "AI_FEATURES_DISABLED" "AI_GRADING_DISABLED" }}
+            {{- if not (hasKey $.Values.rustApi.config $key) }}
+            - name: {{ $key }}
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "mark.api.name" $ }}-config
+                  key: {{ $key }}
+                  optional: true
+            {{- end }}
+            {{- end }}
+          {{- end }}
       {{- with .nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

@@ -32,6 +32,22 @@ import {
   type RustRoutingConfig,
 } from "./rust-routing";
 
+/**
+ * Whether a request target's path has a segment that URL parsing resolves
+ * away (`.` or `..`, also spelled with `%2e`, and with `\\` as a separator).
+ * The downstream URL is built from the raw path, so such a segment would let
+ * a request matched by one gateway route reach another downstream.
+ */
+export function hasDotSegment(originalUrl: string): boolean {
+  const path = originalUrl.split(/[#?]/, 1)[0] ?? "";
+  if (/%2e/i.test(path)) {
+    return true;
+  }
+  return path
+    .split(/[/\\]/)
+    .some((segment) => segment === "." || segment === "..");
+}
+
 // Headers whose values are secrets/PII and must never be logged. Compared
 // case-insensitively. Hoisted to module scope so it isn't rebuilt per request.
 const SENSITIVE_HEADERS = new Set([
@@ -141,6 +157,13 @@ export class ApiService {
     forwardingService: DownstreamService,
     request: UserSessionRequest,
   ): { endpoint: string; extraHeaders: RawAxiosRequestHeaders } {
+    if (hasDotSegment(request.originalUrl ?? "")) {
+      this.logger.warn("Refused forward of a path with a dot segment", {
+        method: sanitizeForLog(request.method),
+        path: sanitizeForLog((request.originalUrl ?? "").split("?", 1)[0]),
+      });
+      throw new BadRequestException("Invalid request path");
+    }
     let endpoint: string;
     let extraHeaders: RawAxiosRequestHeaders = {};
     switch (forwardingService) {

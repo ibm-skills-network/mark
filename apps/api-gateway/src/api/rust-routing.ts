@@ -25,6 +25,7 @@ interface RouteMatcher {
 // Ids are digit-only so a crafted segment can never widen a match.
 const ID = String.raw`\d+`;
 const ASSIGNMENT = String.raw`/api/v2/assignments/${ID}`;
+const ATTEMPT = `${ASSIGNMENT}/attempts/${ID}`;
 
 const exact = (method: string, path: string): RouteMatcher => ({
   method,
@@ -47,6 +48,17 @@ export const ROUTE_FAMILIES: ReadonlyMap<string, readonly RouteMatcher[]> =
       [
         exact("POST", `${ASSIGNMENT}/attempts`),
         exact("POST", `${ASSIGNMENT}/attempts/${ID}/abandon`),
+      ],
+    ],
+    // The grading status stream and question translation stay on MARK_API.
+    [
+      "learner-submit",
+      [
+        exact("PATCH", `${ATTEMPT}`),
+        exact("GET", `${ATTEMPT}/completed`),
+        exact("GET", `${ATTEMPT}/submission-status`),
+        exact("POST", `${ATTEMPT}/notify`),
+        exact("GET", `${ATTEMPT}/grade-sync-status`),
       ],
     ],
   ]);

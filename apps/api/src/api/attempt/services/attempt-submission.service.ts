@@ -737,16 +737,23 @@ export class AttemptSubmissionService {
         servedResponseByQuestionId.set(response.questionId, response);
       }
     }
-    // Media questions are no longer graded, so, exactly as on submit, they
-    // count toward neither total. The pinned (cached) question decides the
-    // type; a served question missing from it is checked against its row
-    // below.
+    // Media questions are no longer graded, so, exactly as on submit, an
+    // unanswered one counts toward neither total. An attempt graded before
+    // that change has a stored response for it, and that response stays in
+    // both totals so they describe the same question set as the stored
+    // grade. The pinned (cached) question decides the type; a served
+    // question missing from it is checked against its row below.
+    const isUngradedMedia = (question: {
+      id: number;
+      responseType?: string | null;
+    }) =>
+      isMediaResponseType(question.responseType) &&
+      !servedResponseByQuestionId.has(question.id);
     const mediaQuestionIds = new Set(
       cachedQuestions
         .filter(
           (question) =>
-            servedQuestionIdSet.has(question.id) &&
-            isMediaResponseType(question.responseType),
+            servedQuestionIdSet.has(question.id) && isUngradedMedia(question),
         )
         .map((question) => question.id),
     );
@@ -780,7 +787,7 @@ export class AttemptSubmissionService {
       ]),
     );
     for (const question of missingMaxQuestions) {
-      if (isMediaResponseType(question.responseType)) {
+      if (isUngradedMedia(question)) {
         mediaQuestionIds.add(question.id);
       }
     }

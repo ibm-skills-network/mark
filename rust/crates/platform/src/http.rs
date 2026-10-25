@@ -23,9 +23,15 @@ use tracing::{info, info_span, warn, Span};
 pub const REQUEST_ID_HEADER: HeaderName = HeaderName::from_static("x-request-id");
 const AKAMAI_GRN: HeaderName = HeaderName::from_static("akamai-grn");
 
-/// Default request body ceiling for JSON endpoints. Upload routes will
-/// declare their own, larger limit explicitly.
+/// Default request body ceiling for JSON endpoints: axum's own per-extractor
+/// limit, which every route keeps unless it opts in to more with
+/// `DefaultBodyLimit`.
 pub const DEFAULT_BODY_LIMIT: usize = 2 * 1024 * 1024;
+
+/// Hard ceiling for any request body, enforced before routing. Only routes
+/// that raise their extractor limit (the learner submit carries every answer
+/// of an attempt) can get near it.
+pub const MAX_BODY_LIMIT: usize = 16 * 1024 * 1024;
 
 #[derive(Debug, Clone, Copy, Default)]
 struct UuidRequestId;
@@ -45,7 +51,7 @@ impl MakeRequestId for UuidRequestId {
 /// Wrap `router` with the standard middleware stack.
 pub fn with_middleware(router: Router, request_timeout: Duration) -> Router {
     router
-        .layer(RequestBodyLimitLayer::new(DEFAULT_BODY_LIMIT))
+        .layer(RequestBodyLimitLayer::new(MAX_BODY_LIMIT))
         .layer(TimeoutLayer::with_status_code(
             axum::http::StatusCode::GATEWAY_TIMEOUT,
             request_timeout,
@@ -177,6 +183,31 @@ mod tests {
             response.headers().get(REQUEST_ID_HEADER).unwrap(),
             "0.abc.123"
         );
+    }
+
+    #[tokio::test]
+    async fn rejects_bodies_over_the_hard_ceiling() {
+        let app = with_middleware(
+            Router::new().route(
+                "/",
+                axum::routing::post(
+                    |body: axum::body::Bytes| async move { body.len().to_string() },
+                )
+                .layer(axum::extract::DefaultBodyLimit::max(MAX_BODY_LIMIT * 2)),
+            ),
+            Duration::from_secs(5),
+        );
+        let big = vec![b'x'; MAX_BODY_LIMIT + 1];
+        let response = app
+            .oneshot(
+                axum::http::Request::post("/")
+                    .header("content-length", big.len())
+                    .body(Body::from(big))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), axum::http::StatusCode::PAYLOAD_TOO_LARGE);
     }
 
     #[tokio::test]
