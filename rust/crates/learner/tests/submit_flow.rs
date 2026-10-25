@@ -19,7 +19,7 @@ use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use base64::Engine;
 use http_body_util::BodyExt;
-use mark_learner::internal_client::InternalApi;
+use mark_learner::internal_client::{InternalApi, INTERNAL_CONTRACT_HEADER};
 use mark_learner::lti::LtiGateway;
 use mark_learner::{router, LearnerState, SubmitSettings};
 use mark_platform::{db, Config, Role};
@@ -268,6 +268,11 @@ async fn start_mocks(mocks: Mocks) -> (String, String) {
                 )
             }),
         )
+        .layer(axum::middleware::map_response(|mut r: axum::response::Response| async move {
+            // The real internal API stamps every answer with its contract.
+            r.headers_mut().insert(INTERNAL_CONTRACT_HEADER, axum::http::HeaderValue::from_static("1"));
+            r
+        }))
         .with_state(mocks.clone());
     let gateway = Router::new()
         .route(
@@ -369,7 +374,7 @@ async fn submit_routes_end_to_end() {
             pool: pool.clone(),
             accept_operations: true,
             submit: SubmitSettings {
-                internal: Some(InternalApi::new(&internal_url, "secret".to_owned()).unwrap()),
+                internal: Some(InternalApi::new(&internal_url, "secret".to_owned(), 1).unwrap()),
                 lti: LtiGateway::with_timeout(Some(gateway_url), LTI_TIMEOUT).unwrap(),
                 learner_buckets: Arc::new(vec!["learner".to_owned()]),
             },

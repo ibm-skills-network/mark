@@ -49,6 +49,7 @@ async fn run(config: Config) -> anyhow::Result<()> {
             .internal_api_url
             .as_deref()
             .zip(grading.job_queue_secret.clone()),
+        grading.internal_contract_min,
         grading.lti_gateway_url.clone(),
         grading.learner_buckets(),
     )?;

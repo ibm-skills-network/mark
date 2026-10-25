@@ -4,6 +4,9 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{ include "mark.rustApi.name" $ }}
+  annotations:
+    # Kept on removal from this chart: the mark-rust release adopts it.
+    helm.sh/resource-policy: keep
   labels:
     {{- include "mark.rustApi.labels" $ | nindent 4 }}
 spec:

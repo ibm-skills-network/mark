@@ -19,6 +19,7 @@ import { DatabaseModule } from "./database/database.module";
 import { HealthModule } from "./health/health.module";
 import { JobQueueModule } from "./job-queue/job-queue.module";
 import { winstonOptions } from "./logger/config";
+import { InternalContractMiddleware } from "./job-queue/internal-contract.middleware";
 import { LoggerMiddleware } from "./logger/logger.middleware";
 import { MessagingModule } from "./messaging/messaging.module";
 import { routes } from "./routes";
@@ -46,6 +47,8 @@ export class AppModule implements NestModule {
     consumer
       .apply(LoggerMiddleware)
       .forRoutes({ path: "{*splat}", method: RequestMethod.ALL })
+      .apply(InternalContractMiddleware)
+      .forRoutes({ path: "/internal{/*splat}", method: RequestMethod.ALL })
       .apply(UserSessionMiddleware)
       .forRoutes(
         { path: "/v1/assignments{/*splat}", method: RequestMethod.ALL },

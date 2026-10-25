@@ -102,19 +102,38 @@ pub struct Config {
 /// passback), and the storage buckets learner uploads may name. Every value
 /// is optional so a read-only deployment starts without them; the submit
 /// route refuses to run when the internal API is not configured.
-#[derive(Clone, Default, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct GradingHandOff {
     /// `MARK_INTERNAL_API_URL`: base URL of the legacy API service, without
     /// the `/api` prefix (e.g. `http://mark-api:3000`).
     pub internal_api_url: Option<String>,
     /// `JOB_QUEUE_SECRET`: sent as `x-job-queue-secret` to the internal API.
     pub job_queue_secret: Option<String>,
+    /// `MARK_INTERNAL_CONTRACT_MIN`: the lowest `x-mark-internal-contract`
+    /// the internal API may answer with. A lower or missing value means the
+    /// legacy API has not been rolled yet, and submits answer 503 until it is.
+    pub internal_contract_min: u32,
     /// `GRADING_LTI_GATEWAY_URL`: where grades are PUT for LTI launches.
     pub lti_gateway_url: Option<String>,
     /// `IBM_COS_LEARNER_BUCKET`.
     pub learner_bucket: Option<String>,
     /// `IBM_COS_LEARNER_BUCKET_PROD`.
     pub learner_bucket_prod: Option<String>,
+}
+
+impl Default for GradingHandOff {
+    /// Unset hand-off targets, but the contract minimum the current build
+    /// needs: a default must never accept an older legacy API.
+    fn default() -> Self {
+        Self {
+            internal_api_url: None,
+            job_queue_secret: None,
+            internal_contract_min: 1,
+            lti_gateway_url: None,
+            learner_bucket: None,
+            learner_bucket_prod: None,
+        }
+    }
 }
 
 impl GradingHandOff {
@@ -146,6 +165,7 @@ impl fmt::Debug for GradingHandOff {
                 "job_queue_secret",
                 &self.job_queue_secret.as_ref().map(|_| "<redacted>"),
             )
+            .field("internal_contract_min", &self.internal_contract_min)
             .field("lti_gateway_url", &self.lti_gateway_url)
             .field("learner_bucket", &self.learner_bucket)
             .field("learner_bucket_prod", &self.learner_bucket_prod)
@@ -245,6 +265,7 @@ impl Config {
             internal_api_url: http_url(env, "MARK_INTERNAL_API_URL")?
                 .map(|url| url.trim_end_matches('/').to_owned()),
             job_queue_secret: env.get("JOB_QUEUE_SECRET"),
+            internal_contract_min: parse_or(env, "MARK_INTERNAL_CONTRACT_MIN", 1)?,
             lti_gateway_url: http_url(env, "GRADING_LTI_GATEWAY_URL")?,
             learner_bucket: env.get("IBM_COS_LEARNER_BUCKET"),
             learner_bucket_prod: env.get("IBM_COS_LEARNER_BUCKET_PROD"),
@@ -426,7 +447,25 @@ mod tests {
             Some("http://mark-api:3000")
         );
         assert!(cfg.grading.internal_api_configured());
+        assert_eq!(cfg.grading.internal_contract_min, 1);
         assert_eq!(cfg.grading.learner_buckets(), vec!["learner".to_owned()]);
+        env.insert("MARK_INTERNAL_CONTRACT_MIN", "2");
+        assert_eq!(
+            Config::load(Role::Api, &env)
+                .unwrap()
+                .grading
+                .internal_contract_min,
+            2
+        );
+        env.insert("MARK_INTERNAL_CONTRACT_MIN", "one");
+        assert!(matches!(
+            Config::load(Role::Api, &env),
+            Err(ConfigError::Invalid {
+                name: "MARK_INTERNAL_CONTRACT_MIN",
+                ..
+            })
+        ));
+        env.insert("MARK_INTERNAL_CONTRACT_MIN", "1");
         let rendered = format!("{cfg:?}");
         assert!(!rendered.contains("s3cr3t-value"), "{rendered}");
 

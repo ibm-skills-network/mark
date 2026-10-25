@@ -1,0 +1,19 @@
+{{- if .Values.rustApi.enabled }}
+{{- with .Values.rustApi }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mark-rust.api.name" $ }}
+  labels:
+    {{- include "mark-rust.api.labels" $ | nindent 4 }}
+spec:
+  type: {{ .service.type }}
+  ports:
+    - port: {{ .service.port }}
+      targetPort: {{ .containerPort }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "mark-rust.api.selectorLabels" $ | nindent 4 }}
+{{- end }}
+{{- end }}
