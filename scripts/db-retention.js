@@ -119,8 +119,9 @@ function cutoffFor(days, now) {
 // Every statement is bounded by LIMIT so a single batch can never run long
 // enough to hold locks or bloat the WAL, and SKIP LOCKED keeps a batch from
 // waiting on a row the application is updating at that moment (the next
-// run picks such rows up). The cutoffs use the indexed age column of each
-// table.
+// run picks such rows up). Each select orders by the indexed age column so
+// the planner takes that index rather than scanning the table for the
+// first matches.
 function buildSteps(args, now, sql) {
   return [
     {
@@ -129,7 +130,7 @@ function buildSteps(args, now, sql) {
       count: (cutoff) =>
         sql`SELECT count(*)::int AS n FROM "LtiGradeSync" WHERE "updatedAt" < ${cutoff} AND "authCookie" <> ''`,
       apply: (cutoff, limit) =>
-        sql`UPDATE "LtiGradeSync" SET "authCookie" = '' WHERE id IN (SELECT id FROM "LtiGradeSync" WHERE "updatedAt" < ${cutoff} AND "authCookie" <> '' LIMIT ${limit} FOR UPDATE SKIP LOCKED)`,
+        sql`UPDATE "LtiGradeSync" SET "authCookie" = '' WHERE id IN (SELECT id FROM "LtiGradeSync" WHERE "updatedAt" < ${cutoff} AND "authCookie" <> '' ORDER BY "updatedAt" LIMIT ${limit} FOR UPDATE SKIP LOCKED)`,
     },
     {
       name: "grading_cache",
@@ -137,7 +138,7 @@ function buildSteps(args, now, sql) {
       count: (cutoff) =>
         sql`SELECT count(*)::int AS n FROM "GradingCache" WHERE "cachedAt" < ${cutoff}`,
       apply: (cutoff, limit) =>
-        sql`DELETE FROM "GradingCache" WHERE id IN (SELECT id FROM "GradingCache" WHERE "cachedAt" < ${cutoff} LIMIT ${limit} FOR UPDATE SKIP LOCKED)`,
+        sql`DELETE FROM "GradingCache" WHERE id IN (SELECT id FROM "GradingCache" WHERE "cachedAt" < ${cutoff} ORDER BY "cachedAt" LIMIT ${limit} FOR UPDATE SKIP LOCKED)`,
     },
     {
       name: "grading_audit",
@@ -145,7 +146,7 @@ function buildSteps(args, now, sql) {
       count: (cutoff) =>
         sql`SELECT count(*)::int AS n FROM "GradingAudit" WHERE "timestamp" < ${cutoff}`,
       apply: (cutoff, limit) =>
-        sql`DELETE FROM "GradingAudit" WHERE id IN (SELECT id FROM "GradingAudit" WHERE "timestamp" < ${cutoff} LIMIT ${limit} FOR UPDATE SKIP LOCKED)`,
+        sql`DELETE FROM "GradingAudit" WHERE id IN (SELECT id FROM "GradingAudit" WHERE "timestamp" < ${cutoff} ORDER BY "timestamp" LIMIT ${limit} FOR UPDATE SKIP LOCKED)`,
     },
     {
       name: "lti_sync_rows",
@@ -153,7 +154,7 @@ function buildSteps(args, now, sql) {
       count: (cutoff) =>
         sql`SELECT count(*)::int AS n FROM "LtiGradeSync" WHERE "updatedAt" < ${cutoff}`,
       apply: (cutoff, limit) =>
-        sql`DELETE FROM "LtiGradeSync" WHERE id IN (SELECT id FROM "LtiGradeSync" WHERE "updatedAt" < ${cutoff} LIMIT ${limit} FOR UPDATE SKIP LOCKED)`,
+        sql`DELETE FROM "LtiGradeSync" WHERE id IN (SELECT id FROM "LtiGradeSync" WHERE "updatedAt" < ${cutoff} ORDER BY "updatedAt" LIMIT ${limit} FOR UPDATE SKIP LOCKED)`,
     },
   ];
 }
