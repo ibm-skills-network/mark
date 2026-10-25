@@ -455,8 +455,9 @@ components:
         totalPossiblePoints:
           {
             type: [number, "null"],
-            description: Over the served questions,
-            media response types excluded (as on submit). Null when `showAssignmentScore` is false.,
+            description: Over the served questions. A media response type
+            is excluded (as on submit) unless this attempt has a stored response for it,
+            so the totals cover the same questions as the stored grade. Null when `showAssignmentScore` is false.,
           }
         passed:
           {

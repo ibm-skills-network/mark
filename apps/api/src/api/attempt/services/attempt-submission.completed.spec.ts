@@ -817,7 +817,7 @@ describe("AttemptSubmissionService.getLearnerAssignmentAttempt (completed attemp
     });
 
     it.each(["PRESENTATION", "VIDEO", "AUDIO", "LIVE_RECORDING"])(
-      "leaves a served %s question out of both totals, as the submit does",
+      "leaves an unanswered %s question out of both totals, as the submit does",
       async (responseType) => {
         mockAttemptAccessCacheService.getQuestionDtosForAttemptAccess.mockResolvedValue(
           [choiceQuestion, { ...textQuestion, responseType }],
@@ -825,11 +825,7 @@ describe("AttemptSubmissionService.getLearnerAssignmentAttempt (completed attemp
         mockPrisma.assignmentAttempt.findFirst.mockResolvedValue({
           ...baseAttempt(),
           grade: 1,
-          questionResponses: [
-            response({ id: 1, questionId: 101, points: 5 }),
-            // A historical graded media response must not count either.
-            response({ id: 2, questionId: 202, points: 3 }),
-          ],
+          questionResponses: [response({ id: 1, questionId: 101, points: 5 })],
         });
 
         const result = await read();
@@ -840,7 +836,47 @@ describe("AttemptSubmissionService.getLearnerAssignmentAttempt (completed attemp
       },
     );
 
-    it("leaves out a served media question that is only in the archived rows", async () => {
+    it("keeps a media question that was graded in this attempt in both totals", async () => {
+      // Graded before media was excluded: the stored grade covers it, so the
+      // totals must too, or the percentage and the points disagree.
+      mockAttemptAccessCacheService.getQuestionDtosForAttemptAccess.mockResolvedValue(
+        [choiceQuestion, { ...textQuestion, responseType: "VIDEO" }],
+      );
+      mockPrisma.assignmentAttempt.findFirst.mockResolvedValue({
+        ...baseAttempt(),
+        grade: 0.8,
+        questionResponses: [
+          response({ id: 1, questionId: 101, points: 5 }),
+          response({ id: 2, questionId: 202, points: 3 }),
+        ],
+      });
+
+      const result = await read();
+
+      expect(result.totalPossiblePoints).toBe(10);
+      expect(result.totalPointsEarned).toBe(8);
+      expect(result.grade).toBe(0.8);
+    });
+
+    it("leaves out an unanswered media question that is only in the archived rows", async () => {
+      mockAttemptAccessCacheService.getQuestionDtosForAttemptAccess.mockResolvedValue(
+        [choiceQuestion],
+      );
+      mockPrisma.question.findMany.mockResolvedValue([
+        { id: 202, totalPoints: 5, responseType: "VIDEO" },
+      ]);
+      mockPrisma.assignmentAttempt.findFirst.mockResolvedValue({
+        ...baseAttempt(),
+        questionResponses: [response({ id: 1, questionId: 101, points: 5 })],
+      });
+
+      const result = await read();
+
+      expect(result.totalPossiblePoints).toBe(5);
+      expect(result.totalPointsEarned).toBe(5);
+    });
+
+    it("keeps a graded media question that is only in the archived rows", async () => {
       mockAttemptAccessCacheService.getQuestionDtosForAttemptAccess.mockResolvedValue(
         [choiceQuestion],
       );
@@ -857,8 +893,8 @@ describe("AttemptSubmissionService.getLearnerAssignmentAttempt (completed attemp
 
       const result = await read();
 
-      expect(result.totalPossiblePoints).toBe(5);
-      expect(result.totalPointsEarned).toBe(5);
+      expect(result.totalPossiblePoints).toBe(10);
+      expect(result.totalPointsEarned).toBe(7);
     });
   });
 

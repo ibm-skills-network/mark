@@ -231,8 +231,10 @@ pub struct Totals {
 }
 
 /// The served set, newest response per served question, and the clamped
-/// totals over it with media response types left out. `deleted` holds rows
-/// for served questions missing from the source (any assignment).
+/// totals over it. A media question is left out only when this attempt has
+/// no response for it: one graded before media was excluded stays in both
+/// totals so they cover the same questions as the stored grade. `deleted`
+/// holds rows for served questions missing from the source (any assignment).
 pub fn totals(
     served: &[i32],
     source: &[SourceQuestion],
@@ -248,13 +250,16 @@ pub fn totals(
             .map(|q| q.total_points)
     };
     let response_of = |id: i32| newest.iter().find(|(q, _)| *q == id).map(|(_, r)| *r);
+    let ungraded_media = |id: i32, response_type: Option<&str>| {
+        is_media_response_type(response_type) && response_of(id).is_none()
+    };
     let mut media: Vec<i32> = source
         .iter()
-        .filter(|q| served.contains(&q.id) && is_media_response_type(q.response_type.as_deref()))
+        .filter(|q| served.contains(&q.id) && ungraded_media(q.id, q.response_type.as_deref()))
         .map(|q| q.id)
         .collect();
     for row in deleted {
-        if is_media_response_type(row.response_type.as_deref()) {
+        if ungraded_media(row.row_id, row.response_type.as_deref()) {
             media.push(row.row_id);
         }
     }
@@ -711,14 +716,21 @@ mod tests {
                 ..source(3, "TEXT", 10, json!([]))
             },
         ];
-        // Question 1 was stored above its maximum; 2 unanswered; 3 is media.
+        // Question 1 was stored above its maximum; 2 unanswered; 3 is an
+        // unanswered media question and counts toward neither total.
         let r1 = response(10, 1, 2.0, "[]", json!([]), None);
-        let r3 = response(11, 3, 10.0, "\"\"", json!([]), None);
-        let newest = vec![(1, &r1), (3, &r3)];
+        let newest = vec![(1, &r1)];
         let t = totals(&[1, 2, 3], &src, &newest, &[], Some(0.9)).unwrap();
         assert!((t.earned - 1.0).abs() < f64::EPSILON);
         assert!((t.possible - 5.0).abs() < f64::EPSILON);
         assert_eq!(t.effective_grade, Some(0.2));
+        // A media question graded in this attempt stays in both totals.
+        let r3 = response(11, 3, 10.0, "\"\"", json!([]), None);
+        let newest = vec![(1, &r1), (3, &r3)];
+        let t = totals(&[1, 2, 3], &src, &newest, &[], Some(0.9)).unwrap();
+        assert!((t.earned - 11.0).abs() < f64::EPSILON);
+        assert!((t.possible - 15.0).abs() < f64::EPSILON);
+        assert_eq!(t.effective_grade, Some(11.0 / 15.0));
         // No clamping: the stored grade stands.
         let r1 = response(10, 1, 1.0, "[]", json!([]), None);
         let newest = vec![(1, &r1)];
