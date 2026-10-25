@@ -798,6 +798,7 @@ model LtiGradeSync {
   @@index([attemptId])
   @@index([userId])
   @@index([status])
+  @@index([updatedAt])
   @@index([nextRetryAt])
   @@index([createdAt])
 }
