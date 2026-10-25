@@ -154,7 +154,9 @@ describe("db-retention statements", () => {
         statement.text.startsWith(`${verb} "${table}"`),
     ).toBe(true);
     expect(statement.text).toContain(`"${column}" < ?`);
-    expect(statement.text).toMatch(/LIMIT \? FOR UPDATE SKIP LOCKED\)$/);
+    expect(statement.text).toMatch(
+      new RegExp(`ORDER BY "${column}" LIMIT \\? FOR UPDATE SKIP LOCKED\\)$`),
+    );
     expect(statement.values).toEqual([step.cutoff, 500]);
 
     const count = step.count(step.cutoff);
