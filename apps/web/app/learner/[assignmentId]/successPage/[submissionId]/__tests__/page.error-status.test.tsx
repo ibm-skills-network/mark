@@ -80,11 +80,19 @@ jest.mock("sonner", () => ({
 
 jest.mock("@/components/ErrorModal", () => ({
   __esModule: true,
-  default: (props: { statusCode: number; headline: string; error: string }) => (
+  default: (props: {
+    statusCode: number;
+    headline: string;
+    error: string;
+    primaryActionHref?: string;
+    primaryActionLabel?: string;
+  }) => (
     <div
       data-testid="error-modal"
       data-status={String(props.statusCode)}
       data-headline={props.headline}
+      data-href={props.primaryActionHref}
+      data-label={props.primaryActionLabel}
     >
       {props.error}
     </div>
@@ -189,6 +197,69 @@ describe("results page — a failed load is reported as what failed", () => {
     expect(screen.getByTestId("error-modal")).toHaveAttribute(
       "data-status",
       "404",
+    );
+  });
+
+  it("sends the learner back into an attempt they have not submitted yet", async () => {
+    getCompletedAttemptMock.mockResolvedValue(undefined);
+    getAttemptsMock.mockResolvedValue([
+      {
+        id: 2486,
+        submitted: false,
+        createdAt: new Date(Date.now() - 60_000).toISOString(),
+        expiresAt: null,
+      },
+    ]);
+
+    await renderAndSettle();
+
+    const modal = screen.getByTestId("error-modal");
+    expect(modal).toHaveAttribute("data-href", "/learner/3532/questions");
+    expect(modal).toHaveAttribute("data-label", "Resume my attempt");
+    expect(modal.getAttribute("data-headline")).toMatch(/not submitted/i);
+  });
+
+  it("falls back only to an attempt that was actually submitted", async () => {
+    getCompletedAttemptMock.mockResolvedValue(undefined);
+    getAttemptsMock.mockResolvedValue([
+      {
+        id: 2490,
+        submitted: false,
+        createdAt: new Date().toISOString(),
+        expiresAt: null,
+      },
+      {
+        id: 2480,
+        submitted: true,
+        createdAt: new Date(Date.now() - 120_000).toISOString(),
+        expiresAt: null,
+      },
+    ]);
+
+    await renderAndSettle();
+
+    expect(screen.getByTestId("error-modal")).toHaveAttribute(
+      "data-href",
+      "/learner/3532/successPage/2480",
+    );
+  });
+
+  it("does not offer an unsubmitted attempt as the way to the results", async () => {
+    getCompletedAttemptMock.mockResolvedValue(undefined);
+    getAttemptsMock.mockResolvedValue([
+      {
+        id: 2490,
+        submitted: false,
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() - 60_000).toISOString(),
+      },
+    ]);
+
+    await renderAndSettle();
+
+    expect(screen.getByTestId("error-modal")).toHaveAttribute(
+      "data-href",
+      "/learner/3532",
     );
   });
 });
