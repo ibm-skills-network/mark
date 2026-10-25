@@ -23,6 +23,7 @@ import {
   DEFAULT_JOB_WORKER_HEARTBEAT_INTERVAL_MS,
   DEFAULT_JOB_WORKER_HEARTBEAT_TTL_SECONDS,
   DEFAULT_JOB_WORKER_LIVENESS_FILE,
+  JOB_WORKER_HEARTBEAT_INDEX_KEY,
   JOB_WORKER_HEARTBEAT_KEY_PREFIX,
 } from "./job-worker-heartbeat.constants";
 import { decryptJobPayload, getJobQueueSecret } from "./job-payload.crypto";
@@ -354,6 +355,9 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
     }
     await Promise.all(this.workers.map(async (worker) => worker.close()));
     if (this.connection) {
+      await this.connection
+        .srem(JOB_WORKER_HEARTBEAT_INDEX_KEY, this.getHeartbeatKey())
+        .catch(() => null);
       await this.connection.del(this.getHeartbeatKey()).catch(() => null);
       await this.connection.quit();
     }
@@ -501,6 +505,12 @@ export class JobWorkerService implements OnModuleInit, OnModuleDestroy {
       }),
       "EX",
       this.getHeartbeatTtlSeconds(),
+    );
+    // Readers list live workers from this set instead of scanning the
+    // keyspace; a member whose key has expired is pruned by the reader.
+    await this.getConnection().sadd(
+      JOB_WORKER_HEARTBEAT_INDEX_KEY,
+      this.getHeartbeatKey(),
     );
   }
 
