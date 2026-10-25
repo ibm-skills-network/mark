@@ -39,7 +39,7 @@ import {
  * a request matched by one gateway route reach another downstream.
  */
 export function hasDotSegment(originalUrl: string): boolean {
-  const path = originalUrl.split(/[?#]/, 1)[0] ?? "";
+  const path = originalUrl.split(/[#?]/, 1)[0] ?? "";
   if (/%2e/i.test(path)) {
     return true;
   }
