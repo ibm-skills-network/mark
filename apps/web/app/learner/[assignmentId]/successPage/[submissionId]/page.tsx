@@ -25,6 +25,10 @@ import {
   resolveAttemptViewError,
   type AttemptViewError,
 } from "@/lib/attempt-error";
+import {
+  isAttemptInProgress,
+  isAttemptSubmitted,
+} from "@/app/learner/utils/attempts";
 import { statusFromError } from "@/lib/error-screen";
 import Crown from "@/public/Crown.svg";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
@@ -238,20 +242,40 @@ function SuccessPage() {
               sessionAssignmentId: user.assignmentId,
               returnUrl: user.returnUrl,
             });
-            let resolvedHref = viewError.primaryActionHref;
+            let resolved: AttemptViewError = viewError;
             try {
               logState("Looking up other attempts for learner");
               const attempts = await getAttempts(assignmentId, undefined, {
                 throwOnAuthError: true,
               });
-              const submittedAttempt =
-                attempts?.find((att) => att.submitted) || attempts?.[0];
-              if (submittedAttempt) {
+              const routeAttempt = attempts?.find((att) => att.id === attemptId);
+              // Results only exist once submitted: the server answers 404 for
+              // an attempt that is still open, so the learner's own open
+              // attempt is resumed rather than reported as missing, and only
+              // a submitted attempt is offered as the fallback.
+              const submittedAttempt = attempts?.find((att) =>
+                isAttemptSubmitted(att),
+              );
+              if (routeAttempt && isAttemptInProgress(routeAttempt)) {
+                logState("Attempt is still open", `Attempt ${routeAttempt.id}`);
+                resolved = {
+                  ...viewError,
+                  headline: "This attempt is not submitted yet",
+                  message:
+                    "There are no results to show until you submit. Resume the attempt to finish it.",
+                  primaryActionHref: `/learner/${assignmentId}/questions`,
+                  primaryActionLabel: "Resume my attempt",
+                  userSteps: [],
+                };
+              } else if (submittedAttempt) {
                 logState(
                   "Found fallback attempt",
                   `Attempt ${submittedAttempt.id}`,
                 );
-                resolvedHref = `/learner/${assignmentId}/successPage/${submittedAttempt.id}`;
+                resolved = {
+                  ...viewError,
+                  primaryActionHref: `/learner/${assignmentId}/successPage/${submittedAttempt.id}`,
+                };
               }
             } catch (error) {
               logState(
@@ -260,7 +284,7 @@ function SuccessPage() {
               );
             }
 
-            setErrorConfig({ ...viewError, primaryActionHref: resolvedHref });
+            setErrorConfig(resolved);
             setLoading(false);
             return;
           }
