@@ -1,0 +1,104 @@
+{{- if .Values.rustApi.enabled }}
+{{- with .Values.rustApi }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mark-rust.api.name" $ }}
+  labels:
+    {{- include "mark-rust.api.labels" $ | nindent 4 }}
+spec:
+  replicas: {{ .replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "mark-rust.api.selectorLabels" $ | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: {{ include "mark-rust.api.name" $ }}
+        checksum/secrets: {{ include (print $.Template.BasePath "/api/secret.yaml") $ | sha256sum }}
+        checksum/config: {{ include (print $.Template.BasePath "/api/configmap.yaml") $ | sha256sum }}
+        {{- with .podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "mark-rust.api.selectorLabels" $ | nindent 8 }}
+    spec:
+      imagePullSecrets:
+        {{- include "mark-rust.imagePullSecrets" $ | nindent 8 }}
+      serviceAccountName: default
+      securityContext:
+        {{- toYaml .podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ include "mark-rust.api.name" $ }}
+          securityContext:
+            {{- toYaml .securityContext | nindent 12 }}
+          image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
+          imagePullPolicy: {{ .image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .containerPort }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health/liveness
+              port: http
+            initialDelaySeconds: {{ .livenessProbe.initialDelaySeconds }}
+            timeoutSeconds: {{ .livenessProbe.timeoutSeconds }}
+            periodSeconds: {{ .livenessProbe.periodSeconds }}
+          readinessProbe:
+            httpGet:
+              path: /health/readiness
+              port: http
+            initialDelaySeconds: {{ .readinessProbe.initialDelaySeconds }}
+            timeoutSeconds: {{ .readinessProbe.timeoutSeconds }}
+            periodSeconds: {{ .readinessProbe.periodSeconds }}
+          resources:
+            {{- toYaml .resources | nindent 12 }}
+          envFrom:
+            - configMapRef:
+                name: {{ include "mark-rust.api.name" $ }}-config
+            - secretRef:
+                name: {{ include "mark-rust.api.name" $ }}-secrets
+          # Shared with the TypeScript API; a key set under rustApi.config or rustApi.secrets wins.
+          env:
+            {{- if not (hasKey .secrets "JOB_QUEUE_SECRET") }}
+            - name: JOB_QUEUE_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mark-rust.api.secretName" $ }}
+                  key: JOB_QUEUE_SECRET
+            {{- end }}
+            {{- range $key := list "IBM_COS_LEARNER_BUCKET" "IBM_COS_LEARNER_BUCKET_PROD" }}
+            {{- if not (hasKey $.Values.rustApi.secrets $key) }}
+            - name: {{ $key }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "mark-rust.api.secretName" $ }}
+                  key: {{ $key }}
+                  optional: true
+            {{- end }}
+            {{- end }}
+            {{- range $key := list "GRADING_LTI_GATEWAY_URL" "AI_FEATURES_DISABLED" "AI_GRADING_DISABLED" }}
+            {{- if not (hasKey $.Values.rustApi.config $key) }}
+            - name: {{ $key }}
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "mark-rust.api.configMapName" $ }}
+                  key: {{ $key }}
+                  optional: true
+            {{- end }}
+            {{- end }}
+      {{- with .nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
+{{- end }}

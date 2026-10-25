@@ -19,6 +19,10 @@ use tracing::{error, warn};
 use crate::error::ApiError;
 
 pub const JOB_QUEUE_SECRET_HEADER: &str = "x-job-queue-secret";
+/// Answered by every internal endpoint; the number only moves when a
+/// request or response shape changes. A missing header is a legacy API
+/// from before the header existed.
+pub const INTERNAL_CONTRACT_HEADER: &str = "x-mark-internal-contract";
 /// A call that times out may still have enqueued the job; the learner's
 /// retry then finds it through the in-flight lookup and reuses it.
 const TIMEOUT: Duration = Duration::from_secs(15);
@@ -28,6 +32,10 @@ const TIMEOUT: Duration = Duration::from_secs(15);
 pub struct InternalApi {
     base_url: String,
     secret: String,
+    /// Answers below this contract are refused as not ready (503), never
+    /// interpreted: the two services are rolled separately and the legacy
+    /// API must land first.
+    min_contract: u32,
     http: reqwest::Client,
 }
 
@@ -95,6 +103,9 @@ pub enum Enqueued {
 pub enum CallError {
     /// No answer in time or no connection: safe to retry.
     Unreachable(String),
+    /// The legacy API answered with an older contract than this build
+    /// needs: it has not been rolled yet. Safe to retry.
+    NotReady(String),
     /// An answer we cannot use.
     Failed(String),
 }
@@ -106,8 +117,43 @@ impl From<CallError> for ApiError {
                 warn!(error = %detail, "internal grading api unreachable; answering 503");
                 ApiError::unavailable()
             }
+            CallError::NotReady(detail) => {
+                warn!(
+                    error = %detail,
+                    denial_reason = "dependency_not_ready",
+                    "internal grading api contract too old; answering 503"
+                );
+                ApiError::unavailable()
+            }
             CallError::Failed(detail) => ApiError::internal(&detail),
         }
+    }
+}
+
+/// `Ok` when the answer carries a contract this build understands. Server
+/// errors are left to the status handling; they say nothing about the
+/// contract.
+fn contract_check(
+    response: &reqwest::Response,
+    min_contract: u32,
+    call: &str,
+) -> Result<(), CallError> {
+    if response.status().is_server_error() {
+        return Ok(());
+    }
+    let answered = response
+        .headers()
+        .get(INTERNAL_CONTRACT_HEADER)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.trim().parse::<u32>().ok());
+    match answered {
+        Some(version) if version >= min_contract => Ok(()),
+        Some(version) => Err(CallError::NotReady(format!(
+            "{call} answered contract {version}, need {min_contract}"
+        ))),
+        None => Err(CallError::NotReady(format!(
+            "{call} answered without a contract header, need {min_contract}"
+        ))),
     }
 }
 
@@ -120,7 +166,7 @@ fn transport_error(err: &reqwest::Error) -> CallError {
 }
 
 impl InternalApi {
-    pub fn new(base_url: &str, secret: String) -> Result<Self, reqwest::Error> {
+    pub fn new(base_url: &str, secret: String, min_contract: u32) -> Result<Self, reqwest::Error> {
         let http = reqwest::Client::builder()
             .timeout(TIMEOUT)
             .connect_timeout(TIMEOUT)
@@ -128,6 +174,7 @@ impl InternalApi {
         Ok(Self {
             base_url: base_url.trim_end_matches('/').to_owned(),
             secret,
+            min_contract,
             http,
         })
     }
@@ -159,6 +206,7 @@ impl InternalApi {
         if status == StatusCode::SERVICE_UNAVAILABLE {
             return Err(CallError::Unreachable("active-job answered 503".to_owned()));
         }
+        contract_check(&response, self.min_contract, "active-job")?;
         if status != StatusCode::OK {
             error!(
                 assignment_id,
@@ -186,6 +234,10 @@ impl InternalApi {
             .await
             .map_err(|e| transport_error(&e))?;
         let status = response.status();
+        if status == StatusCode::SERVICE_UNAVAILABLE {
+            return Err(CallError::Unreachable("enqueue answered 503".to_owned()));
+        }
+        contract_check(&response, self.min_contract, "enqueue")?;
         if status == StatusCode::CONFLICT || status == StatusCode::BAD_REQUEST {
             let body: Value = response
                 .json()
@@ -205,9 +257,6 @@ impl InternalApi {
                 );
             }
             return Ok(Enqueued::Refused { status, body });
-        }
-        if status == StatusCode::SERVICE_UNAVAILABLE {
-            return Err(CallError::Unreachable("enqueue answered 503".to_owned()));
         }
         if status != StatusCode::OK {
             error!(
@@ -236,13 +285,86 @@ mod tests {
 
     #[test]
     fn debug_redacts_the_secret() {
-        let api = InternalApi::new("http://mark-api:3000/", "topsecret".into()).unwrap();
+        let api = InternalApi::new("http://mark-api:3000/", "topsecret".into(), 1).unwrap();
         let text = format!("{api:?}");
         assert!(!text.contains("topsecret"), "{text}");
         assert_eq!(
             api.url("enqueue"),
             "http://mark-api:3000/api/internal/grading/enqueue"
         );
+    }
+
+    /// A legacy API answering `contract` (or no header when `None`) on
+    /// every internal route, on a loopback port.
+    async fn legacy_api(contract: Option<&'static str>) -> String {
+        use axum::{response::IntoResponse, routing::get, Json, Router};
+        let answer = move || async move {
+            let mut response = Json(serde_json::json!({ "gradingJobId": "job-1" })).into_response();
+            if let Some(version) = contract {
+                response
+                    .headers_mut()
+                    .insert(INTERNAL_CONTRACT_HEADER, version.parse().unwrap());
+            }
+            response
+        };
+        let app = Router::new()
+            .route("/api/internal/grading/active-job", get(answer))
+            .route("/api/internal/grading/enqueue", axum::routing::post(answer));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        format!("http://{addr}")
+    }
+
+    fn request() -> EnqueueRequest {
+        EnqueueRequest {
+            assignment_id: 1,
+            attempt_id: 2,
+            user_id: "u@x".into(),
+            grading_callback_required: false,
+            auth_cookie: None,
+            submission_received_at: "2026-10-24T10:00:00.000Z".into(),
+            tier: QueuedTier::Standard,
+            update_dto: Map::new(),
+        }
+    }
+
+    #[tokio::test]
+    async fn answers_at_or_above_the_minimum_contract_are_used() {
+        let base = legacy_api(Some("2")).await;
+        let api = InternalApi::new(&base, "s".into(), 1).unwrap();
+        assert_eq!(
+            api.active_job("u@x", 1, 2).await.unwrap(),
+            Some("job-1".into())
+        );
+        assert_eq!(
+            api.enqueue(&request()).await.unwrap(),
+            Enqueued::Job {
+                grading_job_id: "job-1".into(),
+                reused: false
+            }
+        );
+    }
+
+    #[tokio::test]
+    async fn an_older_or_missing_contract_is_not_ready() {
+        for contract in [Some("1"), Some("garbage"), None] {
+            let base = legacy_api(contract).await;
+            let api = InternalApi::new(&base, "s".into(), 2).unwrap();
+            assert!(
+                matches!(
+                    api.active_job("u@x", 1, 2).await,
+                    Err(CallError::NotReady(_))
+                ),
+                "{contract:?}"
+            );
+            let err = api.enqueue(&request()).await.unwrap_err();
+            assert!(matches!(err, CallError::NotReady(_)), "{contract:?}");
+            assert_eq!(
+                ApiError::from(err).status(),
+                StatusCode::SERVICE_UNAVAILABLE
+            );
+        }
     }
 
     #[test]

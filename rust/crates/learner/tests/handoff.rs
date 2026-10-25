@@ -9,7 +9,9 @@ use axum::extract::{RawQuery, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::routing::{get, post, put};
 use axum::{Json, Router};
-use mark_learner::internal_client::{CallError, EnqueueRequest, Enqueued, InternalApi, QueuedTier};
+use mark_learner::internal_client::{
+    CallError, EnqueueRequest, Enqueued, InternalApi, QueuedTier, INTERNAL_CONTRACT_HEADER,
+};
 use mark_learner::lti::LtiGateway;
 use serde_json::{json, Map, Value};
 
@@ -62,6 +64,16 @@ fn internal_mock(seen: Seen, enqueue_status: StatusCode, enqueue_body: Value) ->
                 },
             ),
         )
+        .layer(axum::middleware::map_response(
+            |mut r: axum::response::Response| async move {
+                // The real internal API stamps every answer with its contract.
+                r.headers_mut().insert(
+                    INTERNAL_CONTRACT_HEADER,
+                    axum::http::HeaderValue::from_static("1"),
+                );
+                r
+            },
+        ))
         .with_state(seen)
 }
 
@@ -89,7 +101,7 @@ fn enqueue_request() -> EnqueueRequest {
 async fn active_job_sends_the_secret_and_reads_the_job() {
     let seen = Seen::default();
     let base = serve(internal_mock(seen.clone(), StatusCode::OK, json!({}))).await;
-    let api = InternalApi::new(&base, "s3cret".into()).unwrap();
+    let api = InternalApi::new(&base, "s3cret".into(), 1).unwrap();
     assert_eq!(
         api.active_job("l@example.com", 5, 9)
             .await
@@ -116,7 +128,7 @@ async fn enqueue_posts_the_decoded_submit() {
         json!({"gradingJobId": "job-1", "reused": false, "message": "ignored"}),
     ))
     .await;
-    let api = InternalApi::new(&format!("{base}/"), "s3cret".into()).unwrap();
+    let api = InternalApi::new(&format!("{base}/"), "s3cret".into(), 1).unwrap();
     let outcome = api.enqueue(&enqueue_request()).await.unwrap();
     assert_eq!(
         outcome,
@@ -147,7 +159,7 @@ async fn enqueue_passes_409_and_400_through_and_fails_on_anything_else() {
         refusal.clone(),
     ))
     .await;
-    let api = InternalApi::new(&base, "s".into()).unwrap();
+    let api = InternalApi::new(&base, "s".into(), 1).unwrap();
     assert_eq!(
         api.enqueue(&enqueue_request()).await.unwrap(),
         Enqueued::Refused {
@@ -165,7 +177,7 @@ async fn enqueue_passes_409_and_400_through_and_fails_on_anything_else() {
         invalid.clone(),
     ))
     .await;
-    let api = InternalApi::new(&base, "s".into()).unwrap();
+    let api = InternalApi::new(&base, "s".into(), 1).unwrap();
     assert_eq!(
         api.enqueue(&enqueue_request()).await.unwrap(),
         Enqueued::Refused {
@@ -180,7 +192,7 @@ async fn enqueue_passes_409_and_400_through_and_fails_on_anything_else() {
         json!({"statusCode": 500}),
     ))
     .await;
-    let api = InternalApi::new(&base, "s".into()).unwrap();
+    let api = InternalApi::new(&base, "s".into(), 1).unwrap();
     assert!(matches!(
         api.enqueue(&enqueue_request()).await,
         Err(CallError::Failed(_))
@@ -193,7 +205,7 @@ async fn an_unreachable_internal_api_is_retryable() {
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let addr = listener.local_addr().unwrap();
     drop(listener);
-    let api = InternalApi::new(&format!("http://{addr}"), "s".into()).unwrap();
+    let api = InternalApi::new(&format!("http://{addr}"), "s".into(), 1).unwrap();
     assert!(matches!(
         api.active_job("u", 1, 1).await,
         Err(CallError::Unreachable(_))

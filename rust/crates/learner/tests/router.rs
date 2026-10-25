@@ -41,6 +41,7 @@ fn app_with(accept_operations: bool, internal_url: Option<&str>) -> Router {
             accept_operations,
             submit: SubmitSettings::new(
                 internal_url.map(|url| (url, "test-secret".to_owned())),
+                1,
                 None,
                 vec!["learner".to_owned()],
             )

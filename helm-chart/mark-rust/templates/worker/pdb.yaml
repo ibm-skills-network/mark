@@ -1,0 +1,13 @@
+{{- if and .Values.rustWorker.enabled .Values.rustWorker.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "mark-rust.worker.name" . }}
+  labels:
+    {{- include "mark-rust.worker.labels" . | nindent 4 }}
+spec:
+  maxUnavailable: {{ .Values.rustWorker.podDisruptionBudget.maxUnavailable }}
+  selector:
+    matchLabels:
+      {{- include "mark-rust.worker.selectorLabels" . | nindent 6 }}
+{{- end }}

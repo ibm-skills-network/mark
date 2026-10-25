@@ -69,15 +69,19 @@ pub struct SubmitSettings {
 }
 
 impl SubmitSettings {
-    /// Build the HTTP clients. `internal` is `(base_url, job_queue_secret)`.
+    /// Build the HTTP clients. `internal` is `(base_url, job_queue_secret)`;
+    /// `internal_contract_min` is the lowest contract its answers may carry.
     pub fn new(
         internal: Option<(&str, String)>,
+        internal_contract_min: u32,
         lti_gateway_url: Option<String>,
         learner_buckets: Vec<String>,
     ) -> Result<Self, reqwest::Error> {
         Ok(Self {
             internal: internal
-                .map(|(url, secret)| internal_client::InternalApi::new(url, secret))
+                .map(|(url, secret)| {
+                    internal_client::InternalApi::new(url, secret, internal_contract_min)
+                })
                 .transpose()?,
             lti: lti::LtiGateway::new(lti_gateway_url)?,
             learner_buckets: Arc::new(learner_buckets),
