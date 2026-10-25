@@ -745,7 +745,7 @@ export class AttemptSubmissionService {
     // question missing from it is checked against its row below.
     const isUngradedMedia = (question: {
       id: number;
-      responseType: string | null | undefined;
+      responseType?: string | null;
     }) =>
       isMediaResponseType(question.responseType) &&
       !servedResponseByQuestionId.has(question.id);
