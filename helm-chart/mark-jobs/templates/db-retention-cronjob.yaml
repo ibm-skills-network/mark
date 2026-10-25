@@ -1,0 +1,79 @@
+{{- if .Values.dbRetention.enabled }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "mark-jobs.fullname" . }}-db-retention
+  labels:
+    {{- include "mark-jobs.labels" . | nindent 4 }}
+    app: db-retention
+spec:
+  schedule: {{ .Values.dbRetention.schedule | quote }}
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      activeDeadlineSeconds: {{ .Values.dbRetention.activeDeadlineSeconds }}
+      ttlSecondsAfterFinished: 86400
+      template:
+        metadata:
+          annotations:
+            kubectl.kubernetes.io/default-container: retention
+          labels:
+            {{- include "mark-jobs.labels" . | nindent 12 }}
+            app: db-retention
+        spec:
+          restartPolicy: Never
+          imagePullSecrets:
+            {{- include "mark-jobs.imagePullSecrets" . | nindent 12 }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: retention
+              image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              command:
+                - node
+                - /scripts/db-retention.js
+                - --execute
+                - --cache-days={{ .Values.dbRetention.cacheDays }}
+                - --audit-days={{ .Values.dbRetention.auditDays }}
+                - --cookie-days={{ .Values.dbRetention.cookieDays }}
+                - --lti-sync-days={{ .Values.dbRetention.ltiSyncDays }}
+                - --batch-size={{ .Values.dbRetention.batchSize }}
+                - --max-seconds={{ .Values.dbRetention.maxSeconds }}
+              env:
+                - name: NODE_PATH
+                  value: /usr/src/app/node_modules
+              envFrom:
+                - secretRef:
+                    name: {{ include "mark-jobs.fullname" . }}-secrets
+              workingDir: /usr/src/app
+              resources:
+                {{- toYaml .Values.dbRetention.resources | nindent 16 }}
+              securityContext:
+                readOnlyRootFilesystem: true
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                    - ALL
+              volumeMounts:
+                - name: retention-script
+                  mountPath: /scripts
+                  readOnly: true
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: retention-script
+              configMap:
+                name: {{ include "mark-jobs.fullname" . }}-db-retention-script
+            - name: tmp
+              emptyDir: {}
+{{- end }}

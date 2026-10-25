@@ -103,3 +103,22 @@ ltiSyncDrain:
     requests:
       cpu: 100m
       memory: 256Mi
+
+dbRetention:
+  # Nightly bounded sweep of grading byproduct; windows and safety notes in files/db-retention.js.
+  enabled: true
+  schedule: "15 3 * * *"
+  cacheDays: 30
+  auditDays: 60
+  cookieDays: 7
+  ltiSyncDays: 365
+  batchSize: 5000
+  maxSeconds: 1500
+  activeDeadlineSeconds: 1800
+  resources:
+    limits:
+      cpu: "1"
+      memory: 1Gi
+    requests:
+      cpu: 100m
+      memory: 256Mi
