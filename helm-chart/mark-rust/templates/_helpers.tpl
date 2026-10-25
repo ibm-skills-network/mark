@@ -59,7 +59,7 @@ app.kubernetes.io/name: {{ include "mark-rust.worker.name" . }}
 
 {{- define "mark-rust.databaseUrl" -}}
 {{- $v := .Values.postgres -}}
-{{- printf "postgresql://%s:%s@%s:%v/%s" $v.username $v.password $v.hostname $v.port $v.dbName }}
+{{- printf "postgresql://%s:%s@%s:%v/%s" $v.username $v.password $v.hostname $v.port $v.dbName }} {{/* # pragma: allowlist secret */}}
 {{- end }}
 
 {{- define "mark-rust.imagePullSecrets" -}}
