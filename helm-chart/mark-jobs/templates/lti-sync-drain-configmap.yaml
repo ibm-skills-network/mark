@@ -1,5 +1,6 @@
 {{- if .Values.ltiSyncDrain.enabled }}
 ---
+# The script is packaged with the chart: a change to files/lti-sync-drain.js only reaches a cluster with a chart version bump.
 apiVersion: v1
 kind: ConfigMap
 metadata:

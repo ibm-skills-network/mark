@@ -1,5 +1,6 @@
 {{- if .Values.dbRetention.enabled }}
 ---
+# The script is packaged with the chart: a change to files/db-retention.js only reaches a cluster with a chart version bump.
 apiVersion: v1
 kind: ConfigMap
 metadata:
