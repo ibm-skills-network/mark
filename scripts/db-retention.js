@@ -117,8 +117,10 @@ function cutoffFor(days, now) {
 }
 
 // Every statement is bounded by LIMIT so a single batch can never run long
-// enough to hold locks or bloat the WAL. The cutoffs use the indexed age
-// column of each table.
+// enough to hold locks or bloat the WAL, and SKIP LOCKED keeps a batch from
+// waiting on a row the application is updating at that moment (the next
+// run picks such rows up). The cutoffs use the indexed age column of each
+// table.
 function buildSteps(args, now, sql) {
   return [
     {
@@ -127,7 +129,7 @@ function buildSteps(args, now, sql) {
       count: (cutoff) =>
         sql`SELECT count(*)::int AS n FROM "LtiGradeSync" WHERE "updatedAt" < ${cutoff} AND "authCookie" <> ''`,
       apply: (cutoff, limit) =>
-        sql`UPDATE "LtiGradeSync" SET "authCookie" = '' WHERE id IN (SELECT id FROM "LtiGradeSync" WHERE "updatedAt" < ${cutoff} AND "authCookie" <> '' LIMIT ${limit})`,
+        sql`UPDATE "LtiGradeSync" SET "authCookie" = '' WHERE id IN (SELECT id FROM "LtiGradeSync" WHERE "updatedAt" < ${cutoff} AND "authCookie" <> '' LIMIT ${limit} FOR UPDATE SKIP LOCKED)`,
     },
     {
       name: "grading_cache",
@@ -135,7 +137,7 @@ function buildSteps(args, now, sql) {
       count: (cutoff) =>
         sql`SELECT count(*)::int AS n FROM "GradingCache" WHERE "cachedAt" < ${cutoff}`,
       apply: (cutoff, limit) =>
-        sql`DELETE FROM "GradingCache" WHERE id IN (SELECT id FROM "GradingCache" WHERE "cachedAt" < ${cutoff} LIMIT ${limit})`,
+        sql`DELETE FROM "GradingCache" WHERE id IN (SELECT id FROM "GradingCache" WHERE "cachedAt" < ${cutoff} LIMIT ${limit} FOR UPDATE SKIP LOCKED)`,
     },
     {
       name: "grading_audit",
@@ -143,7 +145,7 @@ function buildSteps(args, now, sql) {
       count: (cutoff) =>
         sql`SELECT count(*)::int AS n FROM "GradingAudit" WHERE "timestamp" < ${cutoff}`,
       apply: (cutoff, limit) =>
-        sql`DELETE FROM "GradingAudit" WHERE id IN (SELECT id FROM "GradingAudit" WHERE "timestamp" < ${cutoff} LIMIT ${limit})`,
+        sql`DELETE FROM "GradingAudit" WHERE id IN (SELECT id FROM "GradingAudit" WHERE "timestamp" < ${cutoff} LIMIT ${limit} FOR UPDATE SKIP LOCKED)`,
     },
     {
       name: "lti_sync_rows",
@@ -151,7 +153,7 @@ function buildSteps(args, now, sql) {
       count: (cutoff) =>
         sql`SELECT count(*)::int AS n FROM "LtiGradeSync" WHERE "updatedAt" < ${cutoff}`,
       apply: (cutoff, limit) =>
-        sql`DELETE FROM "LtiGradeSync" WHERE id IN (SELECT id FROM "LtiGradeSync" WHERE "updatedAt" < ${cutoff} LIMIT ${limit})`,
+        sql`DELETE FROM "LtiGradeSync" WHERE id IN (SELECT id FROM "LtiGradeSync" WHERE "updatedAt" < ${cutoff} LIMIT ${limit} FOR UPDATE SKIP LOCKED)`,
     },
   ];
 }
@@ -161,12 +163,19 @@ function sleep(ms) {
 }
 
 // One short transaction per statement: SET LOCAL ends with the transaction,
-// so nothing leaks onto the pooled server connection.
-async function inTransaction(prisma, timeout, run) {
-  return prisma.$transaction(async (tx) => {
-    await tx.$executeRawUnsafe(`SET LOCAL statement_timeout = '${timeout}'`);
-    return run(tx);
-  });
+// so nothing leaks onto the pooled server connection. The Prisma-side
+// timeout must outlast the statement timeout, or Prisma closes the
+// transaction underneath a slow batch (P2028).
+async function inTransaction(prisma, timeoutSeconds, run) {
+  return prisma.$transaction(
+    async (tx) => {
+      await tx.$executeRawUnsafe(
+        `SET LOCAL statement_timeout = '${timeoutSeconds}s'`,
+      );
+      return run(tx);
+    },
+    { maxWait: 10_000, timeout: (timeoutSeconds + 30) * 1000 },
+  );
 }
 
 async function runStep(prisma, step, args, deadline) {
@@ -176,13 +185,14 @@ async function runStep(prisma, step, args, deadline) {
     if (deadline && Date.now() >= deadline) {
       return { total, batches, exhausted: true };
     }
-    const rows = await inTransaction(prisma, "60s", (tx) =>
+    const batchStart = Date.now();
+    const rows = await inTransaction(prisma, 60, (tx) =>
       tx.$executeRaw(step.apply(step.cutoff, args.batchSize)),
     );
     total += rows;
     batches += 1;
     console.log(
-      `${step.name}: batch ${batches} touched ${rows} rows (total ${total})`,
+      `${step.name}: batch ${batches} touched ${rows} rows in ${Date.now() - batchStart}ms (total ${total})`,
     );
     if (rows < args.batchSize) return { total, batches, exhausted: false };
     await sleep(args.pauseMs);
@@ -212,7 +222,7 @@ async function main() {
   try {
     for (const step of steps) {
       if (args.dryRun) {
-        const [{ n }] = await inTransaction(prisma, "120s", (tx) =>
+        const [{ n }] = await inTransaction(prisma, 120, (tx) =>
           tx.$queryRaw(step.count(step.cutoff)),
         );
         console.log(
@@ -223,7 +233,9 @@ async function main() {
       const result = await runStep(prisma, step, args, deadline);
       console.log(
         `${step.name}: done, ${result.total} rows in ${result.batches} batches` +
-          (result.exhausted ? " (time budget exhausted, resumes next run)" : ""),
+          (result.exhausted
+            ? " (time budget exhausted, resumes next run)"
+            : ""),
       );
       if (result.exhausted) {
         exhausted = true;
