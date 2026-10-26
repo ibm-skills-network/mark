@@ -25,6 +25,12 @@ import { dedupeAuthenticationCookieHeader } from "../auth/jwt/cookie-based/jwt.c
 import { MessagingService } from "../messaging/messaging.service";
 import { DownstreamService } from "./api.controller";
 import { sanitizeForLog } from "../logger/sanitize";
+import {
+  type DownstreamDecision,
+  parseV3RoutingConfig,
+  resolveDownstream,
+  type V3RoutingConfig,
+} from "./v3-routing";
 
 /**
  * Whether a request target's path has a segment that URL parsing resolves
@@ -65,11 +71,33 @@ export function asciiJson(value: unknown): string {
 @Injectable()
 export class ApiService {
   private readonly logger: Logger;
+  private readonly v3Routing: V3RoutingConfig;
   constructor(
     private readonly messagingService: MessagingService,
     @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
   ) {
     this.logger = parentLogger.child({ context: ApiService.name });
+    // Parsed once so a bad value is reported at startup, not per request.
+    this.v3Routing = parseV3RoutingConfig(process.env, this.logger);
+  }
+
+  /**
+   * Decide which backend serves this request. Only enabled route families
+   * requested by an allowed role go to the v3 API.
+   */
+  public resolveDownstream(request: UserSessionRequest): DownstreamDecision {
+    const decision = resolveDownstream(request, this.v3Routing);
+    if (decision.family) {
+      this.logger.info("downstream_route", {
+        family: decision.family,
+        backend: decision.service,
+        method: sanitizeForLog(request.method),
+        request_id: sanitizeForLog(
+          request.headers?.["akamai-grn"] ?? request.headers?.["x-request-id"],
+        ),
+      });
+    }
+    return decision;
   }
 
   /**
@@ -144,30 +172,20 @@ export class ApiService {
           request.originalUrl
         }`;
         this.assertConfiguredOrigin(endpoint, process.env.MARK_API_ENDPOINT);
-
-        if (!request.user) {
-          throw new UnauthorizedException("Missing or invalid user session");
+        extraHeaders = this.sessionForwardingHeaders(request);
+        break;
+      }
+      case DownstreamService.MARK_V3_API: {
+        // Only exact, enabled routes may reach v3, even if a caller skips resolveDownstream.
+        if (resolveDownstream(request, this.v3Routing).service !== "v3") {
+          this.logger.warn("Refused v3 forward for an unrouted request", {
+            method: sanitizeForLog(request.method),
+          });
+          throw new BadRequestException("Invalid forwarding target");
         }
-
-        extraHeaders = {
-          "user-session": asciiJson(request.user),
-          "Cache-Control": "no-cache",
-        };
-
-        // When the browser holds duplicate `authentication` cookies (Lax vs
-        // Partitioned jars), forward only the one this gateway authenticated
-        // with. mark-api re-reads the cookie itself (e.g. as the LTI
-        // grade-callback credential) and must not pick a different, stale
-        // session via cookie-parser's first-wins. Lowercase key so it
-        // overrides the client's `cookie` header in normalizeOutgoingHeaders.
-        const dedupedCookieHeader = dedupeAuthenticationCookieHeader(
-          request.headers?.cookie,
-          request.headers,
-          request.savedSession,
-        );
-        if (dedupedCookieHeader !== undefined) {
-          extraHeaders.cookie = dedupedCookieHeader;
-        }
+        endpoint = `${this.v3Routing.endpoint ?? ""}${request.originalUrl}`;
+        this.assertConfiguredOrigin(endpoint, this.v3Routing.endpoint);
+        extraHeaders = this.sessionForwardingHeaders(request);
         break;
       }
       case DownstreamService.LTI_CREDENTIAL_MANAGER: {
@@ -194,6 +212,38 @@ export class ApiService {
       }
     }
     return { endpoint, extraHeaders };
+  }
+
+  /**
+   * Session and cookie headers every Mark backend (legacy or v3) relies on.
+   */
+  private sessionForwardingHeaders(
+    request: UserSessionRequest,
+  ): RawAxiosRequestHeaders {
+    if (!request.user) {
+      throw new UnauthorizedException("Missing or invalid user session");
+    }
+
+    const extraHeaders: RawAxiosRequestHeaders = {
+      "user-session": asciiJson(request.user),
+      "Cache-Control": "no-cache",
+    };
+
+    // When the browser holds duplicate `authentication` cookies (Lax vs
+    // Partitioned jars), forward only the one this gateway authenticated
+    // with. mark-api re-reads the cookie itself (e.g. as the LTI
+    // grade-callback credential) and must not pick a different, stale
+    // session via cookie-parser's first-wins. Lowercase key so it
+    // overrides the client's `cookie` header in normalizeOutgoingHeaders.
+    const dedupedCookieHeader = dedupeAuthenticationCookieHeader(
+      request.headers?.cookie,
+      request.headers,
+      request.savedSession,
+    );
+    if (dedupedCookieHeader !== undefined) {
+      extraHeaders.cookie = dedupedCookieHeader;
+    }
+    return extraHeaders;
   }
 
   /**
