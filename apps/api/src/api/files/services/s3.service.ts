@@ -274,6 +274,27 @@ export class S3Service {
   }
 
   /**
+   * The buckets learner answer uploads are written to (the `learner` and
+   * `learner-prod` upload types). An unset variable contributes nothing.
+   */
+  static learnerUploadBuckets(): Set<string> {
+    const buckets = new Set<string>();
+    for (const uploadType of ["learner", "learner-prod"]) {
+      const bucket = process.env[S3Service.BUCKET_ENV_VAR_BY_TYPE[uploadType]];
+      if (bucket) {
+        buckets.add(bucket);
+      }
+    }
+    return buckets;
+  }
+
+  /** The bucket author uploads are written to, when configured. */
+  static authorUploadBuckets(): Set<string> {
+    const bucket = process.env[S3Service.BUCKET_ENV_VAR_BY_TYPE.author];
+    return new Set(bucket ? [bucket] : []);
+  }
+
+  /**
    * Check whether the supplied bucket name matches one of the configured
    * upload buckets. Used to reject arbitrary bucket names from query params
    * before any S3 call is made.

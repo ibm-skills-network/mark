@@ -1,3 +1,4 @@
+import { AVAILABLE_LANGUAGES } from "@/app/Helpers/getLanguageName";
 import type { Choice, QuestionStore } from "@/config/types";
 
 type ChoiceQuestion = Pick<
@@ -29,25 +30,49 @@ export function selectedChoiceTexts(
 }
 
 /**
+ * The code a submit may name: one from the supported-languages list the
+ * translation picker offers, in that list's spelling, otherwise `"en"`. The
+ * API refuses a submit naming any other code.
+ */
+export function supportedSubmissionLanguage(
+  code: string | null | undefined,
+): string {
+  return findSupportedLanguage(code) ?? "en";
+}
+
+function findSupportedLanguage(
+  code: string | null | undefined,
+): string | undefined {
+  if (typeof code !== "string") return undefined;
+  const wanted = code.trim().toLowerCase();
+  return AVAILABLE_LANGUAGES.find(
+    (supported) => supported.toLowerCase() === wanted,
+  );
+}
+
+/**
  * The language a submit should name: the one the selected choices were
  * rendered in, when every answered choice question agrees on it. The server
  * grades choices against that language first, so naming another one only
  * forces it to search the other languages. With no answered choices, mixed
  * languages or an unknown fetch language, the learner's preference stands.
+ * Always a supported code: an unsupported fetch language yields the
+ * preference, and an unsupported preference yields `"en"`.
  */
 export function submissionLanguage(
   questions: ChoiceQuestion[],
-  preferredLanguage: string,
+  preferredLanguage: string | null | undefined,
 ): string {
+  const preferred = supportedSubmissionLanguage(preferredLanguage);
   const languages = new Set<string | undefined>();
   for (const question of questions) {
     const { texts, language } = selectedChoiceTexts(
       question,
-      preferredLanguage,
+      preferredLanguage ?? "",
     );
     if (texts.length > 0) languages.add(language);
   }
-  if (languages.size !== 1) return preferredLanguage;
+  if (languages.size !== 1) return preferred;
   const [only] = languages;
-  return only ?? preferredLanguage;
+  return findSupportedLanguage(only) ?? preferred;
 }

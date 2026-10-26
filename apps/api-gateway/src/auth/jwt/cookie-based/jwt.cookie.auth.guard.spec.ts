@@ -3,6 +3,7 @@
 import { ExecutionContext } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { IS_PUBLIC_KEY, JwtCookieAuthGuard } from "./jwt.cookie.auth.guard";
+import { SavedSessionStore } from "./saved-session.store";
 
 describe("JwtCookieAuthGuard", () => {
   let guard: JwtCookieAuthGuard;
@@ -10,7 +11,9 @@ describe("JwtCookieAuthGuard", () => {
 
   beforeEach(() => {
     reflector = new Reflector();
-    guard = new JwtCookieAuthGuard(reflector);
+    guard = new JwtCookieAuthGuard(reflector, {
+      find: jest.fn(),
+    } as unknown as SavedSessionStore);
   });
 
   describe("canActivate", () => {
@@ -101,6 +104,130 @@ describe("JwtCookieAuthGuard", () => {
         .mockReturnValue(undefined as any);
       expect(reflector.getAllAndOverride).toBeDefined();
     });
+  });
+});
+
+describe("JwtCookieAuthGuard saved session lookup", () => {
+  const storeId = "7f0c6c1e-3c1a-4c55-9a8e-2b8f6f1d0a11";
+  const quiz = { "x-mark-learner-assignment": "4892" };
+  let reflector: Reflector;
+  let find: jest.Mock;
+  let guard: JwtCookieAuthGuard;
+  let passport: jest.SpyInstance;
+
+  const requestWith = (headers: Record<string, string>): any => ({
+    headers,
+    cookies: Object.fromEntries(
+      (headers.cookie ?? "")
+        .split("; ")
+        .filter(Boolean)
+        .map((pair) => pair.split("=")),
+    ),
+  });
+  const contextFor = (request: any): ExecutionContext =>
+    ({
+      getHandler: () => ({}),
+      getClass: () => ({}),
+      switchToHttp: () => ({ getRequest: () => request }),
+    }) as any;
+
+  beforeEach(() => {
+    reflector = new Reflector();
+    jest.spyOn(reflector, "getAllAndOverride").mockReturnValue(false);
+    find = jest.fn().mockResolvedValue("saved-token");
+    guard = new JwtCookieAuthGuard(reflector, {
+      find,
+    } as unknown as SavedSessionStore);
+    passport = jest
+      .spyOn(Object.getPrototypeOf(JwtCookieAuthGuard.prototype), "canActivate")
+      .mockResolvedValue(true);
+  });
+
+  afterEach(() => passport.mockRestore());
+
+  it("loads the quiz's saved session before passport runs", async () => {
+    const request = requestWith({
+      cookie: `authentication=launch; mark_saved_sessions=${storeId}`,
+      ...quiz,
+    });
+    passport.mockImplementation(async () => {
+      expect(request.savedSession).toBe("saved-token");
+      return true;
+    });
+
+    await expect(guard.canActivate(contextFor(request))).resolves.toBe(true);
+    expect(find).toHaveBeenCalledWith(storeId, "learner", 4892);
+    expect(passport).toHaveBeenCalled();
+  });
+
+  it.each([
+    ["an author header", { "x-mark-author-assignment": "4892" }, "author"],
+    [
+      "an author page referer",
+      { referer: "https://mark.example/author/4892/questions" },
+      "author",
+    ],
+    [
+      "an author preview referer",
+      { referer: "https://mark.example/learner/4892?authorMode=true" },
+      "author",
+    ],
+    [
+      "a learner page referer",
+      { referer: "https://mark.example/learner/4892" },
+      "learner",
+    ],
+  ])("looks up the saved session for %s", async (_name, context, role) => {
+    const request = requestWith({
+      cookie: `authentication=launch; mark_saved_sessions=${storeId}`,
+      ...context,
+    });
+
+    await expect(guard.canActivate(contextFor(request))).resolves.toBe(true);
+    expect(find).toHaveBeenCalledWith(storeId, role, 4892);
+    expect(request.savedSession).toBe("saved-token");
+  });
+
+  it.each([
+    [
+      "no quiz context",
+      { cookie: `authentication=launch; mark_saved_sessions=${storeId}` },
+    ],
+    [
+      "no current session",
+      { cookie: `mark_saved_sessions=${storeId}`, ...quiz },
+    ],
+    ["no store id", { cookie: "authentication=launch", ...quiz }],
+    [
+      "a store id that is not a GUID",
+      { cookie: "authentication=launch; mark_saved_sessions=nope", ...quiz },
+    ],
+  ])("skips the lookup with %s", async (_name, headers) => {
+    const request = requestWith(headers);
+    await expect(guard.canActivate(contextFor(request))).resolves.toBe(true);
+    expect(find).not.toHaveBeenCalled();
+    expect(request.savedSession).toBeUndefined();
+    expect(passport).toHaveBeenCalled();
+  });
+
+  it("still authenticates when nothing is saved", async () => {
+    find.mockResolvedValue(undefined);
+    const request = requestWith({
+      cookie: `authentication=launch; mark_saved_sessions=${storeId}`,
+      ...quiz,
+    });
+    await expect(guard.canActivate(contextFor(request))).resolves.toBe(true);
+    expect(request.savedSession).toBeUndefined();
+  });
+
+  it("does not look up saved sessions for public routes", () => {
+    jest.spyOn(reflector, "getAllAndOverride").mockReturnValue(true);
+    const request = requestWith({
+      cookie: `authentication=launch; mark_saved_sessions=${storeId}`,
+      ...quiz,
+    });
+    expect(guard.canActivate(contextFor(request))).toBe(true);
+    expect(find).not.toHaveBeenCalled();
   });
 });
 

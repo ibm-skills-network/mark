@@ -16,10 +16,12 @@ import {
 } from "@nestjs/common";
 import {
   ApiBody,
+  ApiExtraModels,
   ApiOperation,
   ApiParam,
   ApiResponse,
   ApiTags,
+  getSchemaPath,
 } from "@nestjs/swagger";
 import { ReportType } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
@@ -29,6 +31,8 @@ import {
   UserSessionRequest,
 } from "src/auth/interfaces/user.session.interface";
 import { Roles } from "src/auth/role/roles.global.guard";
+import { DataTransform } from "src/common/interceptors/data-transform.interceptor";
+import { normalizeLangQuery } from "src/helpers/query-language";
 import { AttemptTier } from "src/job-queue/attempt-tier";
 import { Logger } from "winston";
 import {
@@ -46,16 +50,17 @@ import {
   RegradingStatusResponseDto,
   RequestRegradingResponseDto,
 } from "../assignment/attempt/dto/assignment-attempt/feedback.request.dto";
-import {
-  AssignmentAttemptResponseDto,
-  GetAssignmentAttemptResponseDto,
-} from "../assignment/attempt/dto/assignment-attempt/get.assignment.attempt.response.dto";
-import { UpdateAssignmentAttemptResponseDto } from "../assignment/attempt/dto/assignment-attempt/update.assignment.attempt.response.dto";
+import { SubmitAssignmentAttemptResponseDto } from "../assignment/attempt/dto/assignment-attempt/submit.assignment.attempt.response.dto";
 import { ReportRequestDTO } from "../assignment/attempt/dto/assignment-attempt/post.assignment.report.dto";
 import { AssignmentAttemptAccessControlGuard } from "../assignment/attempt/guards/assignment.attempt.access.control.guard";
-import { CreateQuestionResponseAttemptRequestDto } from "../assignment/attempt/dto/question-response/create.question.response.attempt.request.dto";
-import { CreateQuestionResponseAttemptResponseDto } from "../assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
+import { TRANSFORM_FIELDS } from "../../helpers/transform-config";
 import { GRADING_AUDIT_SERVICE } from "./attempt.constants";
+import { CompletedAttemptResponseDto } from "./dto/completed-attempt.response.dto";
+import {
+  AttemptSummaryResponseDto,
+  LearnerAttemptResponseDto,
+} from "./dto/learner-attempt.response.dto";
+import type { AttemptSubmissionStatusDto } from "./services/attempt-submission.service";
 import { AttemptServiceV2 } from "./services/attempt.service";
 import { GradingProgressService } from "./services/grading-progress.service";
 import { GradingAuditService } from "./services/question-response/grading-audit.service";
@@ -86,6 +91,7 @@ export class AttemptControllerV2 {
   @Post()
   @Roles(UserRole.LEARNER)
   @UseGuards(AssignmentAttemptAccessControlGuard)
+  @DataTransform({ encodeResponse: false })
   @ApiOperation({
     summary: "Create an assignment attempt for an assignment.",
   })
@@ -114,6 +120,7 @@ export class AttemptControllerV2 {
   @Post(":attemptId/abandon")
   @Roles(UserRole.LEARNER, UserRole.AUTHOR)
   @UseGuards(AssignmentAttemptAccessControlGuard)
+  @DataTransform({ encodeResponse: false })
   @ApiOperation({
     summary:
       "Abandon an in-progress attempt that is pinned to a stale assignment version.",
@@ -142,8 +149,9 @@ export class AttemptControllerV2 {
   @Get()
   @Roles(UserRole.LEARNER, UserRole.AUTHOR)
   @UseGuards(AssignmentAttemptAccessControlGuard)
+  @DataTransform({ encodeResponse: false })
   @ApiOperation({ summary: "List assignment attempts for an assignment." })
-  @ApiResponse({ status: 200, type: [AssignmentAttemptResponseDto] })
+  @ApiResponse({ status: 200, type: [AttemptSummaryResponseDto] })
   @ApiResponse({ status: 403 })
   @ApiResponse({
     status: 422,
@@ -163,7 +171,7 @@ export class AttemptControllerV2 {
   listAssignmentAttempts(
     @Param("assignmentId") assignmentId: number,
     @Req() request: UserSessionRequest,
-  ): Promise<AssignmentAttemptResponseDto[]> {
+  ): Promise<AttemptSummaryResponseDto[]> {
     return this.attemptService.listAssignmentAttempts(
       Number(assignmentId),
       request.userSession,
@@ -173,33 +181,39 @@ export class AttemptControllerV2 {
   @Get(":attemptId")
   @Roles(UserRole.LEARNER, UserRole.AUTHOR)
   @UseGuards(AssignmentAttemptAccessControlGuard)
+  @DataTransform({ encodeResponse: false })
   @ApiOperation({ summary: "Get an assignment attempt for an assignment." })
-  @ApiResponse({ status: 200, type: GetAssignmentAttemptResponseDto })
+  @ApiResponse({ status: 200, type: LearnerAttemptResponseDto })
   @ApiResponse({ status: 403 })
   getAssignmentAttempt(
     @Param("attemptId") assignmentAttemptId: number,
     @Req() request: UserSessionRequest,
-    @Query("lang") lang?: string,
-  ): Promise<GetAssignmentAttemptResponseDto> {
+    @Query("lang") lang?: unknown,
+  ): Promise<LearnerAttemptResponseDto> {
     return this.attemptService.getAssignmentAttempt(
       Number(assignmentAttemptId),
       request.userSession,
-      lang,
+      normalizeLangQuery(lang),
     );
   }
 
   @Get(":attemptId/completed")
   @Roles(UserRole.LEARNER, UserRole.AUTHOR)
   @UseGuards(AssignmentAttemptAccessControlGuard)
-  @ApiOperation({ summary: "Get an assignment attempt for an assignment." })
-  @ApiResponse({ status: 200, type: GetAssignmentAttemptResponseDto })
+  @DataTransform({ encodeResponse: false })
+  @ApiOperation({ summary: "Get a submitted attempt for its results page." })
+  @ApiResponse({ status: 200, type: CompletedAttemptResponseDto })
   @ApiResponse({ status: 403 })
+  @ApiResponse({ status: 404, description: "Missing, not owned, or open." })
   getLearnerAssignmentAttempt(
-    @Param("attemptId") assignmentAttemptId: number,
+    @Param("assignmentId") assignmentId: string,
+    @Param("attemptId") assignmentAttemptId: string,
     @Req() request: UserSessionRequest,
-  ): Promise<GetAssignmentAttemptResponseDto> {
+  ): Promise<CompletedAttemptResponseDto> {
+    // The guard has already parsed both ids strictly.
     return this.attemptService.getLearnerAssignmentAttempt(
       Number(assignmentAttemptId),
+      Number(assignmentId),
       request.userSession,
     );
   }
@@ -207,6 +221,15 @@ export class AttemptControllerV2 {
   @Patch(":attemptId")
   @Roles(UserRole.LEARNER, UserRole.AUTHOR)
   @UseGuards(AssignmentAttemptAccessControlGuard)
+  // The web client still base64-encodes answer text, so requests keep being
+  // decoded; the result goes out as plain JSON.
+  @DataTransform({
+    encodeResponse: false,
+    decodeRequest: true,
+    fields: [...TRANSFORM_FIELDS],
+    deep: true,
+  })
+  @ApiExtraModels(SubmitAssignmentAttemptResponseDto)
   @ApiOperation({
     summary: "Update an assignment attempt for an assignment.",
   })
@@ -216,16 +239,28 @@ export class AttemptControllerV2 {
   })
   @ApiResponse({
     status: 200,
+    description:
+      "Queued: {gradingJobId, message}; follow the SSE stream. Graded in the request: the submit result.",
     schema: {
-      type: "object",
-      properties: {
-        gradingJobId: {
-          type: "string",
-          description: "Job ID for tracking grading progress",
+      oneOf: [
+        {
+          type: "object",
+          properties: {
+            gradingJobId: {
+              type: "string",
+              description: "Job ID for tracking grading progress",
+            },
+            message: { type: "string", description: "Status message" },
+          },
         },
-        message: { type: "string", description: "Status message" },
-      },
+        { $ref: getSchemaPath(SubmitAssignmentAttemptResponseDto) },
+      ],
     },
+  })
+  @ApiResponse({
+    status: 400,
+    description:
+      "Invalid payload, unserved or duplicate question ids, a file that is not the learner's upload, or an answer to an unsupported question type (code UNSUPPORTED_RESPONSE_TYPE).",
   })
   @ApiResponse({
     status: 422,
@@ -256,7 +291,7 @@ export class AttemptControllerV2 {
     @Req() request: UserSessionRequest,
   ): Promise<
     | { gradingJobId: string; message: string }
-    | UpdateAssignmentAttemptResponseDto
+    | SubmitAssignmentAttemptResponseDto
   > {
     // Taken first: the deadline is judged on arrival, so nothing this handler
     // or the grading queue does afterwards can make an on-time submit late.
@@ -307,6 +342,16 @@ export class AttemptControllerV2 {
             "A grading job is already running for this attempt. Reusing existing job.",
         };
       }
+
+      // A payload grading would refuse is refused here, before it is queued,
+      // so the learner gets the 400/422 on this request rather than a failed
+      // grading job. The refusal itself is logged where it is decided.
+      await this.attemptService.assertSubmitPayloadAcceptable(
+        parsedAttemptId,
+        parsedAssignmentId,
+        request.userSession.userId,
+        learnerUpdateAssignmentAttemptDto,
+      );
     }
 
     // Kill-switch: block submitting/grading an AI-graded attempt while grading
@@ -393,56 +438,44 @@ export class AttemptControllerV2 {
   }
 
   @Get(":attemptId/submission-status")
-  @Roles(UserRole.LEARNER, UserRole.AUTHOR)
+  @Roles(UserRole.LEARNER)
   @UseGuards(AssignmentAttemptAccessControlGuard)
+  // Plain JSON out; requests are decoded the same way the submit PATCH does.
+  @DataTransform({
+    encodeResponse: false,
+    decodeRequest: true,
+    fields: [...TRANSFORM_FIELDS],
+    deep: true,
+  })
   @ApiOperation({
     summary:
       "Whether an attempt still accepts a submit, with a fresh server clock reading.",
   })
   @ApiResponse({ status: 200 })
   @ApiResponse({ status: 403 })
+  @ApiResponse({ status: 404, description: "Missing or not owned." })
   async getAttemptSubmissionStatus(
-    @Param("attemptId") attemptId: number,
+    @Param("assignmentId") assignmentId: string,
+    @Param("attemptId") attemptId: string,
     @Req() request: UserSessionRequest,
-  ) {
+  ): Promise<AttemptSubmissionStatusDto> {
+    // The guard has already parsed both ids strictly.
     const parsedAttemptId = Number(attemptId);
-    const status =
-      await this.attemptService.getAttemptSubmissionStatus(parsedAttemptId);
+    const parsedAssignmentId = Number(assignmentId);
+    const userId = request.userSession.userId;
+    const status = await this.attemptService.getAttemptSubmissionStatus(
+      parsedAttemptId,
+      parsedAssignmentId,
+      userId,
+    );
     this.logger.debug("Attempt submission status read", {
       attemptId: parsedAttemptId,
-      userId: request.userSession?.userId,
+      assignmentId: parsedAssignmentId,
+      userId,
       submitted: status.submitted,
       acceptingSubmissions: status.acceptingSubmissions,
     });
     return status;
-  }
-
-  @Post(":attemptId/questions/:questionId/responses")
-  @Roles(UserRole.LEARNER)
-  @UseGuards(AssignmentAttemptAccessControlGuard)
-  @ApiOperation({ summary: "Auto-save a question response for an attempt." })
-  @ApiResponse({ status: 201, type: CreateQuestionResponseAttemptResponseDto })
-  async submitQuestionResponse(
-    @Param("assignmentId") assignmentId: number,
-    @Param("attemptId") attemptId: number,
-    @Param("questionId") questionId: number,
-    @Body() body: CreateQuestionResponseAttemptRequestDto,
-    @Req() request: UserSessionRequest,
-  ): Promise<CreateQuestionResponseAttemptResponseDto> {
-    const language =
-      body.selectedLanguage ||
-      body.language ||
-      request.userSession.launch_presentation_locale ||
-      "en";
-
-    return this.attemptService.autoSaveQuestionResponse(
-      Number(attemptId),
-      Number(assignmentId),
-      Number(questionId),
-      body,
-      request.userSession,
-      language,
-    );
   }
 
   @Get(":attemptId/grading/:gradingJobId/status-stream")
@@ -674,42 +707,6 @@ export class AttemptControllerV2 {
         "Grading architecture usage summary logged. Check application logs for detailed output.",
       statistics,
     };
-  }
-
-  /**
-   * Get grading progress for an attempt
-   */
-  @Get(":attemptId/progress")
-  @Roles(UserRole.LEARNER)
-  @UseGuards(AssignmentAttemptAccessControlGuard)
-  @ApiOperation({
-    summary: "Get real-time grading progress for an assignment attempt",
-  })
-  @ApiParam({
-    name: "attemptId",
-    description: "The ID of the assignment attempt",
-    type: Number,
-  })
-  @ApiResponse({
-    status: 200,
-    description: "Grading progress retrieved successfully",
-  })
-  @ApiResponse({
-    status: 404,
-    description: "Progress not found",
-  })
-  async getGradingProgress(@Param("attemptId") attemptId: number) {
-    const progress = await this.gradingProgressService.getProgress(
-      Number(attemptId),
-    );
-
-    if (!progress) {
-      throw new NotFoundException(
-        `Grading progress not found for attempt ${attemptId}`,
-      );
-    }
-
-    return progress;
   }
 
   /**

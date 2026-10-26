@@ -170,7 +170,7 @@ describe("FileGradingStrategy - Type Safety Tests", () => {
       expect(result).toBe(true);
     });
 
-    it("should accept valid file with GitHub metadata", async () => {
+    it("should reject a file that only carries a repository link", async () => {
       const requestDto = {
         learnerFileResponse: [
           {
@@ -181,8 +181,9 @@ describe("FileGradingStrategy - Type Safety Tests", () => {
         language: "en",
       } as any as CreateQuestionResponseAttemptRequestDto;
 
-      const result = await strategy.validateResponse(mockQuestion, requestDto);
-      expect(result).toBe(true);
+      await expect(
+        strategy.validateResponse(mockQuestion, requestDto),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it("should accept multiple valid files", async () => {
@@ -206,7 +207,7 @@ describe("FileGradingStrategy - Type Safety Tests", () => {
       expect(result).toBe(true);
     });
 
-    it("should accept mix of storage and GitHub files", async () => {
+    it("should reject a mix of stored and repository-link files", async () => {
       const requestDto = {
         learnerFileResponse: [
           {
@@ -222,8 +223,9 @@ describe("FileGradingStrategy - Type Safety Tests", () => {
         language: "en",
       } as any as CreateQuestionResponseAttemptRequestDto;
 
-      const result = await strategy.validateResponse(mockQuestion, requestDto);
-      expect(result).toBe(true);
+      await expect(
+        strategy.validateResponse(mockQuestion, requestDto),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -269,7 +271,9 @@ describe("FileGradingStrategy - Type Safety Tests", () => {
       } as any as CreateQuestionResponseAttemptRequestDto;
 
       const result = await strategy.extractLearnerResponse(requestDto);
-      expect(result).toEqual(files);
+      expect(result).toEqual(
+        files.map((file) => ({ ...file, content: "InCos" })),
+      );
     });
 
     it("should extract multiple files", async () => {
@@ -291,45 +295,35 @@ describe("FileGradingStrategy - Type Safety Tests", () => {
       } as any as CreateQuestionResponseAttemptRequestDto;
 
       const result = await strategy.extractLearnerResponse(requestDto);
-      expect(result).toEqual(files);
+      expect(result).toEqual(
+        files.map((file) => ({ ...file, content: "InCos" })),
+      );
     });
   });
 
-  describe("extractLearnerResponse - parsed file content", () => {
-    it("serializes an object-valued notebook content to text", async () => {
-      const notebook = { cells: [{ cell_type: "code", source: ["x = 1"] }] };
+  describe("extractLearnerResponse - client content", () => {
+    it("keeps only where each file is stored and never the content sent with it", async () => {
       const requestDto = {
         learnerFileResponse: [
           {
             filename: "lab.ipynb",
+            key: "7/learner@example.com/3/abc-lab.ipynb",
+            bucket: "learner-bucket",
+            fileType: "application/x-ipynb+json",
+            content: "print('graded from the client')",
             githubUrl: "https://github.com/learner/repo/blob/main/lab.ipynb",
-            content: notebook,
           },
         ],
       } as any as CreateQuestionResponseAttemptRequestDto;
 
       const [file] = await strategy.extractLearnerResponse(requestDto);
-      expect(typeof file.content).toBe("string");
-      expect(JSON.parse(file.content)).toEqual(notebook);
-      expect(file.githubUrl).toBe(
-        "https://github.com/learner/repo/blob/main/lab.ipynb",
-      );
-    });
-
-    it("rejects oversized parsed content with a generic error", async () => {
-      const requestDto = {
-        learnerFileResponse: [
-          {
-            filename: "lab.ipynb",
-            githubUrl: "https://github.com/learner/repo/blob/main/lab.ipynb",
-            content: { blob: "x".repeat(25_000_000) },
-          },
-        ],
-      } as any as CreateQuestionResponseAttemptRequestDto;
-
-      await expect(strategy.extractLearnerResponse(requestDto)).rejects.toThrow(
-        BadRequestException,
-      );
+      expect(file).toEqual({
+        filename: "lab.ipynb",
+        key: "7/learner@example.com/3/abc-lab.ipynb",
+        bucket: "learner-bucket",
+        fileType: "application/x-ipynb+json",
+        content: "InCos",
+      });
     });
   });
 

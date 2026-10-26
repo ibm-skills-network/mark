@@ -30,7 +30,16 @@ import { Logger } from "winston";
 import { DatabaseCircuitBreakerService } from "../../database/circuit-breaker/database-circuit-breaker.service";
 import { UserSessionRequest } from "../../auth/interfaces/user.session.interface";
 
-const PRISMA_POOL_CODES = new Set(["P1001", "P1008", "P1017", "P2024"]);
+// Transient database states a retry clears: unreachable, pool timeout, dropped
+// connection, transaction timeout/abort (P2028), write conflict/deadlock (P2034).
+const PRISMA_POOL_CODES = new Set([
+  "P1001",
+  "P1008",
+  "P1017",
+  "P2024",
+  "P2028",
+  "P2034",
+]);
 
 /**
  * The same lost-connection event can surface without a Prisma code: when the

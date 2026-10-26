@@ -3,10 +3,11 @@
 import animationData from "@/animations/LoadSN.json";
 import Loading from "@/components/Loading";
 import {
-  AssignmentAttemptWithQuestions,
   AssignmentDetails,
   AssignmentFeedback,
-  QuestionStore,
+  CompletedAttempt,
+  CompletedAttemptQuestion,
+  CorrectAnswerVisibility,
 } from "@/config/types";
 import {
   getCompletedAttempt,
@@ -24,6 +25,10 @@ import {
   resolveAttemptViewError,
   type AttemptViewError,
 } from "@/lib/attempt-error";
+import {
+  isAttemptInProgress,
+  isAttemptSubmitted,
+} from "@/app/learner/utils/attempts";
 import { statusFromError } from "@/lib/error-screen";
 import Crown from "@/public/Crown.svg";
 import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
@@ -40,6 +45,7 @@ import {
   CircularProgressbarWithChildren,
 } from "react-circular-progressbar";
 import Question from "../Question";
+import { completedQuestionFromStore } from "../completed-question";
 import "@smastrom/react-rating/style.css";
 
 import Button from "@/components/Button";
@@ -62,7 +68,7 @@ function SuccessPage() {
   const attemptId = parseInt(pathname.split("/")?.[4], 10);
   const assignmentId = parseInt(pathname.split("/")?.[2], 10);
 
-  const [questions, setQuestions] = useState([]);
+  const [questions, setQuestions] = useState<CompletedAttemptQuestion[]>([]);
   const [grade, setGrade] = useState(0);
   // Server-computed pass/fail verdict; null unless showPassFailIndicator is
   // enabled for the assignment and the attempt has a grade.
@@ -73,9 +79,9 @@ function SuccessPage() {
     useState<AssignmentDetails>();
   const [showSubmissionFeedback, setShowSubmissionFeedback] =
     useState<boolean>(false);
-  const [correctAnswerVisibility, setCorrectAnswerVisibility] = useState<
-    "NEVER" | "ALWAYS" | "ON_PASS"
-  >("ALWAYS");
+  const [showQuestionScore, setShowQuestionScore] = useState<boolean>(false);
+  const [correctAnswerVisibility, setCorrectAnswerVisibility] =
+    useState<CorrectAnswerVisibility>("NEVER");
   const [zustandShowSubmissionFeedback, zustandShowQuestions] =
     useAssignmentDetails((state) => [
       state.assignmentDetails?.showSubmissionFeedback ?? true,
@@ -141,6 +147,31 @@ function SuccessPage() {
     ]);
   };
 
+  // The server has already applied every visibility rule: a hidden value
+  // arrives as null and hidden questions arrive as an empty list.
+  const applyCompletedAttempt = (attempt: CompletedAttempt) => {
+    setQuestions(attempt.questions ?? []);
+    setBackendComments(attempt.comments ?? "");
+    setShowSubmissionFeedback(attempt.showSubmissionFeedback === true);
+    setShowQuestionScore(attempt.showQuestionScore === true);
+    setCorrectAnswerVisibility(attempt.correctAnswerVisibility ?? "NEVER");
+    setShowQuestions(attempt.showQuestions === true);
+    if (attempt.preferredLanguage) {
+      setUserPreferredLanguage(attempt.preferredLanguage);
+    }
+    setGrade(
+      typeof attempt.grade === "number" ? attempt.grade * 100 : Number.NaN,
+    );
+    setTotalPoints(attempt.totalPossiblePoints ?? 0);
+    setTotalPointsEarned(attempt.totalPointsEarned ?? 0);
+    setPassed(typeof attempt.passed === "boolean" ? attempt.passed : null);
+    setAssignmentDetails({
+      passingGrade: attempt.passingGrade,
+      id: assignmentId,
+      name: "",
+    });
+  };
+
   useEffect(() => {
     logState(
       "Start loading success page",
@@ -167,7 +198,7 @@ function SuccessPage() {
       logState("User loaded", `Role: ${user.role}`);
       if (user.role === "learner") {
         try {
-          let submissionDetails: AssignmentAttemptWithQuestions;
+          let submissionDetails: CompletedAttempt | undefined;
           try {
             submissionDetails = await getCompletedAttempt(
               assignmentId,
@@ -211,20 +242,42 @@ function SuccessPage() {
               sessionAssignmentId: user.assignmentId,
               returnUrl: user.returnUrl,
             });
-            let resolvedHref = viewError.primaryActionHref;
+            let resolved: AttemptViewError = viewError;
             try {
               logState("Looking up other attempts for learner");
               const attempts = await getAttempts(assignmentId, undefined, {
                 throwOnAuthError: true,
               });
-              const submittedAttempt =
-                attempts?.find((att) => att.submitted) || attempts?.[0];
-              if (submittedAttempt) {
+              const routeAttempt = attempts?.find(
+                (att) => att.id === attemptId,
+              );
+              // Results only exist once submitted: the server answers 404 for
+              // an attempt that is still open, so the learner's own open
+              // attempt is resumed rather than reported as missing, and only
+              // a submitted attempt is offered as the fallback.
+              const submittedAttempt = attempts?.find((att) =>
+                isAttemptSubmitted(att),
+              );
+              if (routeAttempt && isAttemptInProgress(routeAttempt)) {
+                logState("Attempt is still open", `Attempt ${routeAttempt.id}`);
+                resolved = {
+                  ...viewError,
+                  headline: "This attempt is not submitted yet",
+                  message:
+                    "There are no results to show until you submit. Resume the attempt to finish it.",
+                  primaryActionHref: `/learner/${assignmentId}/questions`,
+                  primaryActionLabel: "Resume my attempt",
+                  userSteps: [],
+                };
+              } else if (submittedAttempt) {
                 logState(
                   "Found fallback attempt",
                   `Attempt ${submittedAttempt.id}`,
                 );
-                resolvedHref = `/learner/${assignmentId}/successPage/${submittedAttempt.id}`;
+                resolved = {
+                  ...viewError,
+                  primaryActionHref: `/learner/${assignmentId}/successPage/${submittedAttempt.id}`,
+                };
               }
             } catch (error) {
               logState(
@@ -233,60 +286,12 @@ function SuccessPage() {
               );
             }
 
-            setErrorConfig({ ...viewError, primaryActionHref: resolvedHref });
+            setErrorConfig(resolved);
             setLoading(false);
             return;
           }
           logState("Attempt fetched", `Attempt ${submissionDetails.id}`);
-          setQuestions(submissionDetails.questions);
-          setBackendComments(submissionDetails.comments || "");
-          setShowSubmissionFeedback(
-            submissionDetails.showSubmissionFeedback || false,
-          );
-          setCorrectAnswerVisibility(
-            submissionDetails.correctAnswerVisibility ?? "ALWAYS",
-          );
-          setShowQuestions(submissionDetails.showQuestions);
-          setUserPreferredLanguage(submissionDetails.preferredLanguage);
-
-          if (submissionDetails.showAssignmentScore === false) {
-            setGrade(Number.NaN);
-            setTotalPoints(0);
-            setTotalPointsEarned(0);
-          } else {
-            const rawGrade = submissionDetails.grade;
-            // Prefer the server-computed totals: when showQuestions=false the
-            // questions array is stripped, and reducing it yields 0 / 0.
-            const possible =
-              typeof submissionDetails.totalPossiblePoints === "number"
-                ? submissionDetails.totalPossiblePoints
-                : submissionDetails.questions.reduce(
-                    (acc, question) => acc + (question.totalPoints ?? 0),
-                    0,
-                  );
-            const earned =
-              typeof submissionDetails.totalPointsEarned === "number"
-                ? submissionDetails.totalPointsEarned
-                : typeof rawGrade === "number"
-                  ? possible * rawGrade
-                  : 0;
-
-            setGrade(
-              typeof rawGrade === "number" ? rawGrade * 100 : Number.NaN,
-            );
-            setTotalPoints(possible);
-            setTotalPointsEarned(earned);
-          }
-          setPassed(
-            typeof submissionDetails.passed === "boolean"
-              ? submissionDetails.passed
-              : null,
-          );
-          setAssignmentDetails({
-            passingGrade: submissionDetails.passingGrade,
-            id: assignmentId,
-            name: submissionDetails.name,
-          });
+          applyCompletedAttempt(submissionDetails);
           const response = await getFeedback(assignmentId, attemptId);
           if (response) {
             logState("Feedback loaded");
@@ -301,7 +306,7 @@ function SuccessPage() {
         }
       } else if (user.role === "author") {
         logState("Author mode load");
-        let submissionDetails: AssignmentAttemptWithQuestions | undefined;
+        let submissionDetails: CompletedAttempt | undefined;
         try {
           submissionDetails = await getCompletedAttempt(
             assignmentId,
@@ -320,59 +325,32 @@ function SuccessPage() {
         if (cancelled) return;
 
         if (submissionDetails) {
-          setQuestions(submissionDetails.questions);
-          setBackendComments(submissionDetails.comments || "");
-          setShowSubmissionFeedback(
-            submissionDetails.showSubmissionFeedback || false,
-          );
-          setCorrectAnswerVisibility(
-            submissionDetails.correctAnswerVisibility ?? "ALWAYS",
-          );
-          setShowQuestions(submissionDetails.showQuestions);
-
-          if (submissionDetails.showAssignmentScore === false) {
-            setGrade(Number.NaN);
-            setTotalPoints(0);
-            setTotalPointsEarned(0);
-          } else {
-            const rawGrade = submissionDetails.grade;
-            const possible =
-              typeof submissionDetails.totalPossiblePoints === "number"
-                ? submissionDetails.totalPossiblePoints
-                : submissionDetails.questions.reduce(
-                    (acc, question) => acc + (question.totalPoints ?? 0),
-                    0,
-                  );
-            const earned =
-              typeof submissionDetails.totalPointsEarned === "number"
-                ? submissionDetails.totalPointsEarned
-                : typeof rawGrade === "number"
-                  ? possible * rawGrade
-                  : 0;
-
-            setGrade(
-              typeof rawGrade === "number" ? rawGrade * 100 : Number.NaN,
-            );
-            setTotalPoints(possible);
-            setTotalPointsEarned(earned);
-          }
-          setPassed(
-            typeof submissionDetails.passed === "boolean"
-              ? submissionDetails.passed
-              : null,
-          );
-          setAssignmentDetails({
-            passingGrade: submissionDetails.passingGrade,
-            id: assignmentId,
-            name: submissionDetails.name ?? "Assignment",
-          });
+          applyCompletedAttempt(submissionDetails);
           logState("Loaded author success data from backend");
         } else {
+          // A preview attempt exists only in this browser, so its results
+          // come from the store, with the author's own visibility settings.
+          const storeGrade = resolveStoreGrade(zustandGrade);
+          const storeVisibility =
+            zustandAssignmentDetails?.correctAnswerVisibility ?? "NEVER";
+          const storePassingGrade = zustandAssignmentDetails?.passingGrade;
+          const showCorrectAnswers =
+            storeVisibility === "ALWAYS" ||
+            (storeVisibility === "ON_PASS" &&
+              typeof storePassingGrade === "number" &&
+              storeGrade >= storePassingGrade);
           setShowSubmissionFeedback(zustandShowSubmissionFeedback);
-          setQuestions(zustandQuestions);
+          setShowQuestionScore(
+            zustandAssignmentDetails?.showQuestionScore ?? true,
+          );
+          setQuestions(
+            (zustandQuestions ?? []).map((question) =>
+              completedQuestionFromStore(question, { showCorrectAnswers }),
+            ),
+          );
           setShowQuestions(zustandShowQuestions);
           // A never-set store grade must render the hidden-score view, not 0%.
-          setGrade(resolveStoreGrade(zustandGrade));
+          setGrade(storeGrade);
           setPassed(zustandPassed);
           setMissingGradeReason(
             resolveMissingGradeReason(
@@ -382,9 +360,7 @@ function SuccessPage() {
           setTotalPointsEarned(zustandTotalPointsEarned);
           setTotalPoints(zustandTotalPoints);
           setAssignmentDetails(zustandAssignmentDetails);
-          setCorrectAnswerVisibility(
-            zustandAssignmentDetails?.correctAnswerVisibility ?? "ALWAYS",
-          );
+          setCorrectAnswerVisibility(storeVisibility);
           logState("Loaded from author store");
         }
         setLoading(false);
@@ -890,7 +866,7 @@ function SuccessPage() {
         {(role === "learner" && showQuestions) ||
         (role === "author" && showQuestions) ? (
           <div className="mt-4">
-            {questions.map((question: QuestionStore, index: number) => (
+            {questions.map((question, index) => (
               <motion.div
                 className="p-4 sm:p-6  bg-white rounded-lg shadow-lg w-full max-w-4xl mx-auto mb-6"
                 initial={{ opacity: 0, y: 20 }}
@@ -902,14 +878,8 @@ function SuccessPage() {
                   question={question}
                   language={userPreferredLanguage}
                   showSubmissionFeedback={showSubmissionFeedback}
+                  showQuestionScore={showQuestionScore}
                   correctAnswerVisibility={correctAnswerVisibility}
-                  showCorrectAnswer={(() => {
-                    if (correctAnswerVisibility === "NEVER") return false;
-                    if (correctAnswerVisibility === "ALWAYS") return true;
-                    if (correctAnswerVisibility === "ON_PASS")
-                      return grade >= passingGrade;
-                    return false;
-                  })()}
                 />
               </motion.div>
             ))}

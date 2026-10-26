@@ -11,6 +11,29 @@ const STORAGE_KEY_PREFIX_PATTERN = /^([\da-z]{8})([\da-z]{9,14})-(.+)$/;
 const EARLIEST_UPLOAD_MS = Date.UTC(2020, 0, 1);
 const CLOCK_SKEW_ALLOWANCE_MS = 86_400_000;
 
+const hasControlCharacter = (value: string): boolean =>
+  [...value].some((character) => {
+    const code = character.codePointAt(0) ?? 0;
+    return code < 0x20 || (code >= 0x7f && code <= 0x9f);
+  });
+
+/**
+ * True when `key` is a plain object key: non-empty, no backslashes or control
+ * characters, and no empty, `.` or `..` segments (so no leading, trailing or
+ * doubled `/`). A prefix check on a key that passes this cannot be escaped.
+ */
+export function isWellFormedStorageKey(key: unknown): key is string {
+  if (typeof key !== "string" || key.length === 0) return false;
+  if (key.includes("\\") || hasControlCharacter(key)) return false;
+  return key
+    .split("/")
+    .every((segment) => segment !== "" && segment !== "." && segment !== "..");
+}
+
+/** The storage prefix an author's own files are written under. */
+export const authorUploadKeyPrefix = (userId: string): string =>
+  `authors/${userId}/`;
+
 export function generateStorageKeyId(): string {
   const timestamp = Date.now().toString(36).padStart(TIMESTAMP_DIGITS, "0");
   const random = Math.random()

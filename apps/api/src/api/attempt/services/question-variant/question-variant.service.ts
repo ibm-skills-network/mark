@@ -52,7 +52,8 @@ export class QuestionVariantService {
         assignmentAttemptId: attemptId,
         questionId: question.id,
         questionVariantId: variantId,
-        randomizedChoices,
+        // Prisma rejects a bare null for a `Json?` column; DbNull writes SQL NULL.
+        randomizedChoices: randomizedChoices ?? Prisma.DbNull,
       };
     });
 

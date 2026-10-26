@@ -7,7 +7,6 @@
  */
 import * as apiConfig from "../config/constants";
 import * as apiAuthor from "./author";
-import * as apiGithub from "./github";
 import * as apiLearner from "./learner";
 import * as apiShared from "./shared";
 
@@ -77,18 +76,12 @@ export const createAttempt = apiLearner.createAttempt;
 export const abandonAttempt = apiLearner.abandonAttempt;
 export const getAttempt = apiLearner.getAttempt;
 export const getCompletedAttempt = apiLearner.getCompletedAttempt;
-export const getSuccessPageData = apiLearner.getSuccessPageData;
-export const submitQuestion = apiLearner.submitQuestion;
-export type { SubmitQuestionResult } from "./learner";
 export const getLiveRecordingFeedback = apiLearner.getLiveRecordingFeedback;
 export const submitAssignment = apiLearner.submitAssignment;
 export const getFeedback = apiLearner.getFeedback;
 export const submitFeedback = apiLearner.submitFeedback;
 export const submitRegradingRequest = apiLearner.submitRegradingRequest;
 export const submitReportLearner = apiLearner.submitReportLearner;
-
-export const AuthorizeGithubBackend = apiGithub.authorizeGithubBackend;
-export const getStoredGithubToken = apiGithub.getStoredGithubToken;
 
 export const setApiVersion = (
   version: (typeof API_VERSIONS)[keyof typeof API_VERSIONS],

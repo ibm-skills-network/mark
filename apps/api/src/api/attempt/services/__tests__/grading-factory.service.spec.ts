@@ -1,11 +1,12 @@
+import { BadRequestException, Logger } from "@nestjs/common";
 import { QuestionType } from "@prisma/client";
+import { UnsupportedResponseTypeException } from "../../common/utils/learner-file-reference.util";
 import { GradingFactoryService } from "../grading-factory.service";
 
 describe("GradingFactoryService", () => {
   const textStrategy = { name: "text" };
   const fileStrategy = { name: "file" };
   const urlStrategy = { name: "url" };
-  const presentationStrategy = { name: "presentation" };
   const choiceStrategy = { name: "choice" };
   const trueFalseStrategy = { name: "trueFalse" };
   const imageStrategy = { name: "image" };
@@ -14,11 +15,16 @@ describe("GradingFactoryService", () => {
     textStrategy as never,
     fileStrategy as never,
     urlStrategy as never,
-    presentationStrategy as never,
     choiceStrategy as never,
     trueFalseStrategy as never,
     imageStrategy as never,
   );
+
+  beforeAll(() => {
+    jest.spyOn(Logger.prototype, "warn").mockImplementation(() => undefined);
+  });
+
+  afterAll(() => jest.restoreAllMocks());
 
   const files = (...filenames: string[]) =>
     filenames.map((filename) => ({ filename }));
@@ -67,14 +73,6 @@ describe("GradingFactoryService", () => {
     );
   });
 
-  it("does not treat repository files as image submissions", () => {
-    expect(
-      factory.getStrategy(QuestionType.UPLOAD, "OTHER", [
-        { filename: "shot.png", githubUrl: "https://github.com/o/r/shot.png" },
-      ]),
-    ).toBe(fileStrategy);
-  });
-
   it("keeps non-gradable image formats on the file strategy", () => {
     expect(
       factory.getStrategy(QuestionType.UPLOAD, "OTHER", files("diagram.svg")),
@@ -87,22 +85,17 @@ describe("GradingFactoryService", () => {
     ).toBe(fileStrategy);
   });
 
-  it("lets media response types take precedence over file contents", () => {
-    expect(
-      factory.getStrategy(
-        QuestionType.UPLOAD,
-        "LIVE_RECORDING",
-        files("frame.png"),
-      ),
-    ).toBe(presentationStrategy);
-    expect(
-      factory.getStrategy(
-        QuestionType.UPLOAD,
-        "PRESENTATION",
-        files("frame.png"),
-      ),
-    ).toBe(presentationStrategy);
-  });
+  it.each(["PRESENTATION", "VIDEO", "AUDIO", "LIVE_RECORDING"])(
+    "refuses a %s response type with a 400",
+    (responseType) => {
+      expect(() =>
+        factory.getStrategy(QuestionType.UPLOAD, responseType, files("a.png")),
+      ).toThrow(UnsupportedResponseTypeException);
+      expect(() =>
+        factory.getStrategy(QuestionType.TEXT, responseType),
+      ).toThrow(BadRequestException);
+    },
+  );
 
   it("ignores files for non-upload question types", () => {
     expect(

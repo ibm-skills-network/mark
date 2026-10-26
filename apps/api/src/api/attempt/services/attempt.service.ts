@@ -1,10 +1,19 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 /* eslint-disable unicorn/no-null */
 /* eslint-disable @typescript-eslint/require-await */
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import {
+  ForbiddenException,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from "@nestjs/common";
 import { ReportType } from "@prisma/client";
-import { Response as ExpressResponse } from "express";
 import { Observable } from "rxjs";
+import {
+  AttemptSummaryResponseDto,
+  LearnerAttemptResponseDto,
+} from "../dto/learner-attempt.response.dto";
 import { BaseAssignmentAttemptResponseDto } from "src/api/assignment/attempt/dto/assignment-attempt/base.assignment.attempt.response.dto";
 import { LearnerUpdateAssignmentAttemptRequestDto } from "src/api/assignment/attempt/dto/assignment-attempt/create.update.assignment.attempt.request.dto";
 import {
@@ -14,13 +23,7 @@ import {
   RegradingStatusResponseDto,
   RequestRegradingResponseDto,
 } from "src/api/assignment/attempt/dto/assignment-attempt/feedback.request.dto";
-import {
-  AssignmentAttemptResponseDto,
-  GetAssignmentAttemptResponseDto,
-} from "src/api/assignment/attempt/dto/assignment-attempt/get.assignment.attempt.response.dto";
-import { UpdateAssignmentAttemptResponseDto } from "src/api/assignment/attempt/dto/assignment-attempt/update.assignment.attempt.response.dto";
-import { CreateQuestionResponseAttemptRequestDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.request.dto";
-import { CreateQuestionResponseAttemptResponseDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
+import { SubmitAssignmentAttemptResponseDto } from "src/api/assignment/attempt/dto/assignment-attempt/submit.assignment.attempt.response.dto";
 import { randomUUID } from "node:crypto";
 import {
   UserRole,
@@ -38,6 +41,8 @@ import {
   JobQueueName,
 } from "../../../job-queue/job-queue.constants";
 import { JobQueueService } from "../../../job-queue/job-queue.service";
+import { AttemptWorkerUserSession } from "../../../job-queue/job-queue.types";
+import { buildGradingActiveKey } from "../../../job-queue/grading-active-key";
 import { JobStateService } from "../../../job-queue/job-state.service";
 import { JobStateRecord } from "../../../job-queue/job-state.types";
 import { LearnerFacingGradingError } from "../../llm/features/grading/errors/learner-facing-grading.error";
@@ -49,13 +54,33 @@ import { gradingFailureFromError } from "../../llm/features/grading/errors/gradi
 import { AttemptFeedbackService } from "./attempt-feedback.service";
 import { AttemptRegradingService } from "./attempt-regrading.service";
 import { AttemptReportingService } from "./attempt-reporting.service";
-import { AttemptSubmissionService } from "./attempt-submission.service";
+import {
+  AttemptSubmissionService,
+  AttemptSubmissionStatusDto,
+} from "./attempt-submission.service";
 import { newJobScopedCache } from "./grading/job-scoped-cache";
 import {
   GradingProgressService,
   type GradingProgressDetails,
 } from "./grading-progress.service";
 import { AttemptClosedException } from "../../assignment/attempt/helper/submission-deadline.helper";
+
+/** Returned with a newly created learner grading job. */
+export const GRADING_JOB_CREATED_MESSAGE =
+  "Grading job created. Use the SSE endpoint to track progress.";
+
+/** Returned when a learner grading job for the attempt is already in flight. */
+export const GRADING_JOB_REUSED_MESSAGE =
+  "A grading job is already running for this attempt. Reusing existing job.";
+
+/**
+ * The session fields a learner grading job carries to the worker. A
+ * `UserSessionRequest` satisfies it, and so does a caller that holds only
+ * these fields.
+ */
+export interface GradingJobRequester {
+  userSession: AttemptWorkerUserSession;
+}
 
 @Injectable()
 export class AttemptServiceV2 {
@@ -73,19 +98,6 @@ export class AttemptServiceV2 {
     private readonly gradingProgressService?: GradingProgressService,
   ) {}
 
-  private buildGradingActiveKey(
-    userId: string,
-    assignmentId: number,
-    attemptId: number | null,
-  ): string {
-    return [
-      "grading",
-      userId,
-      String(assignmentId),
-      attemptId === null ? "author-preview" : String(attemptId),
-    ].join(":");
-  }
-
   /**
    * Create a grading job for author preview (no attemptId)
    */
@@ -100,7 +112,7 @@ export class AttemptServiceV2 {
     queueName: JobQueueName;
   }> {
     void _authCookie;
-    const activeKey = this.buildGradingActiveKey(
+    const activeKey = buildGradingActiveKey(
       request.userSession.userId,
       assignmentId,
       null,
@@ -205,16 +217,17 @@ export class AttemptServiceV2 {
     assignmentId: number,
     _updateDto: LearnerUpdateAssignmentAttemptRequestDto,
     _authCookie: string,
-    request: UserSessionRequest,
+    request: GradingJobRequester,
     tier: Exclude<AttemptTier, "inline">,
   ): Promise<{
     gradingJobId: string;
     message: string;
     queueName: JobQueueName;
+    reused: boolean;
   }> {
     void _updateDto;
     void _authCookie;
-    const activeKey = this.buildGradingActiveKey(
+    const activeKey = buildGradingActiveKey(
       request.userSession.userId,
       assignmentId,
       attemptId,
@@ -228,9 +241,9 @@ export class AttemptServiceV2 {
     if (existingJobId !== null) {
       return {
         gradingJobId: existingJobId,
-        message:
-          "A grading job is already running for this attempt. Reusing existing job.",
+        message: GRADING_JOB_REUSED_MESSAGE,
         queueName: attemptQueueForTier(tier),
+        reused: true,
       };
     }
 
@@ -258,8 +271,9 @@ export class AttemptServiceV2 {
 
     return {
       gradingJobId: gradingJob.id,
-      message: "Grading job created. Use the SSE endpoint to track progress.",
+      message: GRADING_JOB_CREATED_MESSAGE,
       queueName,
+      reused: false,
     };
   }
 
@@ -269,7 +283,7 @@ export class AttemptServiceV2 {
     assignmentId: number,
     updateDto: LearnerUpdateAssignmentAttemptRequestDto,
     authCookie: string,
-    request: UserSessionRequest,
+    request: GradingJobRequester,
     queueName: JobQueueName,
     submissionReceivedAt?: Date,
   ): Promise<void> {
@@ -391,7 +405,7 @@ export class AttemptServiceV2 {
         );
       }
 
-      let result: UpdateAssignmentAttemptResponseDto;
+      let result: SubmitAssignmentAttemptResponseDto;
       try {
         result = await this.submissionService.updateAssignmentAttempt(
           -1,
@@ -481,7 +495,7 @@ export class AttemptServiceV2 {
         percentage: 0,
       });
 
-      let result: UpdateAssignmentAttemptResponseDto;
+      let result: SubmitAssignmentAttemptResponseDto;
       try {
         result = await this.submissionService.updateAssignmentAttempt(
           attemptId,
@@ -634,37 +648,6 @@ export class AttemptServiceV2 {
       userSession,
     );
   }
-  async updateAssignmentAttemptWithSSE(
-    attemptId: number,
-    assignmentId: number,
-    updateDto: LearnerUpdateAssignmentAttemptRequestDto,
-    authCookie: string,
-    gradingCallbackRequired: boolean,
-    request: UserSessionRequest,
-    response: ExpressResponse,
-  ): Promise<UpdateAssignmentAttemptResponseDto> {
-    const heartbeatInterval = setInterval(() => {
-      response.write(`:heartbeat\n\n`);
-    }, 30_000);
-
-    try {
-      const result = await this.submissionService.updateAssignmentAttempt(
-        attemptId,
-        assignmentId,
-        updateDto,
-        authCookie,
-        gradingCallbackRequired,
-        request,
-      );
-
-      clearInterval(heartbeatInterval);
-      return result;
-    } catch (error) {
-      clearInterval(heartbeatInterval);
-      throw error;
-    }
-  }
-
   /**
    * Get feedback for an assignment attempt
    */
@@ -718,13 +701,57 @@ export class AttemptServiceV2 {
   async listAssignmentAttempts(
     assignmentId: number,
     userSession: UserSession,
-  ): Promise<AssignmentAttemptResponseDto[]> {
-    return this.prisma.assignmentAttempt.findMany({
-      where:
-        userSession.role === UserRole.AUTHOR
+  ): Promise<AttemptSummaryResponseDto[]> {
+    const isAuthor = userSession.role === UserRole.AUTHOR;
+    // An undefined userId would drop the filter and list every learner's rows.
+    if (!isAuthor && !userSession.userId) {
+      this.logger.warn(
+        `listAssignmentAttempts: learner session without userId assignment=${assignmentId}`,
+      );
+      throw new ForbiddenException("Forbidden resource");
+    }
+
+    const [assignment, attempts] = await Promise.all([
+      this.prisma.assignment.findUnique({
+        where: { id: assignmentId },
+        select: { showAssignmentScore: true },
+      }),
+      this.prisma.assignmentAttempt.findMany({
+        where: isAuthor
           ? { assignmentId }
           : { assignmentId, userId: userSession.userId },
-    });
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        select: {
+          id: true,
+          assignmentId: true,
+          assignmentVersionId: true,
+          userId: true,
+          submitted: true,
+          grade: true,
+          expiresAt: true,
+          createdAt: true,
+          questionOrder: true,
+          comments: true,
+          preferredLanguage: true,
+        },
+      }),
+    ]);
+
+    if (!assignment) {
+      throw new NotFoundException(
+        `Assignment with Id ${assignmentId} not found.`,
+      );
+    }
+
+    this.logger.debug(
+      `listAssignmentAttempts: assignment=${assignmentId} role=${userSession.role} count=${attempts.length}`,
+    );
+
+    const showScore = assignment.showAssignmentScore;
+    return attempts.map((attempt) => ({
+      ...attempt,
+      grade: showScore && attempt.submitted ? attempt.grade : null,
+    }));
   }
 
   /**
@@ -753,24 +780,6 @@ export class AttemptServiceV2 {
     );
   }
 
-  async autoSaveQuestionResponse(
-    attemptId: number,
-    assignmentId: number,
-    questionId: number,
-    requestDto: CreateQuestionResponseAttemptRequestDto,
-    userSession: UserSession,
-    language: string,
-  ): Promise<CreateQuestionResponseAttemptResponseDto> {
-    return this.submissionService.autoSaveQuestionResponse(
-      attemptId,
-      assignmentId,
-      questionId,
-      requestDto,
-      userSession,
-      language,
-    );
-  }
-
   /**
    * Update an assignment attempt
    */
@@ -782,7 +791,7 @@ export class AttemptServiceV2 {
     gradingCallbackRequired: boolean,
     request: UserSessionRequest,
     submissionReceivedAt?: Date,
-  ): Promise<UpdateAssignmentAttemptResponseDto> {
+  ): Promise<SubmitAssignmentAttemptResponseDto> {
     return this.submissionService.updateAssignmentAttempt(
       attemptId,
       assignmentId,
@@ -809,7 +818,7 @@ export class AttemptServiceV2 {
     receivedAt: Date,
   ): Promise<{ inFlightGradingJobId: string | null }> {
     const inFlight = await this.jobStateService.findActiveJob(
-      this.buildGradingActiveKey(userId, assignmentId, attemptId),
+      buildGradingActiveKey(userId, assignmentId, attemptId),
     );
     await this.submissionService.assertLearnerAttemptOpenForSubmit(
       attemptId,
@@ -819,20 +828,50 @@ export class AttemptServiceV2 {
     return { inFlightGradingJobId: inFlight?.id ?? null };
   }
 
-  /** Submission state of an attempt with a fresh server clock reading. */
-  async getAttemptSubmissionStatus(attemptId: number) {
-    return this.submissionService.getAttemptSubmissionStatus(attemptId);
+  /**
+   * Refuse a learner submit payload the grader would refuse (unserved or
+   * duplicate ids, answers to unsupported question types, files that are
+   * not the learner's own uploads, unanswered required questions) before it
+   * is queued.
+   */
+  async assertSubmitPayloadAcceptable(
+    attemptId: number,
+    assignmentId: number,
+    userId: string,
+    updateDto: LearnerUpdateAssignmentAttemptRequestDto,
+  ): Promise<void> {
+    await this.submissionService.assertSubmitPayloadAcceptable(
+      attemptId,
+      assignmentId,
+      userId,
+      updateDto,
+    );
+  }
+
+  /** Submission state of a learner's own attempt with a fresh server clock. */
+  async getAttemptSubmissionStatus(
+    attemptId: number,
+    assignmentId: number,
+    userId: string,
+  ): Promise<AttemptSubmissionStatusDto> {
+    return this.submissionService.getAttemptSubmissionStatus(
+      attemptId,
+      assignmentId,
+      userId,
+    );
   }
 
   /**
-   * Get a learner assignment attempt
+   * A submitted attempt for its results page, scoped to the route assignment.
    */
   async getLearnerAssignmentAttempt(
     attemptId: number,
+    assignmentId: number,
     userSession: UserSession,
-  ): Promise<GetAssignmentAttemptResponseDto> {
+  ): ReturnType<AttemptSubmissionService["getLearnerAssignmentAttempt"]> {
     return this.submissionService.getLearnerAssignmentAttempt(
       attemptId,
+      assignmentId,
       userSession,
     );
   }
@@ -844,7 +883,7 @@ export class AttemptServiceV2 {
     attemptId: number,
     userSession: UserSession,
     language?: string,
-  ): Promise<GetAssignmentAttemptResponseDto> {
+  ): Promise<LearnerAttemptResponseDto> {
     return this.submissionService.getAssignmentAttempt(attemptId, language);
   }
 

@@ -531,5 +531,37 @@ describe("ChoiceGradingStrategy - Type Safety Tests", () => {
 
       expect(result.totalPoints).toBe(5);
     });
+
+    it("never stores which options were correct in multiple-correct feedback", async () => {
+      const question = {
+        id: 1,
+        question: "Select all primes",
+        type: QuestionType.MULTIPLE_CORRECT,
+        totalPoints: 2,
+        assignmentId: 1,
+        gradingContextQuestionIds: [],
+        choices: [
+          { id: 1, choice: "Two", isCorrect: true, points: 1 },
+          { id: 2, choice: "Three", isCorrect: true, points: 1 },
+          { id: 3, choice: "Four", isCorrect: false, points: 0 },
+        ],
+      } as unknown as QuestionDto;
+
+      const result = await strategy.gradeResponse(
+        question,
+        ["Four"],
+        mockContext,
+      );
+
+      const stored = JSON.stringify(result.feedback);
+      expect(stored).not.toContain("correctOptions");
+      expect(stored).not.toContain("Two");
+      expect(stored).not.toContain("Three");
+      // What decides the read-time reveal stays in the grading metadata.
+      expect(result.metadata).toMatchObject({
+        perfectScore: false,
+        correctChoices: ["Two", "Three"],
+      });
+    });
   });
 });

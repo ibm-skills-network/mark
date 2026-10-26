@@ -798,6 +798,7 @@ model LtiGradeSync {
   @@index([attemptId])
   @@index([userId])
   @@index([status])
+  @@index([updatedAt])
   @@index([nextRetryAt])
   @@index([createdAt])
 }
@@ -1135,4 +1136,16 @@ model EmailSuppression {
   createdBy String? /// Admin email, or "system" for automatic suppressions
   createdAt DateTime               @default(now())
   updatedAt DateTime               @updatedAt
+}
+
+/// Quiz session tokens a browser saved so it can resume an earlier launch
+model SavedSession {
+  storeId      String /// GUID held in the browser's saved-session cookie
+  role         String
+  assignmentId Int
+  token        String   @db.Text
+  updatedAt    DateTime @updatedAt
+
+  @@id([storeId, role, assignmentId])
+  @@index([updatedAt])
 }

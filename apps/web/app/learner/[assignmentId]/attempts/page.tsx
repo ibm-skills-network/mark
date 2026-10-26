@@ -4,7 +4,11 @@ import {
   useAssignmentDetails,
   useLearnerOverviewStore,
 } from "@/stores/learner";
-import { getTimestampMs } from "@/app/learner/utils/attempts";
+import {
+  getTimestampMs,
+  isAttemptInProgress,
+  isAttemptSubmitted,
+} from "@/app/learner/utils/attempts";
 import React, { useMemo, useState } from "react";
 import DataTable, {
   createTheme,
@@ -78,6 +82,8 @@ interface AttemptTableRow {
   expiresAt: string;
   duration: string;
   isLatest: boolean;
+  /** Results exist only once submitted; an open attempt is resumed instead. */
+  status: "submitted" | "in-progress" | "expired";
 }
 
 export default function AssignmentAttempts() {
@@ -157,6 +163,11 @@ export default function AssignmentAttempts() {
           expiresAt,
           duration,
           isLatest: index === 0,
+          status: isAttemptSubmitted(attempt)
+            ? "submitted"
+            : isAttemptInProgress(attempt)
+              ? "in-progress"
+              : "expired",
         };
       }),
     [sortedAttempts],
@@ -214,20 +225,30 @@ export default function AssignmentAttempts() {
       },
       {
         name: "Action",
-        cell: (row) => (
-          <button
-            onClick={() => {
-              window.open(
-                `/learner/${row.assignmentId}/successPage/${row.id}`,
-                "_self",
-              );
-            }}
-            className="flex items-center gap-1 text-purple-600 hover:text-violet-600 underline"
-            aria-label={`View details for Attempt ${row.attemptNumber}`}
-          >
-            View
-          </button>
-        ),
+        cell: (row) => {
+          // The results page answers 404 for an attempt that was never
+          // submitted, so an open attempt goes back to the quiz and an
+          // expired one has nowhere to go.
+          if (row.status === "expired") {
+            return <span className="text-gray-500">Not submitted</span>;
+          }
+          const href =
+            row.status === "submitted"
+              ? `/learner/${row.assignmentId}/successPage/${row.id}`
+              : `/learner/${row.assignmentId}/questions`;
+          const label = row.status === "submitted" ? "View" : "Resume";
+          return (
+            <button
+              onClick={() => {
+                window.open(href, "_self");
+              }}
+              className="flex items-center gap-1 text-purple-600 hover:text-violet-600 underline"
+              aria-label={`${label} Attempt ${row.attemptNumber}`}
+            >
+              {label}
+            </button>
+          );
+        },
 
         ignoreRowClick: true,
         allowOverflow: false,

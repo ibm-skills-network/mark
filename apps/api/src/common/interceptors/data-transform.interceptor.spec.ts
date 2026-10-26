@@ -1,7 +1,10 @@
 import { CallHandler, ExecutionContext } from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { lastValueFrom, of } from "rxjs";
-import { DataTransformInterceptor } from "./data-transform.interceptor";
+import {
+  DataTransform,
+  DataTransformInterceptor,
+} from "./data-transform.interceptor";
 
 const b64 = (text: string) => Buffer.from(text, "utf8").toString("base64");
 
@@ -62,5 +65,37 @@ describe("DataTransformInterceptor request decoding", () => {
   it("still decodes structured content outside learner files", async () => {
     const body = await decodeBody({ content: b64('{"a":1}') });
     expect(body.content).toEqual({ a: 1 });
+  });
+});
+
+describe("DataTransform decorator", () => {
+  const run = async (handler: () => void, data: unknown) => {
+    const interceptor = new DataTransformInterceptor(new Reflector());
+    const context = {
+      getHandler: () => handler,
+      getClass: () => class {},
+      switchToHttp: () => ({ getRequest: () => ({ body: {}, query: {} }) }),
+    } as unknown as ExecutionContext;
+    const next: CallHandler = { handle: () => of(data) };
+    return lastValueFrom(interceptor.intercept(context, next));
+  };
+
+  it("is read by the interceptor, so encodeResponse: false serves plain text", async () => {
+    class Controller {
+      @DataTransform({ encodeResponse: false })
+      plain() {
+        return;
+      }
+      encoded() {
+        return;
+      }
+    }
+    const body = { introduction: "Hello", instructions: null };
+
+    expect(await run(Controller.prototype.plain, body)).toEqual(body);
+    expect(await run(Controller.prototype.encoded, body)).toEqual({
+      introduction: b64("Hello"),
+      instructions: b64("null"),
+    });
   });
 });

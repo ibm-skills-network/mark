@@ -41,7 +41,7 @@ import TipsView from "./TipsView";
 import SecurityMonitor from "../SecurityMonitor";
 import VersionMismatchBanner from "../VersionMismatchBanner";
 import { clearAssignmentLocalStorage } from "@/app/learner/utils/localStorage";
-import { withTextFileContent } from "@/lib/learner-file-content";
+import { toSubmittedFileReferences } from "@/lib/learner-file-response";
 
 interface Props extends ComponentPropsWithoutRef<"div"> {
   attempt: AssignmentAttemptWithQuestions;
@@ -140,10 +140,14 @@ const mapChoicesToIndices = (values: unknown[], choiceTexts: string[]) => {
 const hydrateQuestionResponse = (question: QuestionStore): QuestionStore => {
   const latestResponse = getLatestQuestionResponse(question);
   const rawResponse = latestResponse?.learnerResponse;
-  const parsedResponse =
-    typeof rawResponse === "string" && rawResponse.trim().length > 0
-      ? parseLearnerResponse(rawResponse)
-      : undefined;
+  // The attempt read serves the stored JSON value as-is: usually a JSON
+  // string, but it may already be an array or object.
+  const parsedResponse: unknown =
+    typeof rawResponse === "string"
+      ? rawResponse.trim().length > 0
+        ? parseLearnerResponse(rawResponse)
+        : undefined
+      : (rawResponse ?? undefined);
   const updated: Partial<QuestionStore> = {};
 
   if (latestResponse?.learnerResponse) {
@@ -152,8 +156,7 @@ const hydrateQuestionResponse = (question: QuestionStore): QuestionStore => {
 
   const hasPresentation = isPresentationResponse(parsedResponse);
   if (!question.presentationResponse && hasPresentation) {
-    updated.presentationResponse =
-      parsedResponse as PresentationQuestionResponse;
+    updated.presentationResponse = parsedResponse;
   }
 
   if (
@@ -231,10 +234,16 @@ const hydrateQuestionResponse = (question: QuestionStore): QuestionStore => {
     !question.learnerFileResponse &&
     !hasPresentation
   ) {
-    if (isLearnerFileResponseArray(parsedResponse)) {
-      updated.learnerFileResponse = parsedResponse.map(withTextFileContent);
-    } else if (isLearnerFileResponse(parsedResponse)) {
-      updated.learnerFileResponse = [withTextFileContent(parsedResponse)];
+    // Drafts saved by older clients can hold repository entries or the
+    // file's full text; keep only references to uploaded objects, which is
+    // all the submit route accepts.
+    const draftFiles = isLearnerFileResponseArray(parsedResponse)
+      ? toSubmittedFileReferences(parsedResponse)
+      : isLearnerFileResponse(parsedResponse)
+        ? toSubmittedFileReferences([parsedResponse])
+        : [];
+    if (draftFiles.length > 0) {
+      updated.learnerFileResponse = draftFiles;
     }
   }
 

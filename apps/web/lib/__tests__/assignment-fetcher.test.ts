@@ -106,3 +106,36 @@ describe("getAssignment", () => {
     expect(apiClient.get).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("getAssignment plain JSON", () => {
+  it("asks the client not to transform the response", async () => {
+    apiClient.get.mockResolvedValue(assignmentRow);
+
+    await getAssignment(42, "en");
+
+    expect(apiClient.get).toHaveBeenCalledWith(
+      expect.stringContaining("/42?lang=en"),
+      expect.objectContaining({ transformResponse: false }),
+    );
+  });
+
+  it("passes null text fields through untouched", async () => {
+    apiClient.get.mockResolvedValue({
+      ...assignmentRow,
+      introduction: null,
+      instructions: null,
+      gradingCriteriaOverview: null,
+    });
+
+    const assignment = await getAssignment(42);
+
+    expect(assignment).toEqual(
+      expect.objectContaining({
+        introduction: null,
+        instructions: null,
+        gradingCriteriaOverview: null,
+      }),
+    );
+    expect(assignment).not.toHaveProperty("success");
+  });
+});

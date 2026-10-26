@@ -1,7 +1,6 @@
 import { TerminusModule } from "@nestjs/terminus";
 import { Test, TestingModule } from "@nestjs/testing";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
-import { GithubCredentialCheckService } from "../api/github/github-credential-check.service";
 import { AdminGuard } from "../auth/guards/admin.guard";
 import { AdminVerificationService } from "../auth/services/admin-verification.service";
 import { DatabaseCircuitBreakerService } from "../database/circuit-breaker/database-circuit-breaker.service";
@@ -45,7 +44,6 @@ describe("HealthController", () => {
         PrismaService,
         DatabaseHealthIndicator,
         DatabaseCircuitBreakerService,
-        GithubCredentialCheckService,
         // The integration report is admin-gated, so Nest instantiates the
         // guard; the token check itself is covered by the guard's own spec.
         {
@@ -66,7 +64,7 @@ describe("HealthController", () => {
   it("serves the integration report without failing the pod's probes", () => {
     const report = controller.integrations();
 
-    expect(report.checks.map((check) => check.name)).toContain("github_oauth");
+    expect(report.checks).toEqual([]);
     // A broken integration must never take the pod out of rotation.
     expect(report.status).toBeDefined();
   });

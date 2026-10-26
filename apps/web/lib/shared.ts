@@ -2238,6 +2238,8 @@ export async function getAssignment(
   const responseBody = (await withTransientRetry(() =>
     apiClient.get(url, {
       quiet: options?.quiet ?? false,
+      // Plain JSON on the wire: no base64 decode, no string-to-JSON heuristic.
+      transformResponse: false,
       headers: {
         "Cache-Control": "no-cache",
         ...(cookies ? { Cookie: cookies } : {}),
@@ -2295,17 +2297,29 @@ export async function getSupportedLanguages(
   return data.languages || [];
 }
 
+export interface QuestionTranslation {
+  translatedQuestion: string;
+  translatedChoices?: Choice[];
+}
+
 /**
- * Translates a question to a different language.
+ * Statuses where the question simply stays in its current language: an
+ * unsupported code (400), the per-user rate limit (429) or translation being
+ * unavailable (503). None of them is worth interrupting the learner for.
+ */
+const UNTRANSLATED_STATUSES = new Set([400, 429, 503]);
+
+/**
+ * Translates a question to a different language. Only the language code is
+ * sent; the server reads the question itself. Resolves to null when the
+ * question should stay untranslated.
  */
 export async function translateQuestion(
   assignmentId: number,
   questionId: number,
-  question: QuestionStore,
-  selectedLanguage: string,
   selectedLanguageCode: string,
   cookies?: string,
-): Promise<{ translatedQuestion: string; translatedChoices?: Choice[] }> {
+): Promise<QuestionTranslation | null> {
   const endpointURL = `${getApiRoutes().assignments}/${assignmentId}/questions/${questionId}/translations`;
 
   const res = await fetch(endpointURL, {
@@ -2314,22 +2328,29 @@ export async function translateQuestion(
       "Content-Type": "application/json",
       ...(cookies ? { Cookie: cookies } : {}),
     },
-    body: JSON.stringify({
-      selectedLanguage,
-      selectedLanguageCode,
-      question,
-    }),
+    body: JSON.stringify({ selectedLanguageCode }),
   });
 
-  if (!res.ok) {
-    const errorBody = (await res.json()) as ErrorResponse;
-    throw new Error(errorBody.message || "Failed to translate question");
+  if (UNTRANSLATED_STATUSES.has(res.status)) {
+    console.warn("[learner] question left untranslated", {
+      assignmentId,
+      questionId,
+      selectedLanguageCode,
+      status: res.status,
+    });
+    return null;
   }
 
-  return (await res.json()) as {
-    translatedQuestion: string;
-    translatedChoices?: Choice[];
-  };
+  if (!res.ok) {
+    const errorBody = (await res
+      .json()
+      .catch(() => null)) as ErrorResponse | null;
+    const message =
+      typeof errorBody?.message === "string" ? errorBody.message : undefined;
+    throw new Error(message || "Failed to translate question");
+  }
+
+  return (await res.json()) as QuestionTranslation;
 }
 
 /**

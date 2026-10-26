@@ -1,4 +1,9 @@
-import { ExecutionContext, ForbiddenException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ExecutionContext,
+  ForbiddenException,
+  NotFoundException,
+} from "@nestjs/common";
 import { Reflector } from "@nestjs/core";
 import { Prisma } from "@prisma/client";
 
@@ -8,6 +13,7 @@ import {
   type UserSessionRequest,
 } from "../../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../../database/prisma.service";
+import { AssignmentControllerV2 } from "../v2/controllers/assignment.controller";
 import { AssignmentAccessControlGuard } from "./assignment.access.control.guard";
 
 describe("AssignmentAccessControlGuard — launch-derived auto-link", () => {
@@ -47,8 +53,11 @@ describe("AssignmentAccessControlGuard — launch-derived auto-link", () => {
   const createContext = (
     session: Partial<UserSession>,
     params: Record<string, string | undefined> = {},
+    handler: (...arguments_: never[]) => unknown = () => undefined,
   ): ExecutionContext =>
     ({
+      getHandler: () => handler,
+      getClass: () => AssignmentControllerV2,
       switchToHttp: () => ({
         getRequest: () => ({
           userSession: {
@@ -63,7 +72,7 @@ describe("AssignmentAccessControlGuard — launch-derived auto-link", () => {
           originalUrl: "/api/v1/assignments/4535",
         }),
       }),
-    }) as ExecutionContext;
+    }) as unknown as ExecutionContext;
 
   const mockNoLink = (assignment: { id: number } | null = { id: 4535 }) => {
     mockPrisma.$transaction = jest.fn().mockResolvedValue([null, assignment]);
@@ -105,7 +114,9 @@ describe("AssignmentAccessControlGuard — launch-derived auto-link", () => {
   });
 
   it("does not auto-link when the session has no group id", async () => {
-    mockNoLink();
+    (mockPrisma.assignment.findUnique as jest.Mock).mockResolvedValue({
+      id: 4535,
+    });
 
     const context = createContext({ groupId: "" }, { id: "4535" });
 
@@ -186,5 +197,109 @@ describe("AssignmentAccessControlGuard — launch-derived auto-link", () => {
 
     await expect(guard.canActivate(context)).resolves.toBe(true);
     expect(mockPrisma.assignmentGroup.create).not.toHaveBeenCalled();
+  });
+  describe("route id parsing", () => {
+    it.each(["0", "-1", "2147483648", "99999999999999999999"])(
+      "answers 404 for %s without querying or using the session id",
+      async (raw) => {
+        mockPrisma.$transaction = jest.fn();
+        (mockPrisma.assignment.findUnique as jest.Mock).mockReset();
+        await expect(
+          guard.canActivate(createContext({}, { id: raw })),
+        ).rejects.toMatchObject({
+          constructor: NotFoundException,
+          message: "Assignment not found",
+        });
+        expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+        expect(mockPrisma.assignment.findUnique).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(["12abc", "abc", "1.5", "1e3", ""])(
+      "answers 400 like ParseIntPipe for %p",
+      async (raw) => {
+        mockPrisma.$transaction = jest.fn();
+        await expect(
+          guard.canActivate(createContext({}, { id: raw })),
+        ).rejects.toMatchObject({
+          constructor: BadRequestException,
+          message: "Validation failed (numeric string is expected)",
+        });
+        expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+      },
+    );
+
+    it("accepts the int32 maximum", async () => {
+      mockPrisma.$transaction = jest
+        .fn()
+        .mockResolvedValue([{ assignmentId: 2_147_483_647 }, { id: 1 }]);
+      await expect(
+        guard.canActivate(createContext({}, { id: "2147483647" })),
+      ).resolves.toBe(true);
+    });
+  });
+
+  describe("absent group id", () => {
+    it.each([undefined, ""])(
+      "never queries the group link for groupId %p and denies access",
+      async (groupId) => {
+        mockPrisma.$transaction = jest.fn();
+        (mockPrisma.assignment.findUnique as jest.Mock).mockResolvedValue({
+          id: 4535,
+        });
+        await expect(
+          guard.canActivate(createContext({ groupId }, { id: "4535" })),
+        ).rejects.toMatchObject({
+          constructor: ForbiddenException,
+          message: "Access denied to this assignment",
+        });
+        expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+        expect(mockPrisma.assignmentGroup.findFirst).not.toHaveBeenCalled();
+        expect(mockPrisma.assignmentGroup.create).not.toHaveBeenCalled();
+      },
+    );
+
+    it("still answers 404 for a missing assignment", async () => {
+      (mockPrisma.assignment.findUnique as jest.Mock).mockResolvedValue(null);
+      await expect(
+        guard.canActivate(
+          createContext({ groupId: undefined }, { id: "4535" }),
+        ),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
+
+  describe("group-link heal per route", () => {
+    it("heals on GET assignment", async () => {
+      mockNoLink();
+      (mockPrisma.assignmentGroup.create as jest.Mock).mockResolvedValue({});
+      await expect(
+        guard.canActivate(
+          createContext(
+            {},
+            { id: "4535" },
+            AssignmentControllerV2.prototype.getAssignment,
+          ),
+        ),
+      ).resolves.toBe(true);
+      expect(mockPrisma.assignmentGroup.create).toHaveBeenCalledTimes(1);
+    });
+
+    it("never heals on GET languages", async () => {
+      mockNoLink();
+      await expect(
+        guard.canActivate(
+          createContext(
+            {},
+            { id: "4535" },
+            AssignmentControllerV2.prototype.getAvailableLanguages,
+          ),
+        ),
+      ).rejects.toMatchObject({
+        constructor: ForbiddenException,
+        message: "Access denied to this assignment",
+      });
+      expect(mockPrisma.assignmentGroup.create).not.toHaveBeenCalled();
+    });
   });
 });

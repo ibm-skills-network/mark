@@ -13,6 +13,7 @@ import { JwtBearerTokenAuthGuard } from "../auth/jwt/bearer-token-based/jwt.bear
 import { MockJwtBearerTokenAuthGuard } from "../auth/jwt/bearer-token-based/mock.jwt.bearer.token.auth.guard";
 import { JwtCookieAuthGuard } from "../auth/jwt/cookie-based/jwt.cookie.auth.guard";
 import { MockJwtCookieAuthGuard } from "../auth/jwt/cookie-based/mock.jwt.cookie.auth.guard";
+import { SavedSessionStore } from "../auth/jwt/cookie-based/saved-session.store";
 import { MessagingService } from "../messaging/messaging.service";
 import { ApiController, DownstreamService } from "./api.controller";
 import { ApiService } from "./api.service";
@@ -32,6 +33,7 @@ describe("ApiController", () => {
         MockJwtBearerTokenAuthGuard,
         JwtCookieAuthGuard,
         MockJwtCookieAuthGuard,
+        { provide: SavedSessionStore, useValue: { find: jest.fn() } },
         {
           provide: WINSTON_MODULE_PROVIDER,
           useValue: {
@@ -160,6 +162,7 @@ describe("ApiController", () => {
       } as any;
 
       mockResponse = {
+        setHeader: jest.fn(),
         status: jest.fn().mockReturnThis(),
         send: jest.fn().mockReturnThis(),
       } as any;
@@ -328,6 +331,7 @@ describe("ApiController", () => {
       } as any;
 
       mockResponse = {
+        setHeader: jest.fn(),
         status: jest.fn().mockReturnThis(),
         send: jest.fn().mockReturnThis(),
       } as any;

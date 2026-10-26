@@ -171,6 +171,273 @@ describe("AssignmentRepository", () => {
       global.JSON.parse = originalJsonParse;
     });
 
+    it("never returns version rows to a learner, because they carry the answer key", async () => {
+      const questionVersion = {
+        id: 100,
+        questionId: 1,
+        question: "Version question 1",
+        type: QuestionType.SINGLE_CORRECT,
+        totalPoints: 15,
+        displayOrder: 1,
+        answer: "Paris",
+        authorComment: "key is Paris",
+        choices: [{ id: 1, choice: "Paris", isCorrect: true, points: 15 }],
+        scoring: { type: "AUTO" },
+      };
+      const version = {
+        id: 7,
+        isActive: true,
+        name: "Current Version Assignment",
+        questionOrder: [],
+        questionVersions: [questionVersion],
+      };
+      const mockAssignment = {
+        ...createMockAssignment({ id: 1 }),
+        currentVersionId: 7,
+        currentVersion: version,
+        versions: [version],
+        questions: [],
+      };
+      jest
+        .spyOn(prismaService.assignment, "findUnique")
+        .mockResolvedValue(mockAssignment);
+
+      const learnerResult = await repository.findById(1, sampleLearnerSession);
+      const serialized = JSON.stringify(learnerResult);
+
+      expect(learnerResult.name).toBe("Current Version Assignment");
+      expect(learnerResult).not.toHaveProperty("currentVersion");
+      expect(learnerResult).not.toHaveProperty("versions");
+      expect(learnerResult.questions).toBeUndefined();
+      expect(serialized).not.toContain("isCorrect");
+      expect(serialized).not.toContain("authorComment");
+      expect(serialized).not.toContain("key is Paris");
+
+      const authorResult = await repository.findById(1, sampleAuthorSession);
+      expect(authorResult.currentVersion).toBeDefined();
+      expect(authorResult.versions).toHaveLength(1);
+    });
+
+    it("returns exactly the contract's learner key set", async () => {
+      const version = {
+        ...createMockAssignment({ id: 1 }),
+        id: 7,
+        isActive: true,
+        name: "Version name",
+        questionVersions: [{ id: 100, answer: "Paris" }],
+      };
+      jest.spyOn(prismaService.assignment, "findUnique").mockResolvedValue({
+        ...createMockAssignment({ id: 1 }),
+        currentVersionId: 7,
+        currentVersion: version,
+        versions: [version],
+      } as never);
+
+      const result = await repository.findById(1, sampleLearnerSession);
+
+      expect(Object.keys(result).sort()).toEqual(
+        [
+          "id",
+          "name",
+          "introduction",
+          "instructions",
+          "gradingCriteriaOverview",
+          "timeEstimateMinutes",
+          "attemptsBeforeCoolDown",
+          "retakeAttemptCoolDownMinutes",
+          "type",
+          "graded",
+          "numAttempts",
+          "allotedTimeMinutes",
+          "requireAllQuestions",
+          "optionalQuestionIds",
+          "attemptsPerTimeRange",
+          "attemptsTimeRangeHours",
+          "passingGrade",
+          "displayOrder",
+          "questionDisplay",
+          "numberOfQuestionsPerAttempt",
+          "questionOrder",
+          "published",
+          "showAssignmentScore",
+          "showQuestionScore",
+          "showSubmissionFeedback",
+          "showQuestions",
+          "showPassFailIndicator",
+          "correctAnswerVisibility",
+          "questionControls",
+          "updatedAt",
+          "languageCode",
+          "currentVersionId",
+          "success",
+        ].sort(),
+      );
+      expect(result.success).toBe(true);
+      expect(JSON.stringify(result)).not.toContain("Paris");
+      // Learner reads never load question versions.
+      expect(prismaService.assignment.findUnique).toHaveBeenCalledWith({
+        where: { id: 1 },
+        include: {
+          currentVersion: true,
+          versions: {
+            where: { isActive: true },
+            orderBy: { id: "desc" },
+            take: 1,
+          },
+        },
+      });
+    });
+
+    it("reads attempt and time limits from the base row, not the version", async () => {
+      const base = createMockAssignment({
+        id: 1,
+        numAttempts: 3,
+        attemptsBeforeCoolDown: 2,
+        retakeAttemptCoolDownMinutes: 10,
+        allotedTimeMinutes: 30,
+        attemptsPerTimeRange: 4,
+        attemptsTimeRangeHours: 24,
+        numberOfQuestionsPerAttempt: 5,
+        passingGrade: 60,
+      });
+      const version = {
+        ...base,
+        id: 7,
+        isActive: true,
+        name: "Version name",
+        numAttempts: 99,
+        attemptsBeforeCoolDown: 98,
+        retakeAttemptCoolDownMinutes: 97,
+        allotedTimeMinutes: 96,
+        attemptsPerTimeRange: 95,
+        attemptsTimeRangeHours: 94,
+        numberOfQuestionsPerAttempt: 93,
+        passingGrade: 80,
+      };
+      jest.spyOn(prismaService.assignment, "findUnique").mockResolvedValue({
+        ...base,
+        currentVersionId: 7,
+        currentVersion: version,
+        versions: [],
+      } as never);
+
+      const result = await repository.findById(1, sampleLearnerSession);
+
+      expect(result).toMatchObject({
+        numAttempts: 3,
+        attemptsBeforeCoolDown: 2,
+        retakeAttemptCoolDownMinutes: 10,
+        allotedTimeMinutes: 30,
+        attemptsPerTimeRange: 4,
+        attemptsTimeRangeHours: 24,
+        numberOfQuestionsPerAttempt: 5,
+        // Everything else still merges from the version.
+        name: "Version name",
+        passingGrade: 80,
+      });
+    });
+
+    it("falls back to defaults for null base limits even when the version has values", async () => {
+      const base = createMockAssignment({
+        id: 1,
+        numAttempts: null,
+        attemptsBeforeCoolDown: null,
+        retakeAttemptCoolDownMinutes: null,
+      });
+      const version = {
+        ...base,
+        id: 7,
+        isActive: true,
+        numAttempts: 4,
+        attemptsBeforeCoolDown: 4,
+        retakeAttemptCoolDownMinutes: 4,
+      };
+      jest.spyOn(prismaService.assignment, "findUnique").mockResolvedValue({
+        ...base,
+        currentVersion: version,
+        versions: [],
+      } as never);
+
+      const result = await repository.findById(1, sampleLearnerSession);
+
+      expect(result).toMatchObject({
+        numAttempts: -1,
+        attemptsBeforeCoolDown: 1,
+        retakeAttemptCoolDownMinutes: 0,
+      });
+    });
+
+    it("reads published and showAssignmentScore from the base row", async () => {
+      const base = createMockAssignment({
+        id: 1,
+        published: false,
+        showAssignmentScore: false,
+      });
+      const version = {
+        ...base,
+        id: 7,
+        isActive: true,
+        published: true,
+        showAssignmentScore: true,
+      };
+      jest.spyOn(prismaService.assignment, "findUnique").mockResolvedValue({
+        ...base,
+        currentVersion: version,
+        versions: [],
+      } as never);
+
+      const result = await repository.findById(1, sampleLearnerSession);
+
+      expect(result).toMatchObject({
+        published: false,
+        showAssignmentScore: false,
+      });
+    });
+
+    it("defaults null base published/showAssignmentScore to false/true", async () => {
+      const base = createMockAssignment({
+        id: 1,
+        published: null,
+        showAssignmentScore: null,
+      } as never);
+      jest.spyOn(prismaService.assignment, "findUnique").mockResolvedValue({
+        ...base,
+        currentVersion: null,
+        versions: [],
+      } as never);
+
+      const result = await repository.findById(1, sampleLearnerSession);
+
+      expect(result).toMatchObject({
+        published: false,
+        showAssignmentScore: true,
+      });
+    });
+
+    it.each([
+      ['{"a":1}', { a: 1 }],
+      ["not json", null],
+      ["[1,2]", null],
+      ['"text"', null],
+    ])(
+      "parses questionControls stored as JSON text %p",
+      async (stored, expected) => {
+        const base = createMockAssignment({
+          id: 1,
+          questionControls: stored,
+        } as never);
+        jest.spyOn(prismaService.assignment, "findUnique").mockResolvedValue({
+          ...base,
+          currentVersion: null,
+          versions: [],
+        } as never);
+
+        const result = await repository.findById(1, sampleLearnerSession);
+
+        expect(result.questionControls).toEqual(expected);
+      },
+    );
+
     it("should throw NotFoundException if assignment is not found", async () => {
       const assignmentId = 999;
       jest

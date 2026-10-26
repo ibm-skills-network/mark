@@ -6,7 +6,6 @@ import {
   Inject,
   Injectable,
   Param,
-  Patch,
   Post,
   Query,
   Req,
@@ -28,14 +27,11 @@ import {
 } from "../../../auth/interfaces/user.session.interface";
 import { Roles } from "../../../auth/role/roles.global.guard";
 import {
-  GRADE_SUBMISSION_EXCEPTION,
   IN_COOLDOWN_PERIOD,
   MAX_ATTEMPTS_SUBMISSION_EXCEPTION_MESSAGE,
-  SUBMISSION_DEADLINE_EXCEPTION_MESSAGE,
 } from "./api-exceptions/exceptions";
 import { AttemptServiceV1 } from "./attempt.service";
 import { BaseAssignmentAttemptResponseDto } from "./dto/assignment-attempt/base.assignment.attempt.response.dto";
-import { LearnerUpdateAssignmentAttemptRequestDto } from "./dto/assignment-attempt/create.update.assignment.attempt.request.dto";
 import {
   AssignmentFeedbackDto,
   AssignmentFeedbackResponseDto,
@@ -48,7 +44,6 @@ import {
   GetAssignmentAttemptResponseDto,
 } from "./dto/assignment-attempt/get.assignment.attempt.response.dto";
 import { ReportRequestDTO } from "./dto/assignment-attempt/post.assignment.report.dto";
-import { UpdateAssignmentAttemptResponseDto } from "./dto/assignment-attempt/update.assignment.attempt.response.dto";
 import { AssignmentAttemptAccessControlGuard } from "./guards/assignment.attempt.access.control.guard";
 
 @ApiTags("Attempts")
@@ -120,68 +115,6 @@ export class AttemptControllerV1 {
     return this.attemptService.getAssignmentAttempt(
       Number(assignmentAttemptId),
       lang,
-    );
-  }
-
-  @Get(":attemptId/completed")
-  @Roles(UserRole.LEARNER, UserRole.AUTHOR)
-  @UseGuards(AssignmentAttemptAccessControlGuard)
-  @ApiOperation({ summary: "Get an assignment attempt for an assignment." })
-  @ApiResponse({ status: 200, type: GetAssignmentAttemptResponseDto })
-  @ApiResponse({ status: 403 })
-  getLearnerAssignmentAttempt(
-    @Param("attemptId") assignmentAttemptId: number,
-  ): Promise<GetAssignmentAttemptResponseDto> {
-    return this.attemptService.getLearnerAssignmentAttempt(
-      Number(assignmentAttemptId),
-    );
-  }
-
-  @Patch(":attemptId")
-  @Roles(UserRole.LEARNER, UserRole.AUTHOR)
-  @UseGuards(AssignmentAttemptAccessControlGuard)
-  @ApiOperation({
-    summary: "Update an assignment attempt for an assignment.",
-  })
-  @ApiBody({
-    type: LearnerUpdateAssignmentAttemptRequestDto,
-    required: true,
-  })
-  @ApiResponse({ status: 201, type: BaseAssignmentAttemptResponseDto })
-  @ApiResponse({
-    status: 422,
-    type: String,
-    description: SUBMISSION_DEADLINE_EXCEPTION_MESSAGE,
-  })
-  @ApiResponse({
-    status: 429,
-    type: String,
-    description: IN_COOLDOWN_PERIOD,
-  })
-  @ApiResponse({
-    status: 500,
-    type: String,
-    description: GRADE_SUBMISSION_EXCEPTION,
-  })
-  @ApiResponse({ status: 403 })
-  async updateAssignmentAttempt(
-    @Param("attemptId") assignmentAttemptId: number,
-    @Param("assignmentId") assignmentId: number,
-    @Body()
-    learnerUpdateAssignmentAttemptDto: LearnerUpdateAssignmentAttemptRequestDto,
-    @Req() request: UserSessionRequest,
-  ): Promise<UpdateAssignmentAttemptResponseDto> {
-    const authCookie: string = request?.cookies?.authentication as string;
-    const gradingCallbackRequired =
-      request?.userSession.gradingCallbackRequired ?? false;
-
-    return this.attemptService.updateAssignmentAttempt(
-      Number(assignmentAttemptId),
-      Number(assignmentId),
-      learnerUpdateAssignmentAttemptDto,
-      authCookie,
-      gradingCallbackRequired,
-      request,
     );
   }
 

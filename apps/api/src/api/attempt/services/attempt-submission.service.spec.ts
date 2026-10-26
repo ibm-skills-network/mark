@@ -99,7 +99,6 @@ describe("AttemptSubmissionService - Grading Validation", () => {
 
   const mockQuestionResponseService = {
     submitQuestions: jest.fn(),
-    createQuestionResponse: jest.fn(),
     gradeQuestionsForLearner: jest.fn(),
     commitAttemptWithResponses: jest.fn(),
     markGradingComplete: jest.fn(),
@@ -396,14 +395,16 @@ describe("AttemptSubmissionService - Grading Validation", () => {
         include: {
           currentVersion: {
             include: {
-              questionVersions: true,
+              questionVersions: { orderBy: { id: "asc" } },
             },
           },
           questions: {
             where: { isDeleted: false },
+            orderBy: { id: "asc" },
             include: {
               variants: {
                 where: { isDeleted: false },
+                orderBy: { id: "asc" },
               },
             },
           },
@@ -677,133 +678,6 @@ describe("AttemptSubmissionService - Grading Validation", () => {
     });
   });
 
-  describe("autoSaveQuestionResponse - oversized submission boundary", () => {
-    const learnerSession: UserSession = {
-      userId: "learner-1",
-      role: UserRole.LEARNER,
-      assignmentId: 99,
-      groupId: "group-1",
-    };
-
-    const requestDto = {
-      learnerFileResponse: [],
-    } as unknown as Parameters<
-      AttemptSubmissionService["autoSaveQuestionResponse"]
-    >[3];
-
-    it("keeps previous responses when re-evaluation encounters a source failure", async () => {
-      const error = new SourceProcessingError("extraction_failed", "file:0");
-      mockQuestionResponseService.createQuestionResponse.mockRejectedValueOnce(
-        error,
-      );
-      await expect(
-        service.autoSaveQuestionResponse(
-          1,
-          99,
-          2,
-          requestDto,
-          learnerSession,
-          "en",
-        ),
-      ).rejects.toBe(error);
-      expect(mockPrisma.questionResponse.deleteMany).not.toHaveBeenCalled();
-      expect(mockLtiGradeSyncService.createAndSync).not.toHaveBeenCalled();
-    });
-
-    it("translates an OversizedSubmissionError into a BadRequestException carrying the learner message", async () => {
-      const oversized = new OversizedSubmissionError({
-        blockCount: 60_000,
-        cap: 50_000,
-        filename: "huge.xlsx",
-      });
-      mockQuestionResponseService.createQuestionResponse.mockRejectedValue(
-        oversized,
-      );
-
-      const rejection = await service
-        .autoSaveQuestionResponse(71, 99, 101, requestDto, learnerSession, "en")
-        .then(
-          () => {
-            throw new Error("expected autoSaveQuestionResponse to reject");
-          },
-          (error: unknown) => error,
-        );
-
-      expect(rejection).toBeInstanceOf(BadRequestException);
-      expect((rejection as BadRequestException).message).toBe(
-        oversized.learnerMessage,
-      );
-      expect(mockPrisma.questionResponse.deleteMany).not.toHaveBeenCalled();
-    });
-
-    it("translates an UnsupportedImageFormatError into a BadRequestException carrying the learner message", async () => {
-      const unsupported = new UnsupportedImageFormatError({
-        filename: "photo.heic",
-        detectedFormat: "image/heic",
-        reason: "unsupported format detected at submission",
-      });
-      mockQuestionResponseService.createQuestionResponse.mockRejectedValue(
-        unsupported,
-      );
-
-      const rejection = await service
-        .autoSaveQuestionResponse(71, 99, 101, requestDto, learnerSession, "en")
-        .then(
-          () => {
-            throw new Error("expected autoSaveQuestionResponse to reject");
-          },
-          (error: unknown) => error,
-        );
-
-      expect(rejection).toBeInstanceOf(BadRequestException);
-      expect((rejection as BadRequestException).message).toBe(
-        unsupported.learnerMessage,
-      );
-      expect(mockPrisma.questionResponse.deleteMany).not.toHaveBeenCalled();
-    });
-
-    it("lets non-oversized errors pass through unchanged", async () => {
-      const boom = new Error("boom");
-      mockQuestionResponseService.createQuestionResponse.mockRejectedValue(
-        boom,
-      );
-
-      await expect(
-        service.autoSaveQuestionResponse(
-          71,
-          99,
-          101,
-          requestDto,
-          learnerSession,
-          "en",
-        ),
-      ).rejects.toBe(boom);
-    });
-
-    it("maps a GithubRateLimitedError into a ServiceUnavailableException (retryable 503)", async () => {
-      const rateLimited = new GithubRateLimitedError({
-        owner: "octocat",
-        repo: "hello-world",
-        requestUrl: "https://api.github.com/repos/octocat/hello-world",
-      });
-      mockQuestionResponseService.createQuestionResponse.mockRejectedValue(
-        rateLimited,
-      );
-
-      const rejection = await service
-        .autoSaveQuestionResponse(71, 99, 101, requestDto, learnerSession, "en")
-        .then(
-          () => {
-            throw new Error("expected autoSaveQuestionResponse to reject");
-          },
-          (error: unknown) => error,
-        );
-
-      expect(rejection).toBeInstanceOf(ServiceUnavailableException);
-      expect(mockPrisma.questionResponse.deleteMany).not.toHaveBeenCalled();
-    });
-  });
-
   describe("attempt access reads", () => {
     const assignmentAttempt = {
       id: 71,
@@ -879,198 +753,10 @@ describe("AttemptSubmissionService - Grading Validation", () => {
       );
     });
 
-    it("gets learner attempts from the cache-backed question DTO loader", async () => {
-      const mapperSpy = jest
-        .spyOn(service as never, "applyVisibilitySettings")
-        .mockImplementation(() => undefined);
-      const buildSpy = jest
-        .spyOn(AttemptQuestionsMapper, "buildQuestionsWithResponses")
-        .mockResolvedValue([{ id: 101 }, { id: 202 }]);
-
-      const result = await service.getLearnerAssignmentAttempt(71, {
-        userId: "learner-1",
-        role: UserRole.LEARNER,
-        assignmentId: 99,
-        groupId: "group-1",
-      });
-
-      expect(
-        mockAttemptAccessCacheService.getQuestionDtosForAttemptAccess,
-      ).toHaveBeenCalledWith({
-        assignmentId: 99,
-        assignmentUpdatedAt: new Date("2026-04-26T00:00:00.000Z"),
-        assignmentVersionId: 12,
-        questionVersions: [],
-      });
-      expect(mockPrisma.question.findMany).not.toHaveBeenCalled();
-      expect(buildSpy).toHaveBeenCalledWith(
-        expect.any(Object),
-        expect.arrayContaining([
-          expect.objectContaining({ id: 101, answer: "true" }),
-          expect.objectContaining({ id: 202, answer: "false" }),
-        ]),
-        expect.any(Object),
-        mockPrisma,
-        "en",
+    it("strips the pinned version's question versions and the variant rows from in-progress attempt reads", async () => {
+      mockTranslationService.getTranslationsForAttempt.mockResolvedValue(
+        new Map(),
       );
-      expect(result.questions).toEqual([{ id: 101 }, { id: 202 }]);
-
-      buildSpy.mockRestore();
-      mapperSpy.mockRestore();
-    });
-
-    it("includes totalPossiblePoints and totalPointsEarned so the success page can render the score even when showQuestions strips the questions array", async () => {
-      mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
-        ...assignmentAttempt,
-        questionResponses: [
-          { questionId: 101, points: 4 },
-          { questionId: 202, points: 3 },
-        ],
-      });
-      const buildSpy = jest
-        .spyOn(AttemptQuestionsMapper, "buildQuestionsWithResponses")
-        .mockResolvedValue([
-          { id: 101, totalPoints: 5 },
-          { id: 202, totalPoints: 5 },
-        ]);
-      // Force the visibility filter to actually run so we prove totals are
-      // captured before it strips the questions array.
-      mockPrisma.assignment.findUnique.mockResolvedValue({
-        id: 99,
-        questionOrder: [101, 202],
-        displayOrder: null,
-        passingGrade: 50,
-        showAssignmentScore: true,
-        showSubmissionFeedback: true,
-        showQuestionScore: true,
-        showQuestions: false,
-        updatedAt: new Date("2026-04-26T00:00:00.000Z"),
-        currentVersion: { correctAnswerVisibility: "ALWAYS" },
-      });
-
-      const result = await service.getLearnerAssignmentAttempt(71, {
-        userId: "learner-1",
-        role: UserRole.LEARNER,
-        assignmentId: 99,
-        groupId: "group-1",
-      });
-
-      expect(result.totalPossiblePoints).toBe(10);
-      expect(result.totalPointsEarned).toBe(7);
-      expect(result.questions).toEqual([]);
-
-      buildSpy.mockRestore();
-    });
-
-    it("scopes totalPossiblePoints to the questions served this attempt, not the whole question bank", async () => {
-      // Question-bank assignment: bank of 3 cached questions, but only 2 were
-      // drawn for this attempt (questionOrder). The denominator must be the 2
-      // served (10), not the full bank of 3 (15) — otherwise the success page
-      // shows an inflated "X/15" when only 2 questions were answered.
-      mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
-        ...assignmentAttempt,
-        questionOrder: [101, 202],
-        questionResponses: [
-          { questionId: 101, points: 5 },
-          { questionId: 202, points: 5 },
-        ],
-      });
-      mockAttemptAccessCacheService.getQuestionDtosForAttemptAccess.mockResolvedValue(
-        [
-          { id: 101, totalPoints: 5 },
-          { id: 202, totalPoints: 5 },
-          { id: 303, totalPoints: 5 }, // in the bank, not served this attempt
-        ],
-      );
-      const buildSpy = jest
-        .spyOn(AttemptQuestionsMapper, "buildQuestionsWithResponses")
-        .mockResolvedValue([
-          { id: 101, totalPoints: 5 },
-          { id: 202, totalPoints: 5 },
-        ]);
-      mockPrisma.assignment.findUnique.mockResolvedValue({
-        id: 99,
-        questionOrder: [101, 202, 303],
-        displayOrder: null,
-        passingGrade: 50,
-        showAssignmentScore: true,
-        showSubmissionFeedback: true,
-        showQuestionScore: true,
-        showQuestions: true,
-        updatedAt: new Date("2026-04-26T00:00:00.000Z"),
-        currentVersion: { correctAnswerVisibility: "ALWAYS" },
-      });
-
-      const result = await service.getLearnerAssignmentAttempt(71, {
-        userId: "learner-1",
-        role: UserRole.LEARNER,
-        assignmentId: 99,
-        groupId: "group-1",
-      });
-
-      expect(result.totalPossiblePoints).toBe(10);
-      expect(result.totalPointsEarned).toBe(10);
-      expect(result.grade).toBe(0.9);
-
-      buildSpy.mockRestore();
-    });
-
-    it("excludes unserved and duplicate responses from the displayed numerator", async () => {
-      mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
-        ...assignmentAttempt,
-        questionOrder: [101],
-        questionResponses: [
-          { id: 1, questionId: 101, points: 3 },
-          { id: 2, questionId: 101, points: 5 },
-          { id: 3, questionId: 202, points: 5 },
-        ],
-      });
-      mockAttemptAccessCacheService.getQuestionDtosForAttemptAccess.mockResolvedValue(
-        [
-          { id: 101, totalPoints: 5 },
-          { id: 202, totalPoints: 5 },
-        ],
-      );
-      const buildSpy = jest
-        .spyOn(AttemptQuestionsMapper, "buildQuestionsWithResponses")
-        .mockResolvedValue([{ id: 101, totalPoints: 5 }]);
-
-      const result = await service.getLearnerAssignmentAttempt(71, {
-        userId: "learner-1",
-        role: UserRole.LEARNER,
-        assignmentId: 99,
-        groupId: "group-1",
-      });
-
-      expect(result.totalPossiblePoints).toBe(5);
-      expect(result.totalPointsEarned).toBe(5);
-
-      buildSpy.mockRestore();
-    });
-
-    it("uses the original maximum when a served question was deleted after submission", async () => {
-      // Non-versioned assignment: Q202 was served (in questionOrder) and graded,
-      // but the author deleted it afterwards so it is gone from the question
-      // cache. Its grading metadata preserves the original maximum.
-      mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
-        ...assignmentAttempt,
-        grade: 0.9,
-        questionOrder: [101, 202],
-        questionResponses: [
-          { questionId: 101, points: 5 },
-          {
-            questionId: 202,
-            points: 4,
-            metadata: { maxPossiblePoints: 5 },
-          }, // question deleted from the cache
-        ],
-      });
-      mockAttemptAccessCacheService.getQuestionDtosForAttemptAccess.mockResolvedValue(
-        [{ id: 101, totalPoints: 5 }], // 202 missing: deleted after submission
-      );
-      const buildSpy = jest
-        .spyOn(AttemptQuestionsMapper, "buildQuestionsWithResponses")
-        .mockResolvedValue([{ id: 101, totalPoints: 5 }]);
       mockPrisma.assignment.findUnique.mockResolvedValue({
         id: 99,
         questionOrder: [101, 202],
@@ -1081,224 +767,223 @@ describe("AttemptSubmissionService - Grading Validation", () => {
         showQuestionScore: true,
         showQuestions: true,
         updatedAt: new Date("2026-04-26T00:00:00.000Z"),
-        currentVersion: { correctAnswerVisibility: "ALWAYS" },
+        currentVersionId: 12,
+        currentVersion: { correctAnswerVisibility: "NEVER" },
       });
-
-      const result = await service.getLearnerAssignmentAttempt(71, {
-        userId: "learner-1",
-        role: UserRole.LEARNER,
-        assignmentId: 99,
-        groupId: "group-1",
-      });
-
-      expect(result.totalPossiblePoints).toBe(10);
-      expect(result.totalPointsEarned).toBe(9);
-      expect(result.totalPointsEarned).toBeLessThanOrEqual(
-        result.totalPossiblePoints as number,
-      );
-
-      buildSpy.mockRestore();
-    });
-
-    it("falls back to an archived question row when response metadata is missing", async () => {
       mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
         ...assignmentAttempt,
-        questionOrder: [101, 202],
-        questionResponses: [
-          { questionId: 101, points: 5 },
-          { questionId: 202, points: 4, metadata: null },
-        ],
-      });
-      mockAttemptAccessCacheService.getQuestionDtosForAttemptAccess.mockResolvedValue(
-        [{ id: 101, totalPoints: 5 }],
-      );
-      mockPrisma.question.findMany.mockResolvedValue([
-        { id: 202, totalPoints: 5 },
-      ]);
-      const buildSpy = jest
-        .spyOn(AttemptQuestionsMapper, "buildQuestionsWithResponses")
-        .mockResolvedValue([{ id: 101, totalPoints: 5 }]);
-
-      const result = await service.getLearnerAssignmentAttempt(71, {
-        userId: "learner-1",
-        role: UserRole.LEARNER,
-        assignmentId: 99,
-        groupId: "group-1",
-      });
-
-      expect(mockPrisma.question.findMany).toHaveBeenCalledWith({
-        where: { id: { in: [202] } },
-        select: { id: true, totalPoints: true },
-      });
-      expect(result.totalPossiblePoints).toBe(10);
-      expect(result.totalPointsEarned).toBe(9);
-
-      buildSpy.mockRestore();
-    });
-
-    it("parses persisted metadata when a deleted served question earned zero", async () => {
-      mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
-        ...assignmentAttempt,
-        grade: 0.5,
-        questionOrder: [101, 202],
-        questionResponses: [
-          { questionId: 101, points: 5 },
+        submitted: false,
+        assignmentVersion: {
+          id: 12,
+          allotedTimeMinutes: 45,
+          questionVersions: [
+            {
+              id: 1001,
+              questionId: 101,
+              answer: "the answer",
+              authorComment: "secret",
+            },
+          ],
+        },
+        questionVariants: [
           {
-            questionId: 202,
-            points: 0,
-            metadata: JSON.stringify({ maxPossiblePoints: 5 }),
+            assignmentAttemptId: 71,
+            questionId: 101,
+            questionVariantId: 5,
+            randomizedChoices: [
+              { id: 0, choice: "A", isCorrect: true, points: 5 },
+            ],
+            questionVariant: {
+              id: 5,
+              answer: "the answer",
+              variantOf: {
+                id: 101,
+                answer: "the answer",
+                authorComment: "secret",
+              },
+            },
           },
         ],
       });
-      mockAttemptAccessCacheService.getQuestionDtosForAttemptAccess.mockResolvedValue(
-        [{ id: 101, totalPoints: 5 }],
-      );
-      const buildSpy = jest
-        .spyOn(AttemptQuestionsMapper, "buildQuestionsWithResponses")
-        .mockResolvedValue([{ id: 101, totalPoints: 5 }]);
 
-      const result = await service.getLearnerAssignmentAttempt(71, {
-        userId: "learner-1",
-        role: UserRole.LEARNER,
-        assignmentId: 99,
-        groupId: "group-1",
+      const result = await service.getAssignmentAttempt(71, "en");
+      const serialized = JSON.stringify(result);
+
+      expect(result.assignmentVersion).toEqual({
+        id: 12,
+        allotedTimeMinutes: 45,
       });
+      expect(result).not.toHaveProperty("questionVariants");
+      expect(serialized).not.toContain("the answer");
+      expect(serialized).not.toContain("secret");
+      expect(serialized).not.toContain("isCorrect");
+      expect(serialized).not.toContain('"answer"');
+      expect(serialized).not.toContain("questionVersions");
+      expect(serialized).not.toContain("questionVariants");
+      for (const question of result.questions) {
+        expect(JSON.stringify(question.choices)).not.toContain('"points"');
+        expect(JSON.stringify(question.randomizedChoices)).not.toContain(
+          '"points"',
+        );
+      }
 
-      expect(result.totalPossiblePoints).toBe(10);
-      expect(result.totalPointsEarned).toBe(5);
-      expect(result.grade).toBe(0.5);
-
-      buildSpy.mockRestore();
-    });
-
-    it("clamps a response graded above its question's max and recomputes the displayed grade so an already-graded attempt cannot show a false 100%", async () => {
-      // Reproduces the multi-select overshoot: Q202 was graded 2 points on a
-      // 1-point question, which inflated the attempt total so the +1 overshoot
-      // masked Q303's 0 and produced a false 3/3 = 100%.
-      mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
-        ...assignmentAttempt,
-        grade: 1, // stored grade was derived from the inflated points
-        questionOrder: [101, 202, 303], // all three served this attempt
-        questionResponses: [
-          { questionId: 101, points: 1 },
-          { questionId: 202, points: 2 }, // over the question's max of 1
-          { questionId: 303, points: 0 },
-        ],
-      });
-      mockAttemptAccessCacheService.getQuestionDtosForAttemptAccess.mockResolvedValue(
+      // The contract's Attempt schema, exactly.
+      expect(Object.keys(result).sort()).toEqual(
         [
-          { id: 101, totalPoints: 1 },
-          { id: 202, totalPoints: 1 },
-          { id: 303, totalPoints: 1 },
-        ],
+          "id",
+          "assignmentId",
+          "assignmentVersionId",
+          "userId",
+          "submitted",
+          "grade",
+          "expiresAt",
+          "createdAt",
+          "questionOrder",
+          "comments",
+          "preferredLanguage",
+          "serverNow",
+          "questions",
+          "questionResponses",
+          "passingGrade",
+          "showAssignmentScore",
+          "showSubmissionFeedback",
+          "showQuestionScore",
+          "showQuestions",
+          "correctAnswerVisibility",
+          "currentVersionId",
+          "versionMismatch",
+          "assignmentVersion",
+        ].sort(),
       );
-      const buildSpy = jest
-        .spyOn(AttemptQuestionsMapper, "buildQuestionsWithResponses")
-        .mockResolvedValue([
-          { id: 101, totalPoints: 1 },
-          { id: 202, totalPoints: 1 },
-          { id: 303, totalPoints: 1 },
-        ]);
-      mockPrisma.assignment.findUnique.mockResolvedValue({
-        id: 99,
-        questionOrder: [101, 202, 303],
-        displayOrder: null,
-        passingGrade: 50,
-        showAssignmentScore: true,
-        showSubmissionFeedback: true,
-        showQuestionScore: true,
-        showQuestions: true,
-        updatedAt: new Date("2026-04-26T00:00:00.000Z"),
-        currentVersion: { correctAnswerVisibility: "ALWAYS" },
-      });
-
-      const result = await service.getLearnerAssignmentAttempt(71, {
-        userId: "learner-1",
-        role: UserRole.LEARNER,
-        assignmentId: 99,
-        groupId: "group-1",
-      });
-
-      expect(result.totalPossiblePoints).toBe(3);
-      // 1 + min(2,1) + 0 = 2, not the inflated 1 + 2 + 0 = 3.
-      expect(result.totalPointsEarned).toBe(2);
-      expect(result.grade).toBeCloseTo(2 / 3);
-
-      buildSpy.mockRestore();
+      // A stored frozen order is served as a real array of sanitised choices.
+      const frozen = result.questions.find((question) => question.id === 101);
+      expect(Array.isArray(frozen?.randomizedChoices)).toBe(true);
+      expect(frozen?.randomizedChoices).toEqual([{ id: 0, choice: "A" }]);
+      // No frozen order means null, never a string.
+      const unfrozen = result.questions.find((question) => question.id === 202);
+      expect(unfrozen?.randomizedChoices).toBeNull();
+      expect(unfrozen?.translations).toEqual({});
+      // Unsubmitted: no grade even though the row carries one.
+      expect(result.grade).toBeNull();
     });
 
-    it("leaves the stored grade untouched when no response exceeds its question's max", async () => {
-      mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
-        ...assignmentAttempt,
-        grade: 0.7,
-        questionResponses: [
-          { questionId: 101, points: 4 },
-          { questionId: 202, points: 3 },
-        ],
-      });
-      const buildSpy = jest
-        .spyOn(AttemptQuestionsMapper, "buildQuestionsWithResponses")
-        .mockResolvedValue([
-          { id: 101, totalPoints: 5 },
-          { id: 202, totalPoints: 5 },
-        ]);
-
-      const result = await service.getLearnerAssignmentAttempt(71, {
-        userId: "learner-1",
-        role: UserRole.LEARNER,
-        assignmentId: 99,
-        groupId: "group-1",
-      });
-
-      expect(result.totalPointsEarned).toBe(7);
-      // Nothing was clamped, so the persisted grade is passed through as-is.
-      expect(result.grade).toBe(0.7);
-
-      buildSpy.mockRestore();
+    const choiceQuestion = () => ({
+      id: 101,
+      question: "Question 101",
+      type: "MULTIPLE_CORRECT",
+      choices: [
+        { choice: "A", isCorrect: true, points: 5, feedback: "right" },
+        { choice: "B", isCorrect: false, points: 0, feedback: "wrong" },
+      ],
+      randomizedChoices: JSON.stringify([
+        { choice: "B", isCorrect: false, points: 0, feedback: "wrong" },
+        { choice: "A", isCorrect: true, points: 5, feedback: "right" },
+      ]),
+      scoring: { type: "CRITERIA_BASED", rubrics: [] },
+      answer: "A",
+      authorComment: "secret",
     });
 
-    it("omits totalPointsEarned when showAssignmentScore=false", async () => {
+    it("hides correct answers on an open attempt even when visibility is ALWAYS", async () => {
+      mockTranslationService.getTranslationsForAttempt.mockResolvedValue(
+        new Map(),
+      );
       mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
         ...assignmentAttempt,
-        questionOrder: [101],
-        questionResponses: [{ questionId: 101, points: 4 }],
+        submitted: false,
+        grade: null,
       });
-      mockAttemptAccessCacheService.getQuestionDtosForAttemptAccess.mockResolvedValue(
-        [{ id: 101, totalPoints: 5 }],
+      const translationBuildSpy = jest
+        .spyOn(AttemptQuestionsMapper, "buildQuestionsWithTranslations")
+        .mockResolvedValue([choiceQuestion()] as never);
+
+      const result = await service.getAssignmentAttempt(71, "en");
+      const serialized = JSON.stringify(result.questions);
+
+      expect(serialized).not.toContain("isCorrect");
+      expect(serialized).not.toContain("feedback");
+      expect(serialized).not.toContain("points");
+      expect(serialized).not.toContain("secret");
+      expect(result.questions[0]).not.toHaveProperty("answer");
+
+      translationBuildSpy.mockRestore();
+    });
+
+    it("applies the visibility setting once the attempt is submitted", async () => {
+      mockTranslationService.getTranslationsForAttempt.mockResolvedValue(
+        new Map(),
       );
-      const buildSpy = jest
-        .spyOn(AttemptQuestionsMapper, "buildQuestionsWithResponses")
-        .mockResolvedValue([{ id: 101, totalPoints: 5 }]);
-      mockPrisma.assignment.findUnique.mockResolvedValue({
-        id: 99,
-        questionOrder: [101],
-        displayOrder: null,
-        passingGrade: 50,
-        showAssignmentScore: false,
-        showSubmissionFeedback: true,
-        showQuestionScore: true,
-        showQuestions: true,
-        updatedAt: new Date("2026-04-26T00:00:00.000Z"),
-        currentVersion: { correctAnswerVisibility: "ALWAYS" },
+      mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+        ...assignmentAttempt,
+        submitted: true,
       });
+      const translationBuildSpy = jest
+        .spyOn(AttemptQuestionsMapper, "buildQuestionsWithTranslations")
+        .mockResolvedValue([choiceQuestion()] as never);
 
-      const result = await service.getLearnerAssignmentAttempt(71, {
-        userId: "learner-1",
-        role: UserRole.LEARNER,
-        assignmentId: 99,
-        groupId: "group-1",
+      try {
+        const result = await service.getAssignmentAttempt(71, "en");
+        const wire = JSON.parse(JSON.stringify(result.questions)) as Array<{
+          choices: Array<Record<string, unknown>>;
+          randomizedChoices: Array<Record<string, unknown>>;
+        }>;
+
+        // `choices` never carries the key, even once revealed.
+        for (const choice of wire[0].choices) {
+          expect(Object.keys(choice).sort()).toEqual(["choice", "id"]);
+        }
+        // The frozen list carries isCorrect and feedback when revealed.
+        expect(wire[0].randomizedChoices).toEqual([
+          { id: null, choice: "B", isCorrect: false, feedback: "wrong" },
+          { id: null, choice: "A", isCorrect: true, feedback: "right" },
+        ]);
+        expect(JSON.stringify(wire)).not.toContain("points");
+      } finally {
+        translationBuildSpy.mockRestore();
+      }
+    });
+
+    it("serves feedback as null on revealed items the author left without any", async () => {
+      mockTranslationService.getTranslationsForAttempt.mockResolvedValue(
+        new Map(),
+      );
+      mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
+        ...assignmentAttempt,
+        submitted: true,
       });
+      const translationBuildSpy = jest
+        .spyOn(AttemptQuestionsMapper, "buildQuestionsWithTranslations")
+        .mockResolvedValue([
+          {
+            ...choiceQuestion(),
+            randomizedChoices: [{ id: 1, choice: "A", isCorrect: true }],
+            translations: {
+              fr: {
+                translatedText: "Q",
+                translatedChoices: JSON.stringify([
+                  { id: 1, choice: "Un", isCorrect: true, points: 5 },
+                ]),
+              },
+            },
+          },
+        ] as never);
 
-      expect(result.totalPossiblePoints).toBe(5);
-      expect(result.totalPointsEarned).toBeUndefined();
+      try {
+        const result = await service.getAssignmentAttempt(71, "fr");
+        const wire = JSON.stringify(result.questions[0]);
 
-      buildSpy.mockRestore();
+        expect(wire).toContain(
+          '"randomizedChoices":[{"id":1,"choice":"A","isCorrect":true,"feedback":null}]',
+        );
+        expect(wire).toContain(
+          '"translatedChoices":[{"id":1,"choice":"Un","isCorrect":true,"feedback":null}]',
+        );
+      } finally {
+        translationBuildSpy.mockRestore();
+      }
     });
 
     it("serves a region-coded language its own translation instead of the authored English", async () => {
-      const removeSensitiveSpy = jest
-        .spyOn(service as never, "removeSensitiveData")
-        .mockImplementation(() => undefined);
       mockTranslationService.getTranslationsForAttempt.mockResolvedValue(
         new Map([
           [
@@ -1326,8 +1011,6 @@ describe("AttemptSubmissionService - Grading Validation", () => {
         "问题一零一",
         "问题二零二",
       ]);
-
-      removeSensitiveSpy.mockRestore();
     });
 
     it("uses cached questions for translation-aware attempt reads", async () => {
@@ -1337,10 +1020,7 @@ describe("AttemptSubmissionService - Grading Validation", () => {
       );
       const translationBuildSpy = jest
         .spyOn(AttemptQuestionsMapper, "buildQuestionsWithTranslations")
-        .mockResolvedValue([{ id: 101 }, { id: 202 }]);
-      const removeSensitiveSpy = jest
-        .spyOn(service as never, "removeSensitiveData")
-        .mockImplementation(() => undefined);
+        .mockResolvedValue([{ id: 101 }, { id: 202 }] as never);
 
       const result = await service.getAssignmentAttempt(71, "fr");
 
@@ -1365,10 +1045,35 @@ describe("AttemptSubmissionService - Grading Validation", () => {
         "fr",
       );
       expect(translationBuildSpy).toHaveBeenCalled();
-      expect(result.questions).toEqual([{ id: 101 }, { id: 202 }]);
+      expect(result.questions.map((question) => question.id)).toEqual([
+        101, 202,
+      ]);
 
       translationBuildSpy.mockRestore();
-      removeSensitiveSpy.mockRestore();
+    });
+
+    it("loads the attempt's responses and variant picks in a stable order", async () => {
+      mockTranslationService.getTranslationsForAttempt.mockResolvedValue(
+        new Map(),
+      );
+      const translationBuildSpy = jest
+        .spyOn(AttemptQuestionsMapper, "buildQuestionsWithTranslations")
+        .mockResolvedValue([] as never);
+
+      await service.getAssignmentAttempt(71, "en");
+
+      expect(mockPrisma.assignmentAttempt.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({
+          include: expect.objectContaining({
+            questionResponses: { orderBy: { id: "asc" } },
+            questionVariants: expect.objectContaining({
+              orderBy: { questionId: "asc" },
+            }),
+          }),
+        }),
+      );
+
+      translationBuildSpy.mockRestore();
     });
   });
 
@@ -1484,9 +1189,9 @@ describe("AttemptSubmissionService - Grading Validation", () => {
         authorRequest as UpdateAttemptRequest,
       );
 
-      expect(result.grade).toBeUndefined();
-      expect(result.totalPointsEarned).toBe(1);
-      expect(result.totalPossiblePoints).toBe(1);
+      expect(result.grade).toBeNull();
+      expect(result.totalPointsEarned).toBeNull();
+      expect(result.totalPossiblePoints).toBeNull();
     });
 
     it("returns the grade when showAssignmentScore is true", async () => {
@@ -1846,94 +1551,6 @@ describe("AttemptSubmissionService - Grading Validation", () => {
   });
 
   // ─── Change 4: authorComment bug fix ─────────────────────────────────────
-
-  describe("removeSensitiveData — authorComment always null (Change 4)", () => {
-    type QuestionLike = {
-      authorComment: string | null;
-      scoring?: { showRubricsToLearner?: boolean; rubrics?: unknown };
-      choices?: Array<{
-        points?: number;
-        isCorrect?: boolean;
-        feedback?: string;
-      }>;
-    };
-
-    const callRemoveSensitiveData = (
-      questions: QuestionLike[],
-      correctAnswerVisibility = "NEVER",
-      grade = 0,
-      passingGrade = 0,
-    ) =>
-      (
-        service as unknown as {
-          removeSensitiveData: (
-            questions: QuestionLike[],
-            assignment: { correctAnswerVisibility: string },
-            grade: number,
-            passingGrade: number,
-          ) => void;
-        }
-      ).removeSensitiveData(
-        questions,
-        { correctAnswerVisibility },
-        grade,
-        passingGrade,
-      );
-
-    it("sets authorComment to null for every question", () => {
-      const questions: QuestionLike[] = [
-        { authorComment: "Internal note only for graders" },
-        { authorComment: "Another internal note" },
-      ];
-
-      callRemoveSensitiveData(questions);
-
-      expect(questions[0].authorComment).toBeNull();
-      expect(questions[1].authorComment).toBeNull();
-    });
-
-    it("sets authorComment to null even when it was already null", () => {
-      const questions: QuestionLike[] = [{ authorComment: null }];
-
-      callRemoveSensitiveData(questions);
-
-      expect(questions[0].authorComment).toBeNull();
-    });
-
-    it("sets authorComment to null regardless of grade or passing threshold", () => {
-      const question: QuestionLike = { authorComment: "Should be hidden" };
-
-      // High grade — still must be null
-      callRemoveSensitiveData([question], "PASSING", 1, 0.5);
-      expect(question.authorComment).toBeNull();
-    });
-
-    it("does not expose rubrics when showRubricsToLearner is false", () => {
-      const question: QuestionLike = {
-        authorComment: "hidden",
-        scoring: {
-          showRubricsToLearner: false,
-          rubrics: { criterion: "fluency" },
-        },
-      };
-
-      callRemoveSensitiveData([question]);
-
-      expect(question.scoring?.rubrics).toBeUndefined();
-    });
-
-    it("preserves rubrics when showRubricsToLearner is true", () => {
-      const rubrics = { criterion: "fluency" };
-      const question: QuestionLike = {
-        authorComment: "hidden",
-        scoring: { showRubricsToLearner: true, rubrics },
-      };
-
-      callRemoveSensitiveData([question]);
-
-      expect(question.scoring?.rubrics).toBe(rubrics);
-    });
-  });
 
   describe("updateLearnerAttempt - submission validation", () => {
     it("throws ConflictException before grading when the attempt is already submitted", async () => {
@@ -2337,7 +1954,12 @@ describe("AttemptSubmissionService - Grading Validation", () => {
           data: expect.objectContaining({ submitted: true, grade: 0 }),
         }),
       );
-      expect(result).toMatchObject({ id: 777, submitted: true, success: true });
+      expect(result).toMatchObject({
+        id: 777,
+        submitted: true,
+        grade: null,
+        feedbacksForQuestions: [],
+      });
     });
 
     it("does not warn when an expired attempt actually carries answers", async () => {
@@ -2528,7 +2150,8 @@ describe("AttemptSubmissionService - Grading Validation", () => {
           comments: EXPIRED_ATTEMPT_COMMENT,
         }),
       });
-      expect(result).toMatchObject({ id: 900, submitted: true, grade: 0 });
+      // Closed at zero; the result shows nothing.
+      expect(result).toMatchObject({ id: 900, submitted: true, grade: null });
     });
 
     it("does not overwrite a grade a concurrent submit already committed", async () => {
@@ -2664,66 +2287,6 @@ describe("AttemptSubmissionService - Grading Validation", () => {
         await expect(
           service.assertLearnerAttemptOpenForSubmit(8, new Date()),
         ).rejects.toBeInstanceOf(NotFoundException);
-      });
-    });
-
-    describe("getAttemptSubmissionStatus", () => {
-      it("reports a fresh server clock and whether submits are still accepted", async () => {
-        const expiresAt = new Date(Date.now() + 5 * 60_000);
-        mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
-          id: 9,
-          submitted: false,
-          comments: null,
-          expiresAt,
-        });
-
-        const before = Date.now();
-        const status = await service.getAttemptSubmissionStatus(9);
-        const after = Date.now();
-
-        expect(status).toMatchObject({
-          id: 9,
-          submitted: false,
-          closedAtTimeLimit: false,
-          acceptingSubmissions: true,
-          expiresAt: expiresAt.toISOString(),
-        });
-        const serverNow = Date.parse(status.serverNow);
-        expect(serverNow).toBeGreaterThanOrEqual(before);
-        expect(serverNow).toBeLessThanOrEqual(after);
-      });
-
-      it("reports an attempt closed at its time limit as not accepting submits", async () => {
-        mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
-          id: 1873208,
-          submitted: true,
-          comments: EXPIRED_ATTEMPT_COMMENT,
-          expiresAt: new Date(Date.now() - 60_000),
-        });
-
-        await expect(
-          service.getAttemptSubmissionStatus(1873208),
-        ).resolves.toMatchObject({
-          submitted: true,
-          closedAtTimeLimit: true,
-          acceptingSubmissions: false,
-        });
-      });
-
-      it("reports an unsubmitted attempt past its grace window as not accepting submits", async () => {
-        mockPrisma.assignmentAttempt.findUnique.mockResolvedValue({
-          id: 10,
-          submitted: false,
-          comments: null,
-          expiresAt: new Date(Date.now() - 31_000),
-        });
-
-        await expect(
-          service.getAttemptSubmissionStatus(10),
-        ).resolves.toMatchObject({
-          submitted: false,
-          acceptingSubmissions: false,
-        });
       });
     });
   });

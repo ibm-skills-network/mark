@@ -7,7 +7,6 @@ import {
   ResponseType,
 } from "@prisma/client";
 import { JsonValue } from "@prisma/client/runtime/library";
-import { AssignmentAttemptQuestions } from "src/api/assignment/attempt/dto/assignment-attempt/get.assignment.attempt.response.dto";
 import {
   AttemptQuestionDto,
   Choice,
@@ -16,6 +15,12 @@ import {
   VideoPresentationConfig,
 } from "src/api/assignment/dto/update.questions.request.dto";
 import { PrismaService } from "../../../../database/prisma.service";
+import { CompletedAttemptQuestionDto } from "../../dto/completed-attempt.response.dto";
+import {
+  applyCorrectOptionsVisibility,
+  applyTrueFalseAnswerVisibility,
+} from "./correct-options-feedback.util";
+import { sanitizeLearnerChoices } from "./learner-attempt-shape.util";
 
 import {
   findQuestionTranslation,
@@ -23,6 +28,17 @@ import {
 } from "./translation-language.util";
 
 const logger = new Logger("AttemptQuestionsMapper");
+
+/** A stored JSON value, parsed when held as JSON text; absent or unparsable is null. */
+function parseStoredJson(value: unknown): unknown {
+  if (typeof value !== "string") return value ?? null;
+  try {
+    return JSON.parse(value) as unknown;
+  } catch {
+    // Unparsable text is treated as absent.
+    return null;
+  }
+}
 
 /**
  * Extended Choice type to include optional id property
@@ -87,7 +103,7 @@ export type PrismaNestedVariant = {
  */
 export interface TranslatedContent {
   translatedText: string;
-  translatedChoices?: ExtendedChoice[] | string;
+  translatedChoices?: ExtendedChoice[] | string | null;
 }
 
 /**
@@ -109,20 +125,43 @@ export interface AssignmentForMapping {
   showSubmissionFeedback?: boolean;
   showQuestionScore?: boolean;
 }
+/** What the completed-attempt shaping needs besides the questions. */
+export interface CompletedQuestionOptions {
+  /** Whether choices carry `isCorrect`/`feedback`. */
+  revealAnswers: boolean;
+  showQuestionScore: boolean;
+  showSubmissionFeedback: boolean;
+  /** The newest served response per question id. */
+  responseByQuestionId: Map<number, QuestionResponse>;
+}
+
+/** A served question with the text and choices the learner saw. */
+interface ServedQuestion {
+  source: EnhancedAttemptQuestionDto;
+  variantId: number | undefined;
+  question: string;
+  choices: ExtendedChoice[];
+  scoring: unknown;
+}
+
 /**
  * Utility class for mapping and transforming questions for assignment attempts
  */
 export class AttemptQuestionsMapper {
   /**
-   * Build questions with responses for an attempt
+   * Build the questions of a submitted attempt for the results page, in the
+   * order the attempt was served. Each question is shaped key by key: choices
+   * carry `isCorrect`/`feedback` only when `revealAnswers` is set, rubrics only
+   * when the author shows them, and the learner's newest response is attached
+   * with its points and feedback nulled per the assignment's settings.
    */
-  static async buildQuestionsWithResponses(
+  static async buildCompletedQuestions(
     assignmentAttempt: AssignmentAttemptWithRelations,
     questions: EnhancedAttemptQuestionDto[],
     assignment: AssignmentForMapping,
     prisma: PrismaService,
-    language?: string,
-  ): Promise<AssignmentAttemptQuestions[]> {
+    options: CompletedQuestionOptions,
+  ): Promise<CompletedAttemptQuestionDto[]> {
     const questionOrder: number[] = assignmentAttempt.questionOrder?.length
       ? assignmentAttempt.questionOrder
       : assignment.questionOrder?.length
@@ -132,75 +171,173 @@ export class AttemptQuestionsMapper {
     const questionById = new Map<number, EnhancedAttemptQuestionDto>(
       questions.map((q) => [q.id, q]),
     );
-
-    const questionVariantsArray = assignmentAttempt.questionVariants ?? [];
-    const questionsWithVariants = questionVariantsArray
-      .map((qv) => {
-        const variant = qv.questionVariant;
-        const originalQ = questionById.get(qv.questionId);
-
-        if (!originalQ) {
-          return null;
-        }
-
-        const questionText = variant?.variantContent ?? originalQ.question;
-        const scoring = variant?.scoring ?? originalQ.scoring;
-        const maxWords = variant?.maxWords ?? originalQ.maxWords;
-        const maxChars = variant?.maxCharacters ?? originalQ.maxCharacters;
-
-        const finalChoices = qv.randomizedChoices
-          ? this.parseChoices(qv.randomizedChoices)
-          : this.parseChoices(variant?.choices ?? originalQ.choices);
-
-        return {
-          id: originalQ.id,
-          variantId: variant ? variant.id : undefined,
-          question: questionText,
-          choices: finalChoices,
-          authorComment: null,
-          maxWords,
-          maxCharacters: maxChars,
-          scoring: scoring as ScoringDto,
-          totalPoints: originalQ.totalPoints,
-          answer: variant?.answer ?? originalQ.answer,
-          type: originalQ.type,
-          assignmentId: originalQ.assignmentId,
-          gradingContextQuestionIds: originalQ.gradingContextQuestionIds,
-          responseType: originalQ.responseType,
-          isDeleted: originalQ.isDeleted,
-          randomizedChoices: originalQ.randomizedChoices,
-          videoPresentationConfig: originalQ.videoPresentationConfig,
-          liveRecordingConfig: originalQ.liveRecordingConfig,
-        } as EnhancedAttemptQuestionDto;
-      })
-      .filter((q): q is EnhancedAttemptQuestionDto => q !== null);
-
-    const questionVariantsMap = new Map<number, EnhancedAttemptQuestionDto>(
-      questionsWithVariants.map((question) => [question.id, question]),
+    const variantByQuestionId = new Map<number, PrismaNestedVariant>(
+      (assignmentAttempt.questionVariants ?? []).map((qv) => [
+        qv.questionId,
+        qv,
+      ]),
     );
 
-    const mergedQuestions = questions.map((originalQ) => {
-      const variantQ = questionVariantsMap.get(originalQ.id);
-      if (variantQ) {
-        return variantQ;
-      }
-      return { ...originalQ, variantId: undefined, authorComment: null };
-    });
-
-    const questionsWithResponses = this.constructQuestionsWithResponses(
-      mergedQuestions,
-      assignmentAttempt.questionResponses,
-    );
-
-    const finalQuestions = questionOrder
-      .map((qId) => questionsWithResponses.find((q) => q.id === qId))
-      .filter((q): q is AssignmentAttemptQuestions => q !== undefined);
-
-    if (language && language !== "en") {
-      await this.applyTranslations(finalQuestions, prisma, language);
+    const served: ServedQuestion[] = [];
+    for (const questionId of questionOrder) {
+      const original = questionById.get(questionId);
+      if (!original) continue;
+      const pick = variantByQuestionId.get(questionId);
+      const variant = pick?.questionVariant ?? undefined;
+      // The frozen order wins; an attempt without one (stored as a non-array
+      // such as `false`) shows the variant's or the question's own choices.
+      const frozenChoices = this.parseChoices(pick?.randomizedChoices);
+      served.push({
+        source: original,
+        variantId: variant?.id,
+        question: variant?.variantContent ?? original.question,
+        choices:
+          frozenChoices.length > 0
+            ? frozenChoices
+            : this.parseChoices(variant?.choices ?? original.choices),
+        scoring: variant?.scoring ?? original.scoring,
+      });
     }
 
-    return finalQuestions;
+    const language = assignmentAttempt.preferredLanguage;
+    if (language && !this.isAuthoredLanguage(language)) {
+      await this.applyTranslations(served, prisma, language);
+    }
+
+    return served.map((question) =>
+      this.toCompletedQuestion(
+        question,
+        options.responseByQuestionId.get(question.source.id),
+        options,
+        language,
+      ),
+    );
+  }
+
+  private static toCompletedQuestion(
+    served: ServedQuestion,
+    response: QuestionResponse | undefined,
+    options: CompletedQuestionOptions,
+    language: string | null | undefined,
+  ): CompletedAttemptQuestionDto {
+    const choices = sanitizeLearnerChoices(
+      served.choices,
+      options.revealAnswers,
+    );
+    const maxPoints = served.source.totalPoints;
+    return {
+      id: served.source.id,
+      question: typeof served.question === "string" ? served.question : null,
+      type: served.source.type,
+      responseType: served.source.responseType ?? null,
+      totalPoints: maxPoints,
+      choices: choices.length > 0 ? choices : null,
+      scoring: this.visibleScoring(served.scoring),
+      response: response
+        ? {
+            learnerResponse: this.parseLearnerResponse(response),
+            points: options.showQuestionScore
+              ? this.clampPoints(response.points, maxPoints)
+              : null,
+            feedback: options.showSubmissionFeedback
+              ? this.visibleFeedback(served, response, options, language)
+              : null,
+          }
+        : null,
+    };
+  }
+
+  /**
+   * Stored feedback, with the answer key of a multiple-correct or true/false
+   * question named only when it is revealed.
+   */
+  private static visibleFeedback(
+    served: ServedQuestion,
+    response: QuestionResponse,
+    options: CompletedQuestionOptions,
+    language: string | null | undefined,
+  ): unknown[] | null {
+    const feedback = this.feedbackList(response.feedback);
+    const type = served.source.type;
+    if (
+      !feedback ||
+      (type !== QuestionType.MULTIPLE_CORRECT &&
+        type !== QuestionType.TRUE_FALSE)
+    ) {
+      return feedback;
+    }
+    const parsed = parseStoredJson(response.metadata);
+    const metadata: Record<string, unknown> =
+      parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : {};
+    if (type === QuestionType.TRUE_FALSE) {
+      return applyTrueFalseAnswerVisibility(feedback, {
+        revealAnswers: options.revealAnswers,
+        isCorrect:
+          typeof metadata.isCorrect === "boolean"
+            ? metadata.isCorrect
+            : undefined,
+        correctAnswer:
+          typeof metadata.correctAnswer === "boolean"
+            ? metadata.correctAnswer
+            : undefined,
+        language,
+      });
+    }
+    return applyCorrectOptionsVisibility(feedback, {
+      revealAnswers: options.revealAnswers,
+      perfectScore:
+        typeof metadata.perfectScore === "boolean"
+          ? metadata.perfectScore
+          : undefined,
+      correctOptions: served.choices
+        .filter((choice) => choice.isCorrect === true)
+        .map((choice) => choice.choice),
+      language,
+    });
+  }
+
+  /** Never more than the question's own maximum, as the totals are. */
+  private static clampPoints(
+    points: number | null | undefined,
+    maxPoints: number | null | undefined,
+  ): number | null {
+    if (typeof points !== "number") return null;
+    return typeof maxPoints === "number" ? Math.min(points, maxPoints) : points;
+  }
+
+  /** `learnerResponse` is stored as JSON text of the value graded. */
+  private static parseLearnerResponse(response: QuestionResponse): unknown {
+    try {
+      return JSON.parse(response.learnerResponse) as unknown;
+    } catch (error: unknown) {
+      // Older rows hold plain text; serve it as stored.
+      logger.debug(
+        `Unparsable learnerResponse on response=${response.id} question=${response.questionId}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return response.learnerResponse;
+    }
+  }
+
+  /** Stored feedback is a list of feedback entries, sometimes as JSON text. */
+  private static feedbackList(feedback: JsonValue): unknown[] | null {
+    const parsed = parseStoredJson(feedback);
+    if (Array.isArray(parsed)) return parsed as unknown[];
+    if (parsed && typeof parsed === "object") return [parsed];
+    return null;
+  }
+
+  /** Scoring is the grading key; only shown when the author opted in. */
+  private static visibleScoring(
+    scoring: unknown,
+  ): Record<string, unknown> | null {
+    const parsed = parseStoredJson(scoring);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return null;
+    }
+    const record = parsed as Record<string, unknown>;
+    return record.showRubricsToLearner === true ? { ...record } : null;
   }
   /**
    * Build questions with translations for an assignment attempt
@@ -293,20 +430,21 @@ export class AttemptQuestionsMapper {
             (index) => baseChoices[index],
           );
 
-          if (orderedBaseChoices.length === baseChoices.length) {
+          // A partial permutation cannot place every choice, so authored
+          // order stands for both the base and the translated lists.
+          if (permutation.length === baseChoices.length) {
             finalChoices = orderedBaseChoices;
+            this.reorderTranslatedChoices(
+              variantTranslations,
+              permutation,
+              baseChoices,
+            );
+            this.reorderTranslatedChoices(
+              questionTranslations,
+              permutation,
+              baseChoices,
+            );
           }
-
-          this.reorderTranslatedChoices(
-            variantTranslations,
-            permutation,
-            baseChoices,
-          );
-          this.reorderTranslatedChoices(
-            questionTranslations,
-            permutation,
-            baseChoices,
-          );
         }
 
         const mergedTranslations = variant
@@ -332,8 +470,9 @@ export class AttemptQuestionsMapper {
               ),
         );
 
+        // Raw choices go through: the learner shaper decides what to reveal.
         const sanitizedTranslations =
-          this.sanitizeTranslationsChoices(mergedTranslations);
+          this.withParsedTranslationChoices(mergedTranslations);
         return {
           id: originalQ.id,
           question: primaryTranslation.translatedText,
@@ -342,8 +481,10 @@ export class AttemptQuestionsMapper {
           authorComment: null,
           maxWords: variant?.maxWords ?? originalQ?.maxWords,
           maxCharacters: variant?.maxCharacters ?? originalQ?.maxCharacters,
-          scoring:
-            (variant?.scoring as unknown as ScoringDto) ?? originalQ.scoring,
+          scoring: this.preferParsedScoring(
+            variant?.scoring,
+            originalQ.scoring,
+          ),
           totalPoints: originalQ.totalPoints,
           answer: variant?.answer ?? originalQ.answer,
           type: originalQ.type,
@@ -382,7 +523,7 @@ export class AttemptQuestionsMapper {
         );
 
         const sanitizedTranslations =
-          this.sanitizeTranslationsChoices(questionTranslations);
+          this.withParsedTranslationChoices(questionTranslations);
 
         return {
           id: originalQ.id,
@@ -433,11 +574,37 @@ export class AttemptQuestionsMapper {
   private static withoutAuthoredLanguage(
     translations: Record<string, TranslatedContent>,
   ): Record<string, TranslatedContent> {
+    // Copies, so reordering below never mutates the caller's translation map.
     return Object.fromEntries(
-      Object.entries(translations).filter(
-        ([code]) => !this.isAuthoredLanguage(code),
-      ),
+      Object.entries(translations)
+        .filter(([code]) => !this.isAuthoredLanguage(code))
+        .map(([code, content]) => [
+          code,
+          {
+            translatedText: content.translatedText,
+            translatedChoices:
+              this.parseOptionalChoices(content.translatedChoices) ?? undefined,
+          },
+        ]),
     );
+  }
+
+  /**
+   * Stored translated choices: an array, or JSON text of one. Anything else
+   * means the translation has no choices of its own.
+   */
+  private static parseOptionalChoices(
+    choices: unknown,
+  ): ExtendedChoice[] | null {
+    if (Array.isArray(choices)) return choices as ExtendedChoice[];
+    if (typeof choices !== "string") return null;
+    try {
+      const parsed: unknown = JSON.parse(choices);
+      return Array.isArray(parsed) ? (parsed as ExtendedChoice[]) : null;
+    } catch {
+      // Unparsable text carries no usable choices; fall back to authored.
+      return null;
+    }
   }
 
   private static isAuthoredLanguage(language: string): boolean {
@@ -501,88 +668,49 @@ export class AttemptQuestionsMapper {
   }
 
   /**
-   * Sanitize choices in all translations
-   *
-   * @param translations - The translations object with choices
-   * @returns A new translations object with sanitized choices
+   * Translations with `translatedChoices` as a parsed array or null. Choice
+   * fields are left intact; the learner shaper strips them per visibility.
    */
-  private static sanitizeTranslationsChoices(
+  private static withParsedTranslationChoices(
     translations: Record<string, TranslatedContent>,
   ): Record<string, TranslatedContent> {
-    const sanitizedTranslations: Record<string, TranslatedContent> = {};
+    const parsedTranslations: Record<string, TranslatedContent> = {};
 
     for (const [lang, content] of Object.entries(translations)) {
-      sanitizedTranslations[lang] = {
+      parsedTranslations[lang] = {
         translatedText: content.translatedText,
-        translatedChoices: content.translatedChoices
-          ? (this.sanitizeChoicesForDisplay(
-              Array.isArray(content.translatedChoices)
-                ? (content.translatedChoices as unknown as ExtendedChoice[])
-                : this.parseChoices(content.translatedChoices),
-            ) as ExtendedChoice[])
-          : null,
+        translatedChoices: this.parseOptionalChoices(content.translatedChoices),
       };
     }
 
-    return sanitizedTranslations;
+    return parsedTranslations;
   }
 
   /**
-   * Construct questions with their corresponding responses
+   * The variant's scoring when it holds a value (stored text is parsed),
+   * else the question's.
    */
-  private static constructQuestionsWithResponses(
-    questions: EnhancedAttemptQuestionDto[],
-    questionResponses: QuestionResponse[],
-  ): AssignmentAttemptQuestions[] {
-    return questions.map((question) => {
-      const correspondingResponses = questionResponses
-        .filter((response) => response.questionId === question.id)
-        .map((response) => ({
-          id: response.id,
-          variantId: question.variantId || null,
-          assignmentAttemptId: response.assignmentAttemptId,
-          questionId: response.questionId,
-          learnerResponse: response.learnerResponse,
-          points: response.points,
-          feedback: response.feedback,
-          metadata: {},
-          gradedAt: null,
-        }));
-
-      const choices = this.parseChoices(question.choices);
-
-      return {
-        id: question.id,
-        variantId: question.variantId,
-        totalPoints: question.totalPoints,
-        maxWords: question.maxWords,
-        maxCharacters: question.maxCharacters,
-        type: question.type,
-        question: question.question,
-        choices,
-        assignmentId: question.assignmentId,
-        alreadyInBackend: true,
-        questionResponses: correspondingResponses,
-        responseType: question.responseType,
-        scoring: this.shouldShowScoring(question.scoring)
-          ? question.scoring
-          : undefined,
-      } as AssignmentAttemptQuestions;
-    });
+  private static preferParsedScoring(
+    variantScoring: unknown,
+    questionScoring: unknown,
+  ): ScoringDto | null {
+    return (parseStoredJson(variantScoring) ??
+      parseStoredJson(questionScoring)) as ScoringDto | null;
   }
 
   /**
-   * Apply translations to questions
+   * Replace text and choices with the stored translation for the attempt's
+   * language, when one exists.
    */
   private static async applyTranslations(
-    questions: AssignmentAttemptQuestions[],
+    questions: ServedQuestion[],
     prisma: PrismaService,
     language: string,
   ): Promise<void> {
     for (const question of questions) {
       const translation = await findQuestionTranslation(
         prisma,
-        question.id,
+        question.source.id,
         question.variantId,
         language,
       );
@@ -624,44 +752,22 @@ export class AttemptQuestionsMapper {
     return [];
   }
 
-  /**
-   * Determine if scoring rubrics should be shown to learner
-   */
-  private static shouldShowScoring(scoring: ScoringDto | unknown): boolean {
-    if (!scoring) return false;
-
-    if (typeof scoring === "string") {
-      try {
-        const parsedScoring = JSON.parse(scoring) as {
-          showRubricsToLearner?: boolean;
-        };
-        return parsedScoring.showRubricsToLearner === true;
-      } catch {
-        return false;
-      }
-    }
-
-    return (
-      (scoring as { showRubricsToLearner?: boolean }).showRubricsToLearner ===
-      true
-    );
-  }
-
   private static reorderTranslatedChoices(
     translations: Record<string, TranslatedContent>,
     permutation: number[],
     originalChoices: ExtendedChoice[],
   ): void {
+    if (permutation.length !== originalChoices.length) return;
     for (const lang in translations) {
       const translationObject = translations[lang];
+      if (!translationObject) continue;
+      const origTranslatedChoices = this.parseOptionalChoices(
+        translationObject.translatedChoices,
+      );
       if (
-        translationObject &&
-        translationObject.translatedChoices &&
-        Array.isArray(translationObject.translatedChoices) &&
-        translationObject.translatedChoices.length === originalChoices.length
+        origTranslatedChoices &&
+        origTranslatedChoices.length === originalChoices.length
       ) {
-        const origTranslatedChoices =
-          translationObject.translatedChoices as unknown as ExtendedChoice[];
         const reorderedTranslatedChoices = permutation.map(
           (index) => origTranslatedChoices[index],
         );

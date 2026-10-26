@@ -13,48 +13,27 @@
 
 import { Injectable } from "@nestjs/common";
 import { HealthCheckResult, HealthCheckService } from "@nestjs/terminus";
-import {
-  GithubCredentialCheckService,
-  GithubCredentialState,
-} from "../api/github/github-credential-check.service";
 
 export interface IntegrationsReport {
   status: "ok" | "degraded";
   checks: {
     name: string;
-    state: GithubCredentialState;
+    state: string;
     checkedAt: string | null;
   }[];
 }
 
-const DEGRADED_STATES = new Set<GithubCredentialState>([
-  "misconfigured",
-  "not_configured",
-]);
-
 @Injectable()
 export class HealthService {
-  constructor(
-    private readonly health: HealthCheckService,
-    private readonly githubCredentials: GithubCredentialCheckService,
-  ) {}
+  constructor(private readonly health: HealthCheckService) {}
 
   /**
    * Configuration-level health of outbound integrations. Returns 200 whatever
    * the outcome — this is for operators and alerting, not for the orchestrator.
+   * No integration currently registers a check.
    */
   checkIntegrations(): IntegrationsReport {
-    const github = this.githubCredentials.getStatus();
-    return {
-      status: DEGRADED_STATES.has(github.state) ? "degraded" : "ok",
-      checks: [
-        {
-          name: "github_oauth",
-          state: github.state,
-          checkedAt: github.checkedAt,
-        },
-      ],
-    };
+    return { status: "ok", checks: [] };
   }
 
   /**

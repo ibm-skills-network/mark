@@ -37,7 +37,7 @@ import { BaseAssignmentResponseDto } from "../../dto/base.assignment.response.dt
 import {
   AssignmentResponseDto,
   GetAssignmentResponseDto,
-  LearnerGetAssignmentResponseDto,
+  LegacyLearnerGetAssignmentResponseDto,
 } from "../../dto/get.assignment.response.dto";
 import { QuestionGenerationPayload } from "../../dto/post.assignment.request.dto";
 import { assertQuestionCountsWithinCaps } from "../../utils/questions-to-generate-caps.util";
@@ -72,11 +72,17 @@ export class AssignmentControllerV1 {
   @UseGuards(AssignmentAccessControlGuard)
   @ApiOperation({ summary: "Get assignment" })
   @ApiParam({ name: "id", required: true })
-  @ApiExtraModels(GetAssignmentResponseDto, LearnerGetAssignmentResponseDto)
+  @ApiExtraModels(
+    GetAssignmentResponseDto,
+    LegacyLearnerGetAssignmentResponseDto,
+  )
   @ApiResponse({
     status: 200,
     schema: {
-      anyOf: refs(GetAssignmentResponseDto, LearnerGetAssignmentResponseDto),
+      anyOf: refs(
+        GetAssignmentResponseDto,
+        LegacyLearnerGetAssignmentResponseDto,
+      ),
     },
     description:
       "The response structure varies based on the role of the user requesting the assignment i.e. learner/author/admin (see schema).",
@@ -92,7 +98,7 @@ export class AssignmentControllerV1 {
     @Param("id") id: number,
     @Req() request: UserSessionRequest,
     @Query("lang") lang?: string,
-  ): Promise<GetAssignmentResponseDto | LearnerGetAssignmentResponseDto> {
+  ): Promise<GetAssignmentResponseDto | LegacyLearnerGetAssignmentResponseDto> {
     return this.assignmentService.get(Number(id), request.userSession, lang);
   }
 

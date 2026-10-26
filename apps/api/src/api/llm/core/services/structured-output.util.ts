@@ -2,12 +2,13 @@ import { HumanMessage } from "@langchain/core/messages";
 import { ChatOpenAI } from "@langchain/openai";
 import { Logger } from "winston";
 import {
+  z,
   ZodArray,
   ZodDefault,
-  ZodEffects,
   ZodNullable,
   ZodObject,
   ZodOptional,
+  ZodPipe,
   ZodRawShape,
   ZodRecord,
   ZodTypeAny,
@@ -16,76 +17,82 @@ import {
 import { LlmStructuredResponse } from "../interfaces/llm-provider.interface";
 import { ITokenCounter } from "../interfaces/token-counter.interface";
 
+/** Rebuild `schema` with a changed def, keeping its class, checks and metadata. */
+function cloneWith<T extends ZodTypeAny>(
+  schema: T,
+  patch: Partial<T["_zod"]["def"]>,
+): T {
+  return schema.clone({ ...schema._zod.def, ...patch });
+}
+
+function acceptsNull(schema: ZodTypeAny): boolean {
+  return schema.safeParse(null).success;
+}
+
 /**
- * OpenAI strict structured outputs require every schema field to be present
- * in `required`, so the SDK rejects any Zod schema that uses `.optional()`
- * without `.nullable()` before a request is even sent. Widen each optional
- * field to also accept null for the API call; `normalizeWidenedOutput` maps
- * the nulls the model emits for those fields back to undefined so callers
- * keep the original schema's types. Subtrees that need no widening are
- * returned as-is, so already-compatible schemas pass through unchanged.
+ * OpenAI strict structured outputs require every property to be listed in
+ * `required`. zod 4's JSON Schema emitter (the one LangChain uses for zod 4
+ * schemas) leaves an `.optional()` key out of `required` even when it is also
+ * nullable, so the request is rejected with "'required' is required to be
+ * supplied and to be an array including every key in properties". Replace
+ * each optional field with a required nullable one for the API call;
+ * `normalizeWidenedOutput` maps the nulls the model emits for those fields
+ * back to undefined so callers keep the original schema's types. Subtrees
+ * that need no widening are returned as-is.
  */
 export function widenOptionalsForStrictOutput(schema: ZodTypeAny): ZodTypeAny {
   if (schema instanceof ZodOptional) {
     const inner = schema.unwrap() as ZodTypeAny;
     const widenedInner = widenOptionalsForStrictOutput(inner);
-    if (widenedInner === inner && inner.isNullable()) {
-      return schema;
-    }
-    return new ZodOptional({
-      ...schema._def,
-      innerType: widenedInner.isNullable()
-        ? widenedInner
-        : ZodNullable.create(widenedInner),
-    });
+    return acceptsNull(widenedInner) ? widenedInner : z.nullable(widenedInner);
   }
   if (schema instanceof ZodNullable) {
     const inner = schema.unwrap() as ZodTypeAny;
     const widenedInner = widenOptionalsForStrictOutput(inner);
     return widenedInner === inner
       ? schema
-      : new ZodNullable({ ...schema._def, innerType: widenedInner });
+      : cloneWith(schema, { innerType: widenedInner });
   }
   if (schema instanceof ZodDefault) {
     const inner = schema.removeDefault() as ZodTypeAny;
     const widenedInner = widenOptionalsForStrictOutput(inner);
     return widenedInner === inner
       ? schema
-      : new ZodDefault({ ...schema._def, innerType: widenedInner });
+      : cloneWith(schema, { innerType: widenedInner });
   }
-  if (schema instanceof ZodEffects) {
-    const inner = schema.innerType() as ZodTypeAny;
+  // `.transform()` / `.pipe()` / `.preprocess()` are pipes in zod 4; the input
+  // side is what the model fills in, so that is the side to widen.
+  if (schema instanceof ZodPipe) {
+    const inner = schema.in as ZodTypeAny;
     const widenedInner = widenOptionalsForStrictOutput(inner);
     return widenedInner === inner
       ? schema
-      : new ZodEffects({ ...schema._def, schema: widenedInner });
+      : cloneWith(schema, { in: widenedInner });
   }
   if (schema instanceof ZodObject) {
     const shape = schema.shape as ZodRawShape;
     let changed = false;
-    const widenedShape: ZodRawShape = {};
+    const widenedShape: Record<string, ZodTypeAny> = {};
     for (const [key, value] of Object.entries(shape)) {
-      const widened = widenOptionalsForStrictOutput(value);
+      const widened = widenOptionalsForStrictOutput(value as ZodTypeAny);
       widenedShape[key] = widened;
       changed = changed || widened !== value;
     }
-    return changed
-      ? new ZodObject({ ...schema._def, shape: () => widenedShape })
-      : schema;
+    return changed ? cloneWith(schema, { shape: widenedShape }) : schema;
   }
   if (schema instanceof ZodArray) {
     const element = schema.element as ZodTypeAny;
     const widened = widenOptionalsForStrictOutput(element);
     return widened === element
       ? schema
-      : new ZodArray({ ...schema._def, type: widened });
+      : cloneWith(schema, { element: widened });
   }
   if (schema instanceof ZodRecord) {
-    const value = schema.valueSchema as ZodTypeAny;
+    const value = schema.valueType as ZodTypeAny;
     const widened = widenOptionalsForStrictOutput(value);
     return widened === value
       ? schema
-      : new ZodRecord({ ...schema._def, valueType: widened });
+      : cloneWith(schema, { valueType: widened });
   }
   if (schema instanceof ZodUnion) {
     const options = schema.options as ZodTypeAny[];
@@ -94,10 +101,7 @@ export function widenOptionalsForStrictOutput(schema: ZodTypeAny): ZodTypeAny {
     );
     return widenedOptions.every((option, index) => option === options[index])
       ? schema
-      : new ZodUnion({
-          ...schema._def,
-          options: widenedOptions as [ZodTypeAny, ZodTypeAny, ...ZodTypeAny[]],
-        });
+      : cloneWith(schema, { options: widenedOptions });
   }
   return schema;
 }
@@ -113,7 +117,7 @@ export function normalizeWidenedOutput(
 ): unknown {
   if (schema instanceof ZodOptional) {
     const inner = schema.unwrap() as ZodTypeAny;
-    if (value === null && !inner.isNullable()) {
+    if (value === null && !acceptsNull(inner)) {
       return undefined;
     }
     return normalizeWidenedOutput(inner, value);
@@ -126,14 +130,14 @@ export function normalizeWidenedOutput(
   if (schema instanceof ZodDefault) {
     return normalizeWidenedOutput(schema.removeDefault() as ZodTypeAny, value);
   }
-  if (schema instanceof ZodEffects) {
-    return normalizeWidenedOutput(schema.innerType() as ZodTypeAny, value);
+  if (schema instanceof ZodPipe) {
+    return normalizeWidenedOutput(schema.in as ZodTypeAny, value);
   }
   if (schema instanceof ZodObject && isPlainObject(value)) {
     const shape = schema.shape as ZodRawShape;
     const normalized: Record<string, unknown> = {};
     for (const [key, entry] of Object.entries(value)) {
-      const fieldSchema = shape[key];
+      const fieldSchema = shape[key] as ZodTypeAny | undefined;
       if (!fieldSchema) {
         normalized[key] = entry;
         continue;
@@ -150,7 +154,7 @@ export function normalizeWidenedOutput(
     return value.map((entry) => normalizeWidenedOutput(element, entry));
   }
   if (schema instanceof ZodRecord && isPlainObject(value)) {
-    const valueSchema = schema.valueSchema as ZodTypeAny;
+    const valueSchema = schema.valueType as ZodTypeAny;
     return Object.fromEntries(
       Object.entries(value).map(([key, entry]) => [
         key,

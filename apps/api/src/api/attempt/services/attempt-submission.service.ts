@@ -1,7 +1,3 @@
-import {
-  SourceProcessingError,
-  RetryableProcessingError,
-} from "../../llm/features/grading/errors/source-processing.error";
 /* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable unicorn/no-null */
 import {
@@ -25,14 +21,13 @@ import {
 } from "@prisma/client";
 import { JsonValue } from "@prisma/client/runtime/library";
 import { BaseAssignmentAttemptResponseDto } from "src/api/assignment/attempt/dto/assignment-attempt/base.assignment.attempt.response.dto";
-import { LearnerUpdateAssignmentAttemptRequestDto } from "src/api/assignment/attempt/dto/assignment-attempt/create.update.assignment.attempt.request.dto";
 import {
-  AssignmentAttemptQuestions,
-  GetAssignmentAttemptResponseDto,
-} from "src/api/assignment/attempt/dto/assignment-attempt/get.assignment.attempt.response.dto";
-import { UpdateAssignmentAttemptResponseDto } from "src/api/assignment/attempt/dto/assignment-attempt/update.assignment.attempt.response.dto";
-import { CreateQuestionResponseAttemptRequestDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.request.dto";
+  LearnerUpdateAssignmentAttemptRequestDto,
+  SubmittedQuestionResponseDto,
+} from "src/api/assignment/attempt/dto/assignment-attempt/create.update.assignment.attempt.request.dto";
+import { SubmitAssignmentAttemptResponseDto } from "src/api/assignment/attempt/dto/assignment-attempt/submit.assignment.attempt.response.dto";
 import { CreateQuestionResponseAttemptResponseDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
+import { S3Service } from "src/api/files/services/s3.service";
 import {
   countAnsweredResponses,
   hasTextContent,
@@ -73,10 +68,14 @@ import {
   AttemptQuestionsMapper,
   EnhancedAttemptQuestionDto,
 } from "../common/utils/attempt-questions-mapper.util";
+import { toLearnerAttemptQuestion } from "../common/utils/learner-attempt-shape.util";
 import {
+  DEFAULT_PASSING_GRADE,
   meetsPassingGrade,
   resolvePassedIndicator,
 } from "../common/utils/pass-fail.util";
+import { CompletedAttemptResponseDto } from "../dto/completed-attempt.response.dto";
+import { LearnerAttemptResponseDto } from "../dto/learner-attempt.response.dto";
 import { AttemptAccessCacheService } from "./attempt-access-cache.service";
 import { AttemptGradingService } from "./attempt-grading.service";
 import {
@@ -95,6 +94,49 @@ import {
 } from "./question-response/question-response.service";
 import { QuestionVariantService } from "./question-variant/question-variant.service";
 import { TranslationService } from "./translation/translation.service";
+import {
+  isMediaResponseType,
+  pinnedQuestionMap,
+} from "../common/utils/grading-question-source.util";
+import {
+  findLearnerFileReferenceDenial,
+  NoGradableQuestionsException,
+  InvalidLearnerFileReferenceException,
+  UnsupportedResponseTypeException,
+} from "../common/utils/learner-file-reference.util";
+import {
+  buildSubmitResult,
+  closedAtTimeLimitResult,
+} from "../common/utils/submit-result.util";
+
+/** Whether an attempt still accepts a submit, read with a fresh clock. */
+export interface AttemptSubmissionStatusDto {
+  id: number;
+  submitted: boolean;
+  closedAtTimeLimit: boolean;
+  acceptingSubmissions: boolean;
+  expiresAt: string | null;
+  serverNow: string;
+}
+
+/** What a learner submit grades; see resolveSubmitPlan. */
+interface SubmitPlan {
+  assignment: Prisma.AssignmentGetPayload<{
+    include: {
+      questions: true;
+      currentVersion: { select: { correctAnswerVisibility: true } };
+    };
+  }>;
+  /** Pinned question DTOs by id, or null for an attempt without a version. */
+  pinnedQuestions: Map<number, QuestionDto> | null;
+  servedQuestionIds: number[];
+  /** Served questions minus media response types, in served order. */
+  gradedQuestionIds: number[];
+  /** One response per graded question; missing ones are empty answers. */
+  responses: SubmittedQuestionResponseDto[];
+  /** Sum of totalPoints over the graded questions. */
+  totalPossiblePoints: number;
+}
 
 type QuestionPointsSource =
   | Pick<Question, "id" | "totalPoints">
@@ -115,79 +157,6 @@ export class AttemptSubmissionService {
     private readonly ltiGradeSyncService: LtiGradeSyncService,
   ) {}
 
-  async autoSaveQuestionResponse(
-    attemptId: number,
-    assignmentId: number,
-    questionId: number,
-    requestDto: CreateQuestionResponseAttemptRequestDto,
-    userSession: UserSession,
-    language: string,
-  ): Promise<CreateQuestionResponseAttemptResponseDto> {
-    let responseDto: CreateQuestionResponseAttemptResponseDto;
-    try {
-      responseDto = await this.questionResponseService.createQuestionResponse(
-        attemptId,
-        { ...requestDto, id: questionId },
-        userSession.role,
-        assignmentId,
-        language,
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        userSession.userId,
-      );
-    } catch (error) {
-      // The grading layers deliberately let these typed terminal errors pass
-      // through un-wrapped so the job worker can classify them as
-      // non-retryable. This autosave route is the one HTTP entry that reaches
-      // the same code; translate it here so the learner sees a clear 400 with
-      // the learner-facing reason instead of a generic 500 from the global
-      // filter.
-      if (
-        error instanceof SourceProcessingError ||
-        error instanceof RetryableProcessingError
-      )
-        throw error;
-      if (error instanceof LearnerFacingGradingError) {
-        throw new BadRequestException(error.learnerMessage);
-      }
-      // A rate-limited or timed-out URL fetch is a temporary system fault,
-      // not a problem with the learner's submission — surface it as a
-      // retryable 503 instead of letting it fall through to a generic 500.
-      if (error instanceof RetryableUrlFetchError) {
-        throw new ServiceUnavailableException(
-          "Temporarily unable to fetch the submitted URL's content. Please try again shortly.",
-        );
-      }
-      throw error;
-    }
-
-    await this.prisma.questionResponse.deleteMany({
-      where: {
-        assignmentAttemptId: attemptId,
-        questionId,
-        id: { not: responseDto.id },
-      },
-    });
-
-    return this.sanitizeAutoSaveResponse(responseDto, userSession.role);
-  }
-
-  private sanitizeAutoSaveResponse(
-    responseDto: CreateQuestionResponseAttemptResponseDto,
-    role: UserRole,
-  ): CreateQuestionResponseAttemptResponseDto {
-    if (role !== UserRole.LEARNER) {
-      return responseDto;
-    }
-
-    return {
-      id: responseDto.id,
-      questionId: responseDto.questionId,
-      question: "",
-    };
-  }
   /**
    * Creates a new assignment attempt
    */
@@ -211,19 +180,22 @@ export class AttemptSubmissionService {
       };
     }
 
+    // Ordered by id so the question pool (and variant draw) is deterministic.
     const assignment = await this.prisma.assignment.findUnique({
       where: { id: assignmentId },
       include: {
         currentVersion: {
           include: {
-            questionVersions: true,
+            questionVersions: { orderBy: { id: "asc" } },
           },
         },
         questions: {
           where: { isDeleted: false },
+          orderBy: { id: "asc" },
           include: {
             variants: {
               where: { isDeleted: false },
+              orderBy: { id: "asc" },
             },
           },
         },
@@ -612,8 +584,8 @@ export class AttemptSubmissionService {
     ) => Promise<void>,
     cache?: JobScopedCache,
     submissionReceivedAt?: Date,
-  ): Promise<UpdateAssignmentAttemptResponseDto> {
-    const { role } = request.userSession;
+  ): Promise<SubmitAssignmentAttemptResponseDto> {
+    const { role, userId } = request.userSession;
     if (role === UserRole.LEARNER) {
       return this.updateLearnerAttempt(
         attemptId,
@@ -630,6 +602,7 @@ export class AttemptSubmissionService {
       return this.updateAuthorAttempt(
         assignmentId,
         updateDto,
+        userId,
         progressCallback,
       );
     } else {
@@ -639,31 +612,55 @@ export class AttemptSubmissionService {
     }
   }
   /**
-   * Gets a learner assignment attempt with all details needed for display
+   * A submitted attempt as the learner's results page shows it. Every
+   * visibility setting is applied here, key by key; nothing the client
+   * receives needs further gating.
    */
   async getLearnerAssignmentAttempt(
     attemptId: number,
+    assignmentId: number,
     userSession: UserSession,
-  ): Promise<GetAssignmentAttemptResponseDto> {
-    const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
-      where: { id: attemptId },
-      include: {
-        questionResponses: true,
-        questionVariants: {
-          include: { questionVariant: { include: { variantOf: true } } },
-        },
-        assignmentVersion: {
-          include: {
-            questionVersions: true,
-          },
-        },
-      },
-    });
+  ): Promise<CompletedAttemptResponseDto> {
+    const isLearner = userSession.role === UserRole.LEARNER;
+    const learnerUserId =
+      typeof userSession.userId === "string" && userSession.userId.length > 0
+        ? userSession.userId
+        : undefined;
+    this.logger.debug(
+      `getLearnerAssignmentAttempt: attempt=${attemptId} assignment=${assignmentId} role=${userSession.role}`,
+    );
+
+    // Scoped to the route's assignment for every role, and to the session's
+    // own rows for learners. An open attempt has no results yet, so it reads
+    // exactly like one that does not exist.
+    const assignmentAttempt =
+      isLearner && learnerUserId === undefined
+        ? null
+        : await this.prisma.assignmentAttempt.findFirst({
+            where: {
+              id: attemptId,
+              assignmentId,
+              submitted: true,
+              ...(isLearner ? { userId: learnerUserId } : {}),
+            },
+            include: {
+              questionResponses: true,
+              questionVariants: {
+                include: { questionVariant: { include: { variantOf: true } } },
+              },
+              assignmentVersion: {
+                include: {
+                  questionVersions: true,
+                },
+              },
+            },
+          });
 
     if (!assignmentAttempt) {
-      throw new NotFoundException(
-        `AssignmentAttempt with Id ${attemptId} not found.`,
+      this.logger.warn(
+        `getLearnerAssignmentAttempt: refused attempt_id=${attemptId} assignment_id=${assignmentId} user_id=${userSession.userId} role=${userSession.role} denial_reason=not_found_unowned_or_unsubmitted`,
       );
+      throw new NotFoundException("Attempt not found or not owned by the user");
     }
 
     const assignment = await this.prisma.assignment.findUnique({
@@ -740,23 +737,28 @@ export class AttemptSubmissionService {
         servedResponseByQuestionId.set(response.questionId, response);
       }
     }
-    const servedResponses = [...servedResponseByQuestionId.values()];
-    const rawPointsEarned = servedResponses.reduce(
-      (sum, response) => sum + (response.points ?? 0),
-      0,
+    // Media questions are no longer graded, so, exactly as on submit, an
+    // unanswered one counts toward neither total. An attempt graded before
+    // that change has a stored response for it, and that response stays in
+    // both totals so they describe the same question set as the stored
+    // grade. The pinned (cached) question decides the type; a served
+    // question missing from it is checked against its row below.
+    const isUngradedMedia = (question: {
+      id: number;
+      responseType?: string | null;
+    }) =>
+      isMediaResponseType(question.responseType) &&
+      !servedResponseByQuestionId.has(question.id);
+    const mediaQuestionIds = new Set(
+      cachedQuestions
+        .filter(
+          (question) =>
+            servedQuestionIdSet.has(question.id) && isUngradedMedia(question),
+        )
+        .map((question) => question.id),
     );
-    let totalPointsEarned = 0;
-    for (const response of servedResponses) {
-      const questionMax = questionMaxById.get(response.questionId);
-      const points = response.points ?? 0;
-      totalPointsEarned +=
-        typeof questionMax === "number"
-          ? Math.min(points, questionMax)
-          : points;
-    }
-    // Compute score totals before applyVisibilitySettings so they survive
-    // even when showQuestions=false strips the questions array. Without this
-    // the success page shows "0 / 0" because it can't sum the (empty) array.
+    // Totals are computed server-side so the score renders even when
+    // showQuestions=false leaves the questions array empty.
     //
     // Scope the denominator to the questions actually served to this attempt.
     // Question-bank assignments draw numberOfQuestionsPerAttempt (< bank size)
@@ -775,7 +777,7 @@ export class AttemptSubmissionService {
       missingMaxQuestionIds.length > 0
         ? await this.prisma.question.findMany({
             where: { id: { in: missingMaxQuestionIds } },
-            select: { id: true, totalPoints: true },
+            select: { id: true, totalPoints: true, responseType: true },
           })
         : [];
     const deletedQuestionMaxById = new Map(
@@ -784,8 +786,32 @@ export class AttemptSubmissionService {
         question.totalPoints,
       ]),
     );
+    for (const question of missingMaxQuestions) {
+      if (isUngradedMedia(question)) {
+        mediaQuestionIds.add(question.id);
+      }
+    }
+    const servedResponses = [...servedResponseByQuestionId.values()].filter(
+      (response) => !mediaQuestionIds.has(response.questionId),
+    );
+    const rawPointsEarned = servedResponses.reduce(
+      (sum, response) => sum + (response.points ?? 0),
+      0,
+    );
+    let totalPointsEarned = 0;
+    for (const response of servedResponses) {
+      const questionMax = questionMaxById.get(response.questionId);
+      const points = response.points ?? 0;
+      totalPointsEarned +=
+        typeof questionMax === "number"
+          ? Math.min(points, questionMax)
+          : points;
+    }
     let totalPossiblePoints = 0;
     for (const questionId of servedQuestionIdSet) {
+      if (mediaQuestionIds.has(questionId)) {
+        continue;
+      }
       if (questionMaxById.has(questionId)) {
         // Question is in the cache: use its defined max (null totalPoints
         // stays 0, matching the historical denominator behavior).
@@ -812,20 +838,24 @@ export class AttemptSubmissionService {
         totalPossiblePoints += deletedQuestionMax;
       }
     }
+    // The grade shown, the pass/fail verdict and ON_PASS answer reveal all
+    // derive from this one value: the stored grade, or the clamped ratio when
+    // clamping lowered the earned total. The persisted grade and the LTI
+    // passback are left untouched; correcting those is a re-grade.
     const effectiveGrade =
-      totalPointsEarned < rawPointsEarned && totalPossiblePoints > 0
+      totalPointsEarned < rawPointsEarned &&
+      totalPossiblePoints > 0 &&
+      assignmentAttempt.grade !== null
         ? totalPointsEarned / totalPossiblePoints
         : assignmentAttempt.grade;
 
-    const shouldShowCorrectAnswers = this.shouldShowCorrectAnswers(
-      assignment.currentVersion?.correctAnswerVisibility || "NEVER",
-      effectiveGrade || 0,
-      assignment.passingGrade,
-    );
-
-    const questionsToShow = this.applyAnswerVisibilityToQuestionDtos(
-      cachedQuestions,
-      shouldShowCorrectAnswers,
+    const correctAnswerVisibility: CorrectAnswerVisibility =
+      assignment.currentVersion?.correctAnswerVisibility || "NEVER";
+    const passingGrade = assignment.passingGrade ?? DEFAULT_PASSING_GRADE;
+    const revealAnswers = this.shouldShowCorrectAnswers(
+      correctAnswerVisibility,
+      effectiveGrade,
+      passingGrade,
     );
 
     const formattedAttempt: AssignmentAttemptWithRelations = {
@@ -857,64 +887,58 @@ export class AttemptSubmissionService {
       })),
     };
 
-    const finalQuestions =
-      await AttemptQuestionsMapper.buildQuestionsWithResponses(
-        formattedAttempt,
-        questionsToShow,
-        {
-          id: assignmentAttempt.assignmentId,
-          ...assignment,
-          questionOrder: questionsToShow.map((q) => q.id),
-        },
-        this.prisma,
-        assignmentAttempt.preferredLanguage || undefined,
-      );
-
-    // Captured before applyVisibilitySettings nulls the grade: the pass/fail
-    // indicator must stay computable when the score itself is hidden. Mirrors
-    // the displayGrade clamping below so both derive from the same value.
-    const preVisibilityGrade =
-      totalPointsEarned < rawPointsEarned &&
-      totalPossiblePoints > 0 &&
-      assignmentAttempt.grade !== null
-        ? totalPointsEarned / totalPossiblePoints
-        : assignmentAttempt.grade;
-
-    this.applyVisibilitySettings(finalQuestions, assignmentAttempt, assignment);
-
-    // Same clamped value as preVisibilityGrade, except that
-    // applyVisibilitySettings has since nulled assignmentAttempt.grade when
-    // showAssignmentScore=false — which must be respected even when clamping
-    // occurred. The persisted grade and the LTI passback are intentionally
-    // left untouched — correcting those is a separate re-grade, not a display
-    // fix.
-    const displayGrade =
-      assignmentAttempt.grade === null ? null : preVisibilityGrade;
-
-    return {
-      ...assignmentAttempt,
-      serverNow: readServerClock(),
-      grade: displayGrade,
-      questions: finalQuestions,
-      totalPossiblePoints,
-      totalPointsEarned:
-        assignment.showAssignmentScore === false
-          ? undefined
-          : totalPointsEarned,
-      passingGrade: assignment.passingGrade,
+    const visibility = {
       showAssignmentScore: assignment.showAssignmentScore,
       showSubmissionFeedback: assignment.showSubmissionFeedback,
       showQuestions: assignment.showQuestions,
       showQuestionScore: assignment.showQuestionScore,
       showPassFailIndicator: assignment.showPassFailIndicator,
-      passed: resolvePassedIndicator(
-        assignment.showPassFailIndicator,
-        preVisibilityGrade,
-        assignment.passingGrade,
-      ),
-      correctAnswerVisibility:
-        assignment.currentVersion?.correctAnswerVisibility || "NEVER",
+    };
+    const questions = visibility.showQuestions
+      ? await AttemptQuestionsMapper.buildCompletedQuestions(
+          formattedAttempt,
+          cachedQuestions,
+          { id: assignmentAttempt.assignmentId, ...assignment },
+          this.prisma,
+          {
+            revealAnswers,
+            showQuestionScore: visibility.showQuestionScore,
+            showSubmissionFeedback: visibility.showSubmissionFeedback,
+            responseByQuestionId: servedResponseByQuestionId,
+          },
+        )
+      : [];
+
+    const showScore = visibility.showAssignmentScore;
+    const passed = resolvePassedIndicator(
+      visibility.showPassFailIndicator,
+      effectiveGrade,
+      passingGrade,
+    );
+
+    this.logger.log(
+      `getLearnerAssignmentAttempt: served attempt=${attemptId} assignment=${assignmentId} role=${userSession.role} questions=${questions.length} reveal_answers=${String(revealAnswers)}`,
+    );
+
+    // Built key by key: the attempt row carries relations (question versions,
+    // variants, every response) that hold the answer key and must not leak.
+    return {
+      id: assignmentAttempt.id,
+      assignmentId: assignmentAttempt.assignmentId,
+      submitted: true,
+      createdAt: assignmentAttempt.createdAt,
+      expiresAt: assignmentAttempt.expiresAt,
+      preferredLanguage: assignmentAttempt.preferredLanguage,
       comments: assignmentAttempt.comments,
+      serverNow: readServerClock(),
+      grade: showScore ? effectiveGrade : null,
+      totalPointsEarned: showScore ? totalPointsEarned : null,
+      totalPossiblePoints: showScore ? totalPossiblePoints : null,
+      passed: passed ?? null,
+      passingGrade,
+      ...visibility,
+      correctAnswerVisibility,
+      questions,
     };
   }
 
@@ -950,14 +974,15 @@ export class AttemptSubmissionService {
   async getAssignmentAttempt(
     attemptId: number,
     language?: string,
-  ): Promise<GetAssignmentAttemptResponseDto> {
+  ): Promise<LearnerAttemptResponseDto> {
     const normalizedLanguage = this.getNormalizedLanguage(language);
 
     const assignmentAttempt = await this.prisma.assignmentAttempt.findUnique({
       where: { id: attemptId },
       include: {
-        questionResponses: true,
+        questionResponses: { orderBy: { id: "asc" } },
         questionVariants: {
+          orderBy: { questionId: "asc" },
           include: {
             questionVariant: {
               include: {
@@ -968,7 +993,7 @@ export class AttemptSubmissionService {
         },
         assignmentVersion: {
           include: {
-            questionVersions: true,
+            questionVersions: { orderBy: { id: "asc" } },
           },
         },
       },
@@ -1011,7 +1036,16 @@ export class AttemptSubmissionService {
       currentVersion: {
         correctAnswerVisibility: CorrectAnswerVisibility;
       } | null;
-    };
+    } | null;
+
+    if (!assignment) {
+      this.logger.warn(
+        `getAssignmentAttempt: attempt=${attemptId} references missing assignment=${assignmentAttempt.assignmentId}`,
+      );
+      throw new NotFoundException(
+        `AssignmentAttempt with Id ${attemptId} not found.`,
+      );
+    }
 
     const cachedQuestions =
       await this.attemptAccessCacheService.getQuestionDtosForAttemptAccess({
@@ -1059,8 +1093,16 @@ export class AttemptSubmissionService {
       })),
     };
 
+    // Every visibility setting is defined relative to submission ("shown after
+    // submission", "shown on pass"). While the attempt is open there is nothing
+    // to reveal yet, so the setting is only consulted once it is submitted.
+    const visibilityForAttempt: CorrectAnswerVisibility =
+      assignmentAttempt.submitted
+        ? assignment.currentVersion?.correctAnswerVisibility || "NEVER"
+        : "NEVER";
+
     const shouldShowAllQuestions = this.shouldShowCorrectAnswers(
-      assignment.currentVersion?.correctAnswerVisibility || "NEVER",
+      visibilityForAttempt,
       assignmentAttempt.grade || 0,
       assignment.passingGrade,
     );
@@ -1073,7 +1115,7 @@ export class AttemptSubmissionService {
       questions: questionsForTranslation,
     } as unknown as UpdateAssignmentQuestionsDto;
 
-    const finalQuestions: AttemptQuestionDto[] =
+    const mappedQuestions =
       await AttemptQuestionsMapper.buildQuestionsWithTranslations(
         formattedAttempt,
         assignmentForTranslation,
@@ -1081,14 +1123,16 @@ export class AttemptSubmissionService {
         normalizedLanguage,
       );
 
-    this.removeSensitiveData(
-      finalQuestions,
-      {
-        correctAnswerVisibility:
-          assignment.currentVersion?.correctAnswerVisibility || "NEVER",
-      },
+    // Answer-key fields are revealed only once the attempt is submitted and
+    // the visibility setting allows it (`visibilityForAttempt` is NEVER while
+    // the attempt is open).
+    const revealAnswers = this.shouldShowCorrectAnswers(
+      visibilityForAttempt,
       assignmentAttempt.grade || 0,
       assignment.passingGrade,
+    );
+    const finalQuestions = mappedQuestions.map((question) =>
+      toLearnerAttemptQuestion(question, revealAnswers),
     );
 
     const versionMismatch =
@@ -1096,19 +1140,47 @@ export class AttemptSubmissionService {
       assignment.currentVersionId !== null &&
       assignmentAttempt.assignmentVersionId !== assignment.currentVersionId;
 
+    this.logger.debug(
+      `getAssignmentAttempt: attempt=${attemptId} assignment=${assignmentAttempt.assignmentId} questions=${finalQuestions.length} language=${normalizedLanguage}`,
+    );
+
+    // Built key by key: the attempt was loaded with relations (question
+    // versions, variants) that carry the answer key and must not be spread.
     // No pass/fail verdict here on purpose. This route serves the in-progress
     // attempt, so it has none of the clamping the completed route applies to
     // historically over-scored responses; deriving `passed` from the raw
     // persisted grade would contradict the verdict the learner is shown on the
     // success page. Pass/fail belongs to the completed and submit responses.
     return {
-      ...assignmentAttempt,
+      id: assignmentAttempt.id,
+      assignmentId: assignmentAttempt.assignmentId,
+      assignmentVersionId: assignmentAttempt.assignmentVersionId,
+      userId: assignmentAttempt.userId,
+      submitted: assignmentAttempt.submitted,
+      grade:
+        assignmentAttempt.submitted && assignment.showAssignmentScore
+          ? assignmentAttempt.grade
+          : null,
+      expiresAt: assignmentAttempt.expiresAt,
+      createdAt: assignmentAttempt.createdAt,
+      questionOrder: assignmentAttempt.questionOrder,
+      comments: assignmentAttempt.comments,
+      preferredLanguage: assignmentAttempt.preferredLanguage,
       serverNow: readServerClock(),
-      // The spread carries the persisted grade, which must not reach a learner
-      // whose assignment hides the score.
-      grade: assignment.showAssignmentScore ? assignmentAttempt.grade : null,
       questions: finalQuestions,
-      passingGrade: assignment.passingGrade,
+      questionResponses: assignmentAttempt.questionResponses.map(
+        (response) => ({
+          id: response.id,
+          assignmentAttemptId: response.assignmentAttemptId,
+          questionId: response.questionId,
+          learnerResponse: response.learnerResponse,
+          points: response.points,
+          feedback: response.feedback,
+          metadata: response.metadata,
+          gradedAt: response.gradedAt,
+        }),
+      ),
+      passingGrade: assignment.passingGrade ?? DEFAULT_PASSING_GRADE,
       showAssignmentScore: assignment.showAssignmentScore,
       showSubmissionFeedback: assignment.showSubmissionFeedback,
       showQuestionScore: assignment.showQuestionScore,
@@ -1117,6 +1189,13 @@ export class AttemptSubmissionService {
         assignment.currentVersion?.correctAnswerVisibility || "NEVER",
       currentVersionId: assignment.currentVersionId,
       versionMismatch,
+      assignmentVersion: assignmentAttempt.assignmentVersion
+        ? {
+            id: assignmentAttempt.assignmentVersion.id,
+            allotedTimeMinutes:
+              assignmentAttempt.assignmentVersion.allotedTimeMinutes,
+          }
+        : null,
     };
   }
 
@@ -1144,14 +1223,14 @@ export class AttemptSubmissionService {
     ) => Promise<void>,
     cache?: JobScopedCache,
     submissionReceivedAt?: Date,
-  ): Promise<UpdateAssignmentAttemptResponseDto> {
+  ): Promise<SubmitAssignmentAttemptResponseDto> {
     // Allocate the per-invocation cache once and share it across both
     // pre-translate and grading phases. Without this hoist, callers that
-    // omit `cache` (notably the SSE submission path,
-    // updateAssignmentAttemptWithSSE) cause preTranslateQuestions to issue
+    // omit `cache` (the inline path) cause preTranslateQuestions to issue
     // its own findUnique calls per variant before gradeQuestionsForLearner
     // allocates its own fresh cache and re-issues the same lookups during
-    // its Phase-0 hoist.
+    // its Phase-0 hoist. It also carries the attempt's pinned questions to
+    // every grading read.
     const effectiveCache: JobScopedCache = cache ?? newJobScopedCache();
     try {
       if (progressCallback) {
@@ -1220,64 +1299,21 @@ export class AttemptSubmissionService {
         return expiredResult;
       }
 
-      const assignment = await this.prisma.assignment.findUnique({
-        where: { id: assignmentId },
-        include: {
-          questions: {
-            where: { isDeleted: false },
-          },
-          currentVersion: {
-            select: {
-              correctAnswerVisibility: true,
-            },
-          },
-        },
-      });
-
-      if (!assignment) {
-        throw new NotFoundException(
-          `Assignment with Id ${assignmentId} not found.`,
-        );
-      }
-
-      const servedQuestionIds = assignmentAttempt.questionOrder?.length
-        ? assignmentAttempt.questionOrder
-        : assignment.questionOrder?.length
-          ? assignment.questionOrder
-          : assignment.questions.map((question) => question.id);
-      const servedQuestionIdSet = new Set(servedQuestionIds);
-      const submittedQuestionIds = updateDto.responsesForQuestions.map(
-        (response) => response.id,
+      const plan = await this.resolveSubmitPlan(
+        assignmentAttempt,
+        assignmentId,
+        request.userSession.userId,
+        updateDto,
       );
-      const invalidQuestionIds = [
-        ...new Set(
-          submittedQuestionIds.filter(
-            (questionId) => !servedQuestionIdSet.has(questionId),
-          ),
-        ),
-      ];
-      const duplicateQuestionIds = [
-        ...new Set(
-          submittedQuestionIds.filter(
-            (questionId, index) =>
-              submittedQuestionIds.indexOf(questionId) !== index,
-          ),
-        ),
-      ];
-      if (invalidQuestionIds.length > 0 || duplicateQuestionIds.length > 0) {
-        throw new BadRequestException(
-          `Invalid question responses for attempt ${attemptId}: ` +
-            [
-              invalidQuestionIds.length > 0
-                ? `unserved question IDs [${invalidQuestionIds.join(", ")}]`
-                : null,
-              duplicateQuestionIds.length > 0
-                ? `duplicate question IDs [${duplicateQuestionIds.join(", ")}]`
-                : null,
-            ]
-              .filter((message): message is string => message !== null)
-              .join("; "),
-        );
+      const {
+        assignment,
+        pinnedQuestions,
+        responses,
+        gradedQuestionIds,
+        totalPossiblePoints,
+      } = plan;
+      if (pinnedQuestions) {
+        effectiveCache.pinnedQuestions = pinnedQuestions;
       }
 
       if (progressCallback) {
@@ -1286,7 +1322,7 @@ export class AttemptSubmissionService {
 
       const preTranslatedQuestions =
         await this.translationService.preTranslateQuestions(
-          updateDto.responsesForQuestions,
+          responses,
           assignmentAttempt,
           updateDto.language,
           effectiveCache,
@@ -1294,47 +1330,12 @@ export class AttemptSubmissionService {
 
       updateDto.preTranslatedQuestions = preTranslatedQuestions;
 
-      if (assignment.requireAllQuestions) {
-        const optionalQuestionIdsValue: unknown =
-          assignment.optionalQuestionIds;
-        const optionalQuestionIdList = Array.isArray(optionalQuestionIdsValue)
-          ? optionalQuestionIdsValue.filter(
-              (questionId): questionId is number =>
-                typeof questionId === "number" && !Number.isNaN(questionId),
-            )
-          : [];
-        const optionalQuestionIds = new Set<number>(optionalQuestionIdList);
-        let questionOrder = assignmentAttempt.questionOrder;
-        if (!questionOrder || questionOrder.length === 0) {
-          questionOrder =
-            assignment.questionOrder?.length > 0
-              ? assignment.questionOrder
-              : (assignment.questions?.map((question) => question.id) ?? []);
-        }
-        const requiredQuestionIds = questionOrder.filter(
-          (questionId) => !optionalQuestionIds.has(questionId),
-        );
-        const responseMap = new Map(
-          updateDto.responsesForQuestions.map((response) => [
-            response.id,
-            response,
-          ]),
-        );
-        const unansweredQuestionIds = requiredQuestionIds.filter(
-          (questionId) => !this.hasLearnerResponse(responseMap.get(questionId)),
-        );
-
-        if (unansweredQuestionIds.length > 0) {
-          throw new UnprocessableEntityException(
-            `All required questions must be answered before submitting (${unansweredQuestionIds.length} unanswered).`,
-          );
-        }
-      }
-
       // ── Phases 1+2: Load question DTOs (short tx) + grade with LLM (no tx) ──
+      // Every served, gradable question is graded: one the learner left out
+      // of the payload is graded as an empty answer and scores zero.
       const gradedItems: GradedItem[] =
         await this.questionResponseService.gradeQuestionsForLearner(
-          updateDto.responsesForQuestions,
+          responses,
           attemptId,
           assignmentId,
           updateDto.language,
@@ -1356,26 +1357,22 @@ export class AttemptSubmissionService {
         await progressCallback("Calculating final grade...", 92);
       }
 
-      const { totalPossiblePoints, missingQuestions } =
-        await this.calculateTotalPossiblePointsWithValidation(
-          successfulQuestionResponses,
-          assignment.questions,
-        );
-
+      // The denominator is the served, gradable set, whatever the payload
+      // carried: leaving a question out can only cost the learner its points.
+      // resolveSubmitPlan has already refused a submit with nothing gradable.
       if (totalPossiblePoints <= 0) {
         this.logger.error("submitLearnerAttempt: invalid totalPossiblePoints", {
           attemptId,
           assignmentId,
           totalPossiblePoints,
           response_count: successfulQuestionResponses.length,
-          question_count: assignment.questions.length,
-          missing_question_count: missingQuestions.length,
+          graded_question_count: gradedQuestionIds.length,
         });
         throw new InternalServerErrorException(
           `Invalid totalPossiblePoints (${totalPossiblePoints}) calculated for attemptId ${attemptId}. ` +
             `This indicates a critical grading error. ` +
             `Responses: ${successfulQuestionResponses.length}, ` +
-            `Questions: ${assignment.questions.length}`,
+            `Questions: ${gradedQuestionIds.length}`,
         );
       }
 
@@ -1448,29 +1445,24 @@ export class AttemptSubmissionService {
         await progressCallback("Grading completed!", 100);
       }
 
-      return {
-        id: result.id,
-        submitted: result.submitted,
-        success: true,
+      return buildSubmitResult({
+        attemptId: result.id,
+        grade: result.grade,
         totalPointsEarned,
         totalPossiblePoints,
-        grade: assignment.showAssignmentScore ? result.grade : undefined,
-        showQuestions: assignment.showQuestions,
-        showPassFailIndicator: assignment.showPassFailIndicator,
-        passed: resolvePassedIndicator(
-          assignment.showPassFailIndicator,
-          result.grade,
-          assignment.passingGrade,
-        ),
-        showSubmissionFeedback: assignment.showSubmissionFeedback,
-        correctAnswerVisibility:
-          assignment.currentVersion?.correctAnswerVisibility || "NEVER",
-        feedbacksForQuestions:
-          this.gradingService.constructFeedbacksForQuestions(
-            successfulQuestionResponses,
-            assignment,
-          ),
-      };
+        settings: {
+          showAssignmentScore: assignment.showAssignmentScore,
+          showSubmissionFeedback: assignment.showSubmissionFeedback,
+          showQuestions: assignment.showQuestions,
+          showQuestionScore: assignment.showQuestionScore,
+          showPassFailIndicator: assignment.showPassFailIndicator,
+          passingGrade: assignment.passingGrade,
+          correctAnswerVisibility:
+            assignment.currentVersion?.correctAnswerVisibility,
+        },
+        responses: successfulQuestionResponses,
+        language: updateDto.language,
+      });
     } catch (error) {
       if (progressCallback) {
         const errorMessage =
@@ -1482,17 +1474,365 @@ export class AttemptSubmissionService {
   }
 
   /**
+   * Check a learner submit against the attempt before anything is queued or
+   * graded, so a payload the grader would refuse gets its 400/422 on the
+   * PATCH itself. Grading repeats the same checks.
+   */
+  async assertSubmitPayloadAcceptable(
+    attemptId: number,
+    assignmentId: number,
+    userId: string,
+    updateDto: LearnerUpdateAssignmentAttemptRequestDto,
+  ): Promise<void> {
+    const attempt = await this.prisma.assignmentAttempt.findUnique({
+      where: { id: attemptId },
+      select: { id: true, questionOrder: true, assignmentVersionId: true },
+    });
+    if (!attempt) {
+      throw new NotFoundException(
+        `AssignmentAttempt with Id ${attemptId} not found.`,
+      );
+    }
+    await this.resolveSubmitPlan(attempt, assignmentId, userId, updateDto);
+  }
+
+  /**
+   * What the learner UI needs to decide whether an attempt is still editable,
+   * with a server clock reading taken now, not one replayed from a cached
+   * attempt payload. Scoped to the route assignment and the learner's own
+   * attempts; anything else is the same 404.
+   */
+  async getAttemptSubmissionStatus(
+    attemptId: number,
+    assignmentId: number,
+    userId: string,
+  ): Promise<AttemptSubmissionStatusDto> {
+    const attempt = userId
+      ? await this.prisma.assignmentAttempt.findFirst({
+          where: { id: attemptId, assignmentId, userId },
+          select: {
+            id: true,
+            submitted: true,
+            comments: true,
+            expiresAt: true,
+          },
+        })
+      : null;
+
+    if (!attempt) {
+      this.logger.warn(
+        `getAttemptSubmissionStatus: refused attempt_id=${attemptId} assignment_id=${assignmentId} user_id=${userId} denial_reason=not_found_or_unowned`,
+      );
+      throw new NotFoundException("Attempt not found or not owned by the user");
+    }
+
+    const serverNow = readServerClock();
+    const pastDeadline = this.validationService.isAttemptExpired(
+      attempt.expiresAt,
+      new Date(serverNow),
+    );
+
+    return {
+      id: attempt.id,
+      submitted: attempt.submitted,
+      closedAtTimeLimit:
+        attempt.submitted && wasClosedAtTimeLimit(attempt.comments),
+      acceptingSubmissions: !attempt.submitted && !pastDeadline,
+      expiresAt: attempt.expiresAt
+        ? new Date(attempt.expiresAt).toISOString()
+        : null,
+      serverNow,
+    };
+  }
+
+  /**
+   * Work out what a learner submit grades, and refuse what it must not.
+   *
+   * Questions come from the attempt's pinned assignment version when it has
+   * one, else the live rows. The served set is the attempt's question order,
+   * else the assignment's, else every question in that source. Response
+   * types that are no longer graded (MEDIA_RESPONSE_TYPES) are left out of
+   * grading, the denominator and the required-answer check. Every other
+   * served question is graded, with an empty answer standing in for one the
+   * payload left out.
+   *
+   * Refusals: a submitted id that is not served, or appears twice (400); an
+   * answer to a media question (400 UNSUPPORTED_RESPONSE_TYPE); a file that
+   * is not the learner's own upload for that question (400); an unanswered
+   * required question (422).
+   */
+  private async resolveSubmitPlan(
+    attempt: Pick<
+      AssignmentAttempt,
+      "id" | "questionOrder" | "assignmentVersionId"
+    >,
+    assignmentId: number,
+    userId: string,
+    updateDto: LearnerUpdateAssignmentAttemptRequestDto,
+  ): Promise<SubmitPlan> {
+    const attemptId = attempt.id;
+    const refuse = (denialReason: string, extra?: Record<string, unknown>) =>
+      this.logger.warn("submit.rejected", {
+        assignment_id: assignmentId,
+        attempt_id: attemptId,
+        user_id: userId,
+        denial_reason: denialReason,
+        ...extra,
+      });
+
+    const assignment = await this.prisma.assignment.findUnique({
+      where: { id: assignmentId },
+      include: {
+        questions: {
+          where: { isDeleted: false },
+        },
+        currentVersion: {
+          select: {
+            correctAnswerVisibility: true,
+          },
+        },
+      },
+    });
+
+    if (!assignment) {
+      throw new NotFoundException(
+        `Assignment with Id ${assignmentId} not found.`,
+      );
+    }
+
+    let pinnedQuestions: Map<number, QuestionDto> | null = null;
+    if (attempt.assignmentVersionId) {
+      const questionVersions = await this.prisma.questionVersion.findMany({
+        where: { assignmentVersionId: attempt.assignmentVersionId },
+        orderBy: [{ displayOrder: "asc" }, { id: "asc" }],
+      });
+      if (questionVersions.length > 0) {
+        pinnedQuestions = pinnedQuestionMap(questionVersions, assignmentId);
+      } else {
+        this.logger.warn("submit.pinned_version_empty", {
+          assignment_id: assignmentId,
+          attempt_id: attemptId,
+          assignment_version_id: attempt.assignmentVersionId,
+        });
+      }
+    }
+
+    const questionMeta = new Map<
+      number,
+      { totalPoints: number; responseType: string | null | undefined }
+    >();
+    if (pinnedQuestions) {
+      for (const question of pinnedQuestions.values()) {
+        questionMeta.set(question.id, {
+          totalPoints: question.totalPoints,
+          responseType: question.responseType,
+        });
+      }
+    } else {
+      for (const question of assignment.questions) {
+        questionMeta.set(question.id, {
+          totalPoints: question.totalPoints,
+          responseType: question.responseType,
+        });
+      }
+    }
+
+    const servedQuestionIds = attempt.questionOrder?.length
+      ? attempt.questionOrder
+      : assignment.questionOrder?.length
+        ? assignment.questionOrder
+        : [...questionMeta.keys()];
+    const servedQuestionIdSet = new Set(servedQuestionIds);
+
+    const submittedQuestionIds = updateDto.responsesForQuestions.map(
+      (response) => response.id,
+    );
+    const invalidQuestionIds = [
+      ...new Set(
+        submittedQuestionIds.filter(
+          (questionId) => !servedQuestionIdSet.has(questionId),
+        ),
+      ),
+    ];
+    const duplicateQuestionIds = [
+      ...new Set(
+        submittedQuestionIds.filter(
+          (questionId, index) =>
+            submittedQuestionIds.indexOf(questionId) !== index,
+        ),
+      ),
+    ];
+    if (invalidQuestionIds.length > 0 || duplicateQuestionIds.length > 0) {
+      refuse("unserved_or_duplicate_question_ids", {
+        unserved_count: invalidQuestionIds.length,
+        duplicate_count: duplicateQuestionIds.length,
+      });
+      throw new BadRequestException(
+        `Invalid question responses for attempt ${attemptId}: ` +
+          [
+            invalidQuestionIds.length > 0
+              ? `unserved question IDs [${invalidQuestionIds.join(", ")}]`
+              : null,
+            duplicateQuestionIds.length > 0
+              ? `duplicate question IDs [${duplicateQuestionIds.join(", ")}]`
+              : null,
+          ]
+            .filter((message): message is string => message !== null)
+            .join("; "),
+      );
+    }
+
+    // A served question missing from the source (deleted since an unpinned
+    // attempt began, or absent from its version) still counts; its row is
+    // read even when soft-deleted.
+    const unresolvedIds = servedQuestionIds.filter(
+      (questionId) => !questionMeta.has(questionId),
+    );
+    if (unresolvedIds.length > 0) {
+      const rows = await this.prisma.question.findMany({
+        where: { id: { in: unresolvedIds }, assignmentId },
+        select: { id: true, totalPoints: true, responseType: true },
+      });
+      for (const row of rows) {
+        questionMeta.set(row.id, {
+          totalPoints: row.totalPoints,
+          responseType: row.responseType,
+        });
+      }
+      const stillMissing = unresolvedIds.filter((id) => !questionMeta.has(id));
+      if (stillMissing.length > 0) {
+        this.logger.error("submit.served_question_unresolved", {
+          assignment_id: assignmentId,
+          attempt_id: attemptId,
+          question_ids: stillMissing,
+        });
+        throw new InternalServerErrorException(
+          `Cannot calculate totalPossiblePoints: Question ${stillMissing[0]} not found ` +
+            `in database. This prevents accurate grading.`,
+        );
+      }
+    }
+
+    const mediaQuestionIds = new Set(
+      servedQuestionIds.filter((questionId) =>
+        isMediaResponseType(questionMeta.get(questionId)?.responseType),
+      ),
+    );
+    const responseById = new Map(
+      updateDto.responsesForQuestions.map((response) => [
+        response.id,
+        response,
+      ]),
+    );
+
+    const answeredMediaIds = [...mediaQuestionIds].filter((questionId) =>
+      this.hasLearnerResponse(responseById.get(questionId)),
+    );
+    if (answeredMediaIds.length > 0) {
+      refuse("unsupported_response_type", {
+        question_ids: answeredMediaIds,
+      });
+      throw new UnsupportedResponseTypeException();
+    }
+
+    const allowedBuckets = S3Service.learnerUploadBuckets();
+    for (const response of updateDto.responsesForQuestions) {
+      const files = response.learnerFileResponse;
+      if (!Array.isArray(files) || files.length === 0) {
+        continue;
+      }
+      const denial = findLearnerFileReferenceDenial(files, {
+        assignmentId,
+        userId,
+        questionId: response.id,
+        allowedBuckets,
+      });
+      if (denial) {
+        refuse(denial, { question_id: response.id });
+        throw new InvalidLearnerFileReferenceException();
+      }
+    }
+
+    const gradedQuestionIds = servedQuestionIds.filter(
+      (questionId) => !mediaQuestionIds.has(questionId),
+    );
+    if (gradedQuestionIds.length === 0) {
+      refuse("no_gradable_questions", {
+        served_question_count: servedQuestionIds.length,
+        media_question_count: mediaQuestionIds.size,
+      });
+      throw new NoGradableQuestionsException();
+    }
+
+    if (assignment.requireAllQuestions) {
+      const optionalQuestionIdsValue: unknown = assignment.optionalQuestionIds;
+      const optionalQuestionIds = new Set<number>(
+        Array.isArray(optionalQuestionIdsValue)
+          ? optionalQuestionIdsValue.filter(
+              (questionId): questionId is number =>
+                typeof questionId === "number" && !Number.isNaN(questionId),
+            )
+          : [],
+      );
+      const unansweredCount = gradedQuestionIds.filter(
+        (questionId) =>
+          !optionalQuestionIds.has(questionId) &&
+          !this.hasLearnerResponse(responseById.get(questionId)),
+      ).length;
+
+      if (unansweredCount > 0) {
+        refuse("required_questions_unanswered", {
+          unanswered_count: unansweredCount,
+        });
+        throw new UnprocessableEntityException(
+          `All required questions must be answered before submitting (${unansweredCount} unanswered).`,
+        );
+      }
+    }
+
+    const responses = gradedQuestionIds.map(
+      (questionId): SubmittedQuestionResponseDto =>
+        responseById.get(questionId) ?? {
+          id: questionId,
+          learnerTextResponse: "",
+          learnerUrlResponse: "",
+          learnerChoices: [],
+          learnerAnswerChoice: null,
+          learnerFileResponse: [],
+          learnerPresentationResponse: null,
+          language: updateDto.language,
+        },
+    );
+
+    const totalPossiblePoints = gradedQuestionIds.reduce(
+      (sum, questionId) =>
+        sum + (questionMeta.get(questionId)?.totalPoints ?? 0),
+      0,
+    );
+
+    return {
+      assignment,
+      pinnedQuestions,
+      servedQuestionIds,
+      gradedQuestionIds,
+      responses,
+      totalPossiblePoints,
+    };
+  }
+
+  /**
    * Updates an attempt for an author (preview mode)
    */
   private async updateAuthorAttempt(
     assignmentId: number,
     updateDto: LearnerUpdateAssignmentAttemptRequestDto,
+    authorUserId: string,
     progressCallback?: (
       progress: string,
       percentage?: number,
       details?: GradingProgressDetails,
     ) => Promise<void>,
-  ): Promise<UpdateAssignmentAttemptResponseDto> {
+  ): Promise<SubmitAssignmentAttemptResponseDto> {
     try {
       if (progressCallback) {
         await progressCallback("Setting up preview...", 5);
@@ -1527,6 +1867,8 @@ export class AttemptSubmissionService {
           updateDto.language,
           updateDto.authorQuestions,
           updateDto.authorAssignmentDetails,
+          undefined,
+          authorUserId,
         );
 
       if (progressCallback) {
@@ -1586,32 +1928,27 @@ export class AttemptSubmissionService {
         updateDto.authorAssignmentDetails?.passingGrade ??
         assignment.passingGrade;
 
-      return {
-        id: -1,
-        submitted: true,
-        success: true,
+      // The preview mirrors the learner submit result, hidden values
+      // included: it is often the author's only way to see what learners
+      // actually get.
+      return buildSubmitResult({
+        attemptId: -1,
+        grade,
         totalPointsEarned,
         totalPossiblePoints,
-        // The preview must mirror the learner submit response (including
-        // withholding the grade when the score is hidden) — it's often the
-        // author's only way to see what learners actually experience.
-        grade: assignment.showAssignmentScore ? grade : undefined,
-        showQuestions: assignment.showQuestions,
-        showPassFailIndicator,
-        passed: resolvePassedIndicator(
+        settings: {
+          showAssignmentScore: assignment.showAssignmentScore,
+          showSubmissionFeedback: assignment.showSubmissionFeedback,
+          showQuestions: assignment.showQuestions,
+          showQuestionScore: assignment.showQuestionScore,
           showPassFailIndicator,
-          grade,
           passingGrade,
-        ),
-        showSubmissionFeedback: assignment.showSubmissionFeedback,
-        correctAnswerVisibility:
-          assignment.currentVersion?.correctAnswerVisibility || "NEVER",
-        feedbacksForQuestions:
-          this.gradingService.constructFeedbacksForQuestions(
-            successfulQuestionResponses,
-            assignment,
-          ),
-      };
+          correctAnswerVisibility:
+            assignment.currentVersion?.correctAnswerVisibility,
+        },
+        responses: successfulQuestionResponses,
+        language: updateDto.language,
+      });
     } catch (error) {
       if (progressCallback) {
         const errorMessage =
@@ -1687,49 +2024,6 @@ export class AttemptSubmissionService {
   }
 
   /**
-   * What the learner UI needs to decide whether an attempt is still editable,
-   * with a server clock reading taken now — not one replayed from a cached
-   * attempt payload.
-   */
-  async getAttemptSubmissionStatus(attemptId: number): Promise<{
-    id: number;
-    submitted: boolean;
-    closedAtTimeLimit: boolean;
-    acceptingSubmissions: boolean;
-    expiresAt: string | null;
-    serverNow: string;
-  }> {
-    const attempt = await this.prisma.assignmentAttempt.findUnique({
-      where: { id: attemptId },
-      select: { id: true, submitted: true, comments: true, expiresAt: true },
-    });
-
-    if (!attempt) {
-      throw new NotFoundException(
-        `AssignmentAttempt with Id ${attemptId} not found.`,
-      );
-    }
-
-    const serverNow = readServerClock();
-    const pastDeadline = this.validationService.isAttemptExpired(
-      attempt.expiresAt,
-      new Date(serverNow),
-    );
-
-    return {
-      id: attempt.id,
-      submitted: attempt.submitted,
-      closedAtTimeLimit:
-        attempt.submitted && wasClosedAtTimeLimit(attempt.comments),
-      acceptingSubmissions: !attempt.submitted && !pastDeadline,
-      expiresAt: attempt.expiresAt
-        ? new Date(attempt.expiresAt).toISOString()
-        : null,
-      serverNow,
-    };
-  }
-
-  /**
    * Close an attempt at zero because its submit came in past the deadline.
    * Conditional on the attempt still being open, so it can never overwrite a
    * grade a concurrent on-time submit has just committed.
@@ -1757,22 +2051,10 @@ export class AttemptSubmissionService {
    */
   private async handleExpiredAttempt(
     attemptId: number,
-  ): Promise<UpdateAssignmentAttemptResponseDto> {
+  ): Promise<SubmitAssignmentAttemptResponseDto> {
     await this.closeExpiredAttempt(attemptId);
 
-    return {
-      id: attemptId,
-      submitted: true,
-      success: true,
-      totalPointsEarned: 0,
-      totalPossiblePoints: 0,
-      grade: 0,
-      showSubmissionFeedback: false,
-      feedbacksForQuestions: [],
-      message: "The attempt deadline has passed.",
-      showQuestions: false,
-      correctAnswerVisibility: "NEVER",
-    };
+    return closedAtTimeLimitResult(attemptId);
   }
 
   /**
@@ -2176,161 +2458,6 @@ export class AttemptSubmissionService {
     return result;
   }
 
-  /**
-   * Applies visibility settings to questions according to the assignment configuration
-   */
-  private applyVisibilitySettings(
-    questions: AssignmentAttemptQuestions[],
-    assignmentAttempt: AssignmentAttempt & {
-      questionVariants: {
-        questionId: number;
-      }[];
-      questionResponses: {
-        id: number;
-        assignmentAttemptId: number;
-        questionId: number;
-        learnerResponse: string;
-        points: number;
-        feedback: JsonValue;
-        metadata: JsonValue | null;
-        gradedAt: Date | null;
-      }[];
-    },
-    assignment: {
-      showAssignmentScore?: boolean;
-      showSubmissionFeedback?: boolean;
-      showQuestionScore?: boolean;
-      showQuestions?: boolean;
-      showCorrectAnswer?: boolean;
-    },
-  ): void {
-    if (assignment.showAssignmentScore === false) {
-      assignmentAttempt.grade = null;
-    }
-
-    for (const question of questions) {
-      if (assignment.showSubmissionFeedback === false) {
-        for (const response of question.questionResponses || []) {
-          if (response.feedback) {
-            response.feedback = null;
-          }
-        }
-      }
-
-      if (assignment.showQuestionScore === false) {
-        for (const response of question.questionResponses || []) {
-          if (response.points !== undefined) {
-            response.points = -1;
-          }
-        }
-      }
-    }
-    if (assignment.showQuestions === false) {
-      questions.length = 0;
-      assignmentAttempt.questionResponses.length = 0;
-      assignmentAttempt.questionVariants.length = 0;
-    }
-  }
-
-  /**
-   * Remove sensitive data from questions
-   */
-
-  private removeSensitiveData(
-    questions: AttemptQuestionDto[],
-    assignment: { correctAnswerVisibility: CorrectAnswerVisibility },
-    grade: number,
-    passingGrade: number,
-  ): void {
-    for (const question of questions) {
-      if (!question.scoring?.showRubricsToLearner) {
-        delete question.scoring?.rubrics;
-      }
-
-      question.authorComment = null;
-      if (question.choices) {
-        for (const choice of question.choices) {
-          delete choice.points;
-          if (
-            !this.shouldShowCorrectAnswers(
-              assignment.correctAnswerVisibility || "NEVER",
-              grade,
-              passingGrade,
-            )
-          ) {
-            delete choice.isCorrect;
-            delete choice.feedback;
-          }
-        }
-      }
-
-      if (question.translations) {
-        for (const lang in question.translations) {
-          const translationObject = question.translations[lang];
-          if (translationObject?.translatedChoices) {
-            for (const choice of translationObject.translatedChoices) {
-              delete choice.points;
-              if (
-                !this.shouldShowCorrectAnswers(
-                  assignment.correctAnswerVisibility,
-                  grade,
-                  passingGrade,
-                )
-              ) {
-                delete choice.isCorrect;
-                delete choice.feedback;
-              }
-            }
-          }
-        }
-      }
-
-      if (
-        question.randomizedChoices &&
-        typeof question.randomizedChoices === "string"
-      ) {
-        const randomizedArray = JSON.parse(
-          question.randomizedChoices,
-        ) as Array<{
-          points?: number;
-          isCorrect?: boolean;
-          feedback?: string;
-          [key: string]: any;
-        }>;
-        if (Array.isArray(randomizedArray)) {
-          for (const choice of randomizedArray) {
-            delete choice.points;
-            if (
-              !this.shouldShowCorrectAnswers(
-                assignment.correctAnswerVisibility || "NEVER",
-                grade,
-                passingGrade,
-              )
-            ) {
-              delete choice.isCorrect;
-              delete choice.feedback;
-            }
-          }
-          question.randomizedChoices = JSON.stringify(randomizedArray);
-        } else {
-          question.randomizedChoices = JSON.stringify([]);
-        }
-      }
-
-      delete question.answer;
-    }
-  }
-
-  private applyAnswerVisibilityToQuestionDtos(
-    questions: EnhancedAttemptQuestionDto[],
-    shouldShowCorrectAnswers: boolean,
-  ): EnhancedAttemptQuestionDto[] {
-    return questions.map((question) => ({
-      ...question,
-      answer: shouldShowCorrectAnswers ? question.answer : undefined,
-    }));
-  }
-
   private toQuestionDtosForTranslation(
     questions: EnhancedAttemptQuestionDto[],
   ): QuestionDto[] {
@@ -2402,12 +2529,14 @@ export class AttemptSubmissionService {
   }
 
   /**
-   * Determine if correct answers should be shown based on visibility setting and grade
+   * Whether a submitted attempt may see the answer key: ALWAYS yes, NEVER no,
+   * ON_PASS only when the grade meets the passing grade. Callers pass NEVER
+   * for an attempt that is still open.
    */
   private shouldShowCorrectAnswers(
     correctAnswerVisibility: CorrectAnswerVisibility,
-    grade: number,
-    passingGrade: number,
+    grade: number | null,
+    passingGrade: number | null,
   ): boolean {
     switch (correctAnswerVisibility) {
       case "NEVER": {

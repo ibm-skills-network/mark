@@ -438,3 +438,106 @@ describe("AttemptQuestionsMapper.buildQuestionsWithTranslations", () => {
     expect(questions[0].question).toBe(QUESTION_HTML);
   });
 });
+
+describe("AttemptQuestionsMapper translated choices for the learner shaper", () => {
+  const esTranslations = (translatedChoices: unknown) =>
+    buildTranslations({
+      "question-42": {
+        es: {
+          translatedText: "<p>Elige</p>",
+          translatedChoices:
+            translatedChoices as TranslatedContent["translatedChoices"],
+        },
+      },
+    });
+
+  it("reorders translated choices stored as JSON text", async () => {
+    const questions =
+      await AttemptQuestionsMapper.buildQuestionsWithTranslations(
+        buildAttempt(JSON.stringify([{ id: 12 }, { id: 11 }])),
+        buildAssignment(),
+        esTranslations(
+          JSON.stringify([
+            { id: 11, choice: "Alfa", isCorrect: true, feedback: "bien" },
+            { id: 12, choice: "Beta (es)", isCorrect: false },
+          ]),
+        ),
+        "es",
+      );
+
+    expect(questions[0].translations?.es?.translatedChoices).toEqual([
+      { id: 12, choice: "Beta (es)", isCorrect: false },
+      { id: 11, choice: "Alfa", isCorrect: true, feedback: "bien" },
+    ]);
+    expect(questions[0].choices).toEqual([
+      { id: 12, choice: "Beta (es)" },
+      { id: 11, choice: "Alfa" },
+    ]);
+  });
+
+  it("keeps authored order when the frozen list does not cover every choice", async () => {
+    const translated = [
+      { id: 11, choice: "Alfa" },
+      { id: 12, choice: "Beta (es)" },
+    ];
+    const questions =
+      await AttemptQuestionsMapper.buildQuestionsWithTranslations(
+        buildAttempt(JSON.stringify([{ id: 12 }])),
+        buildAssignment(),
+        esTranslations(translated),
+        "es",
+      );
+
+    expect(questions[0].translations?.es?.translatedChoices).toEqual(
+      translated,
+    );
+    expect(questions[0].choices).toEqual(translated);
+  });
+
+  it("does not mutate the caller's translation map", async () => {
+    const stored = [
+      { id: 11, choice: "Alfa" },
+      { id: 12, choice: "Beta (es)" },
+    ];
+    const translations = esTranslations(stored);
+    await AttemptQuestionsMapper.buildQuestionsWithTranslations(
+      buildAttempt(JSON.stringify([{ id: 12 }, { id: 11 }])),
+      buildAssignment(),
+      translations,
+      "es",
+    );
+
+    expect(translations.get("question-42")?.es.translatedChoices).toBe(stored);
+  });
+
+  it.each([null, "not json", '{"a":1}'])(
+    "serves translatedChoices %p as null",
+    async (stored) => {
+      const questions =
+        await AttemptQuestionsMapper.buildQuestionsWithTranslations(
+          buildAttempt(null),
+          buildAssignment(),
+          esTranslations(stored),
+          "es",
+        );
+
+      expect(questions[0].translations?.es?.translatedChoices).toBeNull();
+    },
+  );
+
+  it("falls back to the question's scoring when the variant has none", async () => {
+    const assignment = buildAssignment();
+    (assignment.questions[0] as { scoring: unknown }).scoring = {
+      type: "CRITERIA_BASED",
+    };
+    const questions =
+      await AttemptQuestionsMapper.buildQuestionsWithTranslations(
+        buildAttempt(null, { id: 5, scoring: null, choices: null }),
+        assignment,
+        buildTranslations(),
+        "en",
+      );
+
+    expect(questions[0].scoring).toEqual({ type: "CRITERIA_BASED" });
+  });
+});

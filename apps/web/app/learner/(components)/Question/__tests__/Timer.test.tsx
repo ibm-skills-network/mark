@@ -151,6 +151,78 @@ describe("Timer auto-submit", () => {
   });
 });
 
+describe("Timer auto-submit payload", () => {
+  const upload = {
+    filename: "report.pdf",
+    key: "3428/learner@example.com/2/report.pdf",
+    bucket: "learner-bucket",
+  };
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.useFakeTimers();
+    localStorage.clear();
+    mockCountdownState.countdown = 0;
+    mockCountdownState.timerExpired = true;
+    mockUseParams.mockReturnValue({ assignmentId: "3428" });
+    mockSubmitAssignment.mockResolvedValue(undefined);
+    useAssignmentDetails.setState({ assignmentDetails: null });
+  });
+
+  afterEach(() => {
+    act(() => {
+      jest.runOnlyPendingTimers();
+    });
+    jest.useRealTimers();
+  });
+
+  // The timed auto-submit closes the attempt either way; a payload the server
+  // refuses closes it at 0.
+  it("sends file answers as upload references only and a supported language", async () => {
+    useLearnerStore.setState({
+      questions: [
+        answeredQuestion,
+        {
+          id: 2,
+          type: "UPLOAD",
+          learnerFileResponse: [
+            {
+              filename: "main.py",
+              githubUrl: "https://github.com/o/r/blob/main/main.py",
+              owner: "o",
+              repo: "r",
+              path: "main.py",
+              content: "print('hi')\n".repeat(100),
+            },
+            { ...upload, fileType: "image/png", content: "x".repeat(500) },
+          ],
+        } as unknown as QuestionStore,
+      ],
+      activeAttemptId: 999,
+      userPreferedLanguage: "xx",
+      attemptStartedAt: anEstablishedAttempt(),
+      serverTimeOffsetMs: 0,
+    });
+
+    render(<Timer />);
+    await act(async () => {
+      jest.advanceTimersByTime(2100);
+    });
+
+    expect(mockSubmitAssignment).toHaveBeenCalledTimes(1);
+    const [, , responses, language] = mockSubmitAssignment.mock.calls[0] as [
+      number,
+      number,
+      { id: number; learnerFileResponse: unknown[] }[],
+      string,
+    ];
+    expect(responses.find((r) => r.id === 2)?.learnerFileResponse).toEqual([
+      { ...upload, fileType: "image/png", content: "InCos" },
+    ]);
+    expect(language).toBe("en");
+  });
+});
+
 describe("Timer auto-submit on a closed attempt", () => {
   beforeEach(() => {
     jest.clearAllMocks();

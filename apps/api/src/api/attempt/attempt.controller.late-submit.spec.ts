@@ -1,5 +1,12 @@
+import "reflect-metadata";
+import { GUARDS_METADATA, PATH_METADATA } from "@nestjs/common/constants";
+import { ROLES_KEY } from "src/auth/role/roles.global.guard";
+import { TRANSFORM_METADATA_KEY } from "src/common/interceptors/data-transform.interceptor";
+import { TRANSFORM_FIELDS } from "src/helpers/transform-config";
 import { UserRole } from "../../auth/interfaces/user.session.interface";
+import { AssignmentAttemptAccessControlGuard } from "../assignment/attempt/guards/assignment.attempt.access.control.guard";
 import { AttemptClosedException } from "../assignment/attempt/helper/submission-deadline.helper";
+import { UnsupportedResponseTypeException } from "./common/utils/learner-file-reference.util";
 import { AttemptControllerV2 } from "./attempt.controller";
 
 const logger = {
@@ -29,7 +36,7 @@ const buildController = () => {
     }),
     enqueueAuthorPreviewJob: jest.fn().mockResolvedValue(undefined),
     updateAssignmentAttempt: jest.fn().mockResolvedValue({ id: 1873208 }),
-    getAttemptSubmissionStatus: jest.fn(),
+    assertSubmitPayloadAcceptable: jest.fn().mockResolvedValue(undefined),
   };
   const killSwitch = { assertGradingAllowed: jest.fn() };
   const controller = new AttemptControllerV2(
@@ -150,24 +157,112 @@ describe("AttemptControllerV2 submit on a closed attempt", () => {
   });
 });
 
-describe("AttemptControllerV2 submission status", () => {
-  it("returns the attempt's submission status", async () => {
+describe("AttemptControllerV2 submit payload check", () => {
+  it("refuses a payload grading would refuse before queueing or the kill switch", async () => {
+    const { controller, attemptService, killSwitch } = buildController();
+    attemptService.assertSubmitPayloadAcceptable.mockRejectedValue(
+      new UnsupportedResponseTypeException(),
+    );
+
+    const error: unknown = await controller
+      .updateAssignmentAttempt(1873208, 771, body, learnerRequest())
+      .catch((caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(UnsupportedResponseTypeException);
+    expect((error as UnsupportedResponseTypeException).getResponse()).toEqual({
+      statusCode: 400,
+      code: "UNSUPPORTED_RESPONSE_TYPE",
+      message: "This question type is no longer supported.",
+      error: "Bad Request",
+    });
+    expect(attemptService.assertSubmitPayloadAcceptable).toHaveBeenCalledWith(
+      1873208,
+      771,
+      "learner@example.com",
+      body,
+    );
+    expect(attemptService.createGradingJob).not.toHaveBeenCalled();
+    expect(attemptService.enqueueGradingJob).not.toHaveBeenCalled();
+    expect(attemptService.updateAssignmentAttempt).not.toHaveBeenCalled();
+    expect(killSwitch.assertGradingAllowed).not.toHaveBeenCalled();
+  });
+
+  it("does not check the payload of a duplicate submit that reuses the in-flight job", async () => {
     const { controller, attemptService } = buildController();
-    const status = {
-      id: 1873208,
-      submitted: true,
-      closedAtTimeLimit: true,
-      acceptingSubmissions: false,
-      expiresAt: "2026-10-21T01:16:03.499Z",
-      serverNow: "2026-10-21T01:16:24.000Z",
-    };
-    attemptService.getAttemptSubmissionStatus.mockResolvedValue(status);
+    attemptService.assertLearnerAttemptOpenForSubmit.mockResolvedValue({
+      inFlightGradingJobId: "job-in-flight",
+    });
+
+    await controller.updateAssignmentAttempt(
+      1873208,
+      771,
+      body,
+      learnerRequest(),
+    );
+
+    expect(attemptService.assertSubmitPayloadAcceptable).not.toHaveBeenCalled();
+  });
+
+  it("does not check an author preview payload", async () => {
+    const { controller, attemptService } = buildController();
+
+    await controller.updateAssignmentAttempt(
+      -1,
+      771,
+      body,
+      learnerRequest(UserRole.AUTHOR),
+    );
+
+    expect(attemptService.assertSubmitPayloadAcceptable).not.toHaveBeenCalled();
+  });
+});
+
+describe("AttemptControllerV2 submission status", () => {
+  const status = {
+    id: 1_873_208,
+    submitted: true,
+    closedAtTimeLimit: true,
+    acceptingSubmissions: false,
+    expiresAt: "2026-10-21T01:16:03.499Z",
+    serverNow: "2026-10-21T01:16:24.000Z",
+  };
+
+  it("returns the learner's own attempt status, scoped to the route assignment", async () => {
+    const getAttemptSubmissionStatus = jest.fn().mockResolvedValue(status);
+    const controller = new AttemptControllerV2(
+      logger as never,
+      { getAttemptSubmissionStatus } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
 
     await expect(
-      controller.getAttemptSubmissionStatus(1873208, learnerRequest()),
+      controller.getAttemptSubmissionStatus("771", "1873208", learnerRequest()),
     ).resolves.toEqual(status);
-    expect(attemptService.getAttemptSubmissionStatus).toHaveBeenCalledWith(
-      1873208,
+    expect(getAttemptSubmissionStatus).toHaveBeenCalledWith(
+      1_873_208,
+      771,
+      "learner@example.com",
+    );
+  });
+
+  it("is learner-only behind the attempt guard, with plain JSON out and decoded requests in", () => {
+    const handler = AttemptControllerV2.prototype.getAttemptSubmissionStatus;
+
+    expect(Reflect.getMetadata(ROLES_KEY, handler)).toEqual([UserRole.LEARNER]);
+    expect(Reflect.getMetadata(GUARDS_METADATA, handler)).toContain(
+      AssignmentAttemptAccessControlGuard,
+    );
+    expect(Reflect.getMetadata(TRANSFORM_METADATA_KEY, handler)).toEqual({
+      encodeResponse: false,
+      decodeRequest: true,
+      fields: [...TRANSFORM_FIELDS],
+      deep: true,
+    });
+    expect(Reflect.getMetadata(PATH_METADATA, handler)).toBe(
+      ":attemptId/submission-status",
     );
   });
 });

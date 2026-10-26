@@ -10,10 +10,10 @@ import { AssignmentModuleV1 } from "./assignment/v1/modules/assignment.module";
 import { AssignmentModuleV2 } from "./assignment/v2/modules/assignment.module";
 import { AttemptModule } from "./attempt/attempt.module";
 import { FilesModule } from "./files/files.module";
-import { GithubModule } from "./github/github.module";
 import { JobModule } from "./Job/job.module";
 import { LlmModule } from "./llm/llm.module";
 import { ReportsModule } from "./report/report.module";
+import { SavedSessionsModule } from "./saved-sessions/saved-sessions.module";
 import { ChatModule } from "./user/modules/chat.module";
 
 @Module({
@@ -27,11 +27,11 @@ import { ChatModule } from "./user/modules/chat.module";
     AssignmentModuleV2,
     AttemptModule,
     AdminModule,
-    GithubModule,
     JobModule,
     ReportsModule,
     ChatModule,
     FilesModule,
+    SavedSessionsModule,
   ],
 })
 export class ApiModule {}

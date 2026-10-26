@@ -1,5 +1,5 @@
 import { HumanMessage } from "@langchain/core/messages";
-import { createRequire } from "node:module";
+import { toJsonSchema } from "@langchain/core/utils/json_schema";
 import { z } from "zod";
 import {
   CriterionGradeSchema,
@@ -13,14 +13,25 @@ import {
   widenOptionalsForStrictOutput,
 } from "./structured-output.util";
 
-// LangChain serializes schemas with its own nested copy of the openai SDK,
-// whose strict-mode serializer is the one that rejects bare `.optional()` in
-// production — the workspace-root openai is older and silently permissive, so
-// resolve the copy LangChain actually uses.
-const langchainRequire = createRequire(require.resolve("@langchain/openai"));
-const { zodResponseFormat } = langchainRequire("openai/helpers/zod") as {
-  zodResponseFormat: (schema: z.ZodTypeAny, name: string) => unknown;
-};
+// LangChain converts zod 4 schemas with `toJsonSchema` and sends the result
+// with `strict: true`, so OpenAI rejects any object whose `required` list
+// does not name every property. Walk the emitted JSON Schema and collect the
+// object paths that break that rule.
+function objectsMissingRequired(node: unknown, path = "$"): string[] {
+  if (typeof node !== "object" || node === null) return [];
+  const schema = node as Record<string, unknown>;
+  const found: string[] = [];
+  if (schema.type === "object" && typeof schema.properties === "object") {
+    const properties = Object.keys(schema.properties as object);
+    const required = new Set((schema.required as string[] | undefined) ?? []);
+    if (properties.some((key) => !required.has(key))) found.push(path);
+  }
+  for (const [key, value] of Object.entries(schema)) {
+    if (key === "required") continue;
+    found.push(...objectsMissingRequired(value, `${path}.${key}`));
+  }
+  return found;
+}
 
 describe("invokeStructuredChatModel", () => {
   const schema = z.object({ grade: z.number() });
@@ -194,9 +205,7 @@ describe("invokeStructuredChatModel", () => {
     );
 
     const boundSchema = withStructuredOutput.mock.calls[0][0] as z.ZodTypeAny;
-    expect(() =>
-      zodResponseFormat(boundSchema, "structured_response"),
-    ).not.toThrow();
+    expect(objectsMissingRequired(toJsonSchema(boundSchema))).toEqual([]);
 
     expect(result.parsed).toEqual({
       rationale: "ok",
@@ -220,17 +229,22 @@ describe("widenOptionalsForStrictOutput", () => {
     expect(widenOptionalsForStrictOutput(clean)).toBe(clean);
   });
 
-  it("is rejected by the OpenAI strict serializer before widening and accepted after", () => {
-    const bare = z.object({ nextStep: z.string().min(10).optional() });
-    expect(() => zodResponseFormat(bare, "structured_response")).toThrow(
-      /optional\(\)/,
-    );
-    expect(() =>
-      zodResponseFormat(
-        widenOptionalsForStrictOutput(bare),
-        "structured_response",
-      ),
-    ).not.toThrow();
+  it("leaves an optional key out of required before widening and lists it after", () => {
+    const bare = z.object({
+      nextStep: z.string().min(10).optional(),
+      evidence: z.array(z.object({ note: z.string().optional() })),
+    });
+    expect(objectsMissingRequired(toJsonSchema(bare))).toEqual([
+      "$",
+      "$.properties.evidence.items",
+    ]);
+    const widened = toJsonSchema(widenOptionalsForStrictOutput(bare)) as {
+      required: string[];
+      properties: { nextStep: unknown };
+    };
+    expect(objectsMissingRequired(widened)).toEqual([]);
+    expect(widened.required).toEqual(["nextStep", "evidence"]);
+    expect(JSON.stringify(widened.properties.nextStep)).toContain("null");
   });
 
   it.each([
@@ -239,14 +253,13 @@ describe("widenOptionalsForStrictOutput", () => {
     ["JudgeCritiqueSchema", JudgeCritiqueSchema],
     ["GradeSummarySchema", GradeSummarySchema],
   ])(
-    "makes the production grading schema %s strict-serializable",
+    "makes every object in the production grading schema %s fully required",
     (_name, gradingSchema) => {
-      expect(() =>
-        zodResponseFormat(
-          widenOptionalsForStrictOutput(gradingSchema),
-          "structured_response",
+      expect(
+        objectsMissingRequired(
+          toJsonSchema(widenOptionalsForStrictOutput(gradingSchema)),
         ),
-      ).not.toThrow();
+      ).toEqual([]);
     },
   );
 

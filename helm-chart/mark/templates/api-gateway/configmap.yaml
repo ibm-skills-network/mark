@@ -8,4 +8,8 @@ data:
 {{- range $name, $value := .Values.apiGateway.env }}
   {{ $name }}: {{ $value | quote }}
 {{- end }}
+{{- if .Values.rustApi.enabled }}
+  MARK_RUST_API_ENDPOINT: {{ printf "http://%s:%v" (include "mark.rustApi.name" .) .Values.rustApi.service.port | quote }}
+  MARK_RUST_ROUTES: {{ join "," (.Values.rustApi.routes | default list) | quote }}
+{{- end }}
 {{- end }}

@@ -32,6 +32,9 @@ export class LocalizationService {
         invalidTrueFalse: "Invalid true/false response.",
         correctTF: "Correct! Your answer is right.",
         incorrectTF: "Incorrect. The correct answer is {correctAnswer}.",
+        // Stored feedback says only this; the answer is added when revealed.
+        incorrectTFNoAnswer: "Incorrect.",
+        correctAnswerTF: "The correct answer is {correctAnswer}.",
         true: "True",
         false: "False",
 
@@ -57,6 +60,9 @@ export class LocalizationService {
         invalidTrueFalse: "إجابة صحيحة/خاطئة غير صالحة.",
         correctTF: "صحيح! إجابتك صحيحة.",
         incorrectTF: "خطأ. الإجابة الصحيحة هي {correctAnswer}.",
+        // Stored feedback says only this; the answer is added when revealed.
+        incorrectTFNoAnswer: "خطأ.",
+        correctAnswerTF: "الإجابة الصحيحة هي {correctAnswer}.",
         true: "صحيح",
         false: "خطأ",
         correctSelection:
@@ -79,6 +85,9 @@ export class LocalizationService {
         invalidTrueFalse: "Jawaban benar/salah tidak valid.",
         correctTF: "Benar! Jawaban Anda benar.",
         incorrectTF: "Salah. Jawaban yang benar adalah {correctAnswer}.",
+        // Stored feedback says only this; the answer is added when revealed.
+        incorrectTFNoAnswer: "Salah.",
+        correctAnswerTF: "Jawaban yang benar adalah {correctAnswer}.",
         true: "Benar",
         false: "Salah",
         correctSelection: "**Pilihan benar:** {learnerChoice} (+{points} poin)",
@@ -102,6 +111,9 @@ export class LocalizationService {
         invalidTrueFalse: "Ungültige Ja/Nein-Antwort.",
         correctTF: "Richtig! Ihre Antwort ist korrekt.",
         incorrectTF: "Falsch. Die richtige Antwort ist {correctAnswer}.",
+        // Stored feedback says only this; the answer is added when revealed.
+        incorrectTFNoAnswer: "Falsch.",
+        correctAnswerTF: "Die richtige Antwort ist {correctAnswer}.",
         true: "Wahr",
         false: "Falsch",
         correctSelection:
@@ -127,6 +139,9 @@ export class LocalizationService {
         invalidTrueFalse: "Respuesta verdadero/falso inválida.",
         correctTF: "¡Correcto! Tu respuesta es correcta.",
         incorrectTF: "Incorrecto. La respuesta correcta es {correctAnswer}.",
+        // Stored feedback says only this; the answer is added when revealed.
+        incorrectTFNoAnswer: "Incorrecto.",
+        correctAnswerTF: "La respuesta correcta es {correctAnswer}.",
         true: "Verdadero",
         false: "Falso",
         correctSelection:
@@ -151,6 +166,9 @@ export class LocalizationService {
         invalidTrueFalse: "Réponse vrai/faux invalide.",
         correctTF: "Correct ! Votre réponse est juste.",
         incorrectTF: "Incorrect. La bonne réponse est {correctAnswer}.",
+        // Stored feedback says only this; the answer is added when revealed.
+        incorrectTFNoAnswer: "Incorrect.",
+        correctAnswerTF: "La bonne réponse est {correctAnswer}.",
         true: "Vrai",
         false: "Faux",
         correctSelection:

@@ -1,6 +1,7 @@
 import {
   selectedChoiceTexts,
   submissionLanguage,
+  supportedSubmissionLanguage,
 } from "@/lib/learner-choice-submission";
 import { readAuthorPreviewPayload } from "@/app/learner/utils/authorPreview";
 import type {
@@ -17,13 +18,14 @@ import {
   isGradingStreamLostError,
 } from "@/lib/learner";
 import { isGradingUnableError } from "@/lib/grading-failure";
+import { toSubmittedFileReferences } from "@/lib/learner-file-response";
 import { cn } from "@/lib/strings";
 import { getUser, submitAssignment } from "@/lib/talkToBackend";
+import { useAssignmentDetails, useLearnerStore } from "@/stores/learner";
 import {
-  useAssignmentDetails,
-  useGitHubStore,
-  useLearnerStore,
-} from "@/stores/learner";
+  gradableQuestions,
+  questionResultsFromSubmit,
+} from "@/lib/submit-result";
 import { useRouter } from "next/navigation";
 import {
   useEffect,
@@ -88,7 +90,6 @@ function Timer(props: Props) {
     state.assignmentDetails,
     state.setGrade,
   ]);
-  const clearGithubStore = useGitHubStore((state) => state.clearGithubStore);
   // The URL is authoritative; assignmentDetails is only populated on the
   // overview route and is null on a deep link / hard refresh, which would
   // otherwise gate off auto-submit and silently drop a timed submission.
@@ -137,8 +138,8 @@ function Timer(props: Props) {
     void getUserRole();
   }, [assignmentId]);
   async function handleSubmitAssignment() {
-    const responsesForQuestions: QuestionAttemptRequestWithId[] = questions.map(
-      (q) => ({
+    const responsesForQuestions: QuestionAttemptRequestWithId[] =
+      gradableQuestions(questions).map((q) => ({
         id: q.id,
         learnerTextResponse: q.learnerTextResponse || "",
         learnerUrlResponse: q.learnerUrlResponse || "",
@@ -153,19 +154,9 @@ function Timer(props: Props) {
                 .filter((choice) => choice !== undefined) || []
             : selectedChoiceTexts(q, userPreferedLanguage).texts,
         learnerAnswerChoice: q.learnerAnswerChoice ?? null,
-        learnerFileResponse: (q.learnerFileResponse || []).map((file) => {
-          const extension = file.filename.split(".").pop()?.toLowerCase() || "";
-          if (["jpg", "jpeg", "png", "gif", "svg"].includes(extension)) {
-            return {
-              ...file,
-            };
-          }
-          return file;
-        }),
-        learnerPresentationResponse: q.presentationResponse ?? null,
+        learnerFileResponse: toSubmittedFileReferences(q.learnerFileResponse),
         selectedLanguage: q.selectedLanguage,
-      }),
-    );
+      }));
 
     if (!assignmentId) {
       console.warn(
@@ -188,7 +179,7 @@ function Timer(props: Props) {
         activeAttemptId,
         responsesForQuestions,
         roleRef.current === "author"
-          ? userPreferedLanguage
+          ? supportedSubmissionLanguage(userPreferedLanguage)
           : submissionLanguage(questions, userPreferedLanguage),
         roleRef.current === "author" ? authorQuestions : undefined,
         roleRef.current === "author" ? authorAssignmentDetails : undefined,
@@ -256,10 +247,10 @@ function Timer(props: Props) {
       toast.error("Failed to submit assignment.");
       return;
     }
-    const { grade, feedbacksForQuestions } = res;
-    setTotalPointsEarned(res.totalPointsEarned);
-    setTotalPointsPossible(res.totalPossiblePoints);
-    if (grade !== undefined) {
+    const { grade } = res;
+    setTotalPointsEarned(res.totalPointsEarned ?? 0);
+    setTotalPointsPossible(res.totalPossiblePoints ?? 0);
+    if (typeof grade === "number") {
       setGrade(grade * 100);
     } else {
       // No grade on this submission (score hidden): clear any grade left
@@ -276,25 +267,13 @@ function Timer(props: Props) {
       setQuestion(updatedQuestion);
     }
 
-    for (const feedback of feedbacksForQuestions || []) {
-      setQuestion({
-        id: feedback.questionId,
-        questionResponses: [
-          {
-            id: feedback.id,
-            learnerAnswerChoice: responsesForQuestions.find(
-              (q) => q.id === feedback.questionId,
-            )?.learnerAnswerChoice,
-            points: feedback.totalPoints ?? 0,
-            feedback: feedback.feedback || [],
-            learnerResponse: feedback.question,
-            questionId: feedback.questionId,
-            assignmentAttemptId: activeAttemptId,
-          },
-        ],
-      });
+    for (const update of questionResultsFromSubmit(
+      res,
+      responsesForQuestions,
+      activeAttemptId,
+    )) {
+      setQuestion(update);
     }
-    clearGithubStore();
     setLearnerStore({
       activeAttemptId: null,
       expiresAt: undefined,

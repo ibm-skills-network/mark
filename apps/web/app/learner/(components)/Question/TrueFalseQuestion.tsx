@@ -8,21 +8,13 @@ interface Props {
 
 function TrueFalseQuestion(props: Props) {
   const { question } = props;
-  const [setAnswerChoice] = useLearnerStore((state) => [
-    state.setAnswerChoice,
-    state.activeAttemptId,
-  ]);
+  const setAnswerChoice = useLearnerStore((state) => state.setAnswerChoice);
   const learnerAnswerChoice = question.learnerAnswerChoice;
 
   const userPreferredLanguage =
     useLearnerStore((state) => state.userPreferedLanguage) || "en";
   const langTranslations =
     trueFalseTranslations[userPreferredLanguage] || trueFalseTranslations["en"];
-
-  // useAutoSaveResponse(assignmentId, activeAttemptId, question.id, {
-  //   enabled: true,
-  //   debounceMs: 500,
-  // });
 
   const handleChoiceClick = (choice: boolean) => {
     setAnswerChoice(choice, question.id);

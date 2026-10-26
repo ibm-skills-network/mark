@@ -53,3 +53,36 @@ export function sanitizeUploadPath(rawPath: string | undefined | null): string {
   }
   return normalized.startsWith("/") ? normalized.slice(1) : normalized;
 }
+
+export const MAX_UPLOAD_FILE_NAME_LENGTH = 255;
+
+const isControlCharacter = (character: string): boolean => {
+  const code = character.codePointAt(0) ?? 0;
+  return code < 0x20 || (code >= 0x7f && code <= 0x9f);
+};
+
+/**
+ * Reduce a client-supplied upload file name to a safe storage-key segment:
+ * the last path segment only (either separator), with control characters
+ * removed. Rejects with a generic 400 when nothing usable is left or the
+ * result is longer than MAX_UPLOAD_FILE_NAME_LENGTH characters.
+ */
+export function sanitizeUploadFileName(rawFileName: unknown): string {
+  if (typeof rawFileName !== "string") {
+    throw new BadRequestException("Invalid file name");
+  }
+  const segments = rawFileName.split(/[/\\]/);
+  const baseName = [...(segments.at(-1) ?? "")]
+    .filter((character) => !isControlCharacter(character))
+    .join("")
+    .trim();
+  if (
+    baseName.length === 0 ||
+    baseName === "." ||
+    baseName === ".." ||
+    baseName.length > MAX_UPLOAD_FILE_NAME_LENGTH
+  ) {
+    throw new BadRequestException("Invalid file name");
+  }
+  return baseName;
+}

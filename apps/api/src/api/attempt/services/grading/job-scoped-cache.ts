@@ -1,4 +1,5 @@
 import type { Question, Translation } from "@prisma/client";
+import type { QuestionDto } from "src/api/assignment/dto/update.questions.request.dto";
 
 /**
  * Per-job read-side cache for the grading hot path.
@@ -19,6 +20,12 @@ export interface JobScopedCache {
   assignment?: { instructions: string | null };
   questions: Map<number, Question>;
   translations: Map<string, Translation | null>;
+  /**
+   * The attempt's pinned questions (from its assignment version), keyed by
+   * question id. When set, grading reads questions from here instead of the
+   * live Question rows; absent for attempts with no pinned version.
+   */
+  pinnedQuestions?: Map<number, QuestionDto>;
 }
 
 /**

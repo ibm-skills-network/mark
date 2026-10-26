@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { AdminAuthModule } from "../../auth/admin-auth.module";
+import { InternalGradingController } from "../../job-queue/internal-grading.controller";
 import { JobQueueModule } from "../../job-queue/job-queue.module";
 import { AssignmentAttemptAccessControlGuard } from "../assignment/attempt/guards/assignment.attempt.access.control.guard";
 import { QuestionService } from "../assignment/question/question.service";
@@ -25,7 +26,6 @@ import { AttemptControllerV2 } from "./attempt.controller";
 import { ChoiceGradingStrategy } from "./common/strategies/choice-grading.strategy";
 import { FileGradingStrategy } from "./common/strategies/file-grading.strategy";
 import { ImageGradingStrategy } from "./common/strategies/image-grading.strategy";
-import { PresentationGradingStrategy } from "./common/strategies/presentation-grading.strategy";
 import { TextGradingStrategy } from "./common/strategies/text-grading.strategy";
 import { TrueFalseGradingStrategy } from "./common/strategies/true-false-grading.strategy";
 import { UrlGradingStrategy } from "./common/strategies/url-grading.strategy";
@@ -59,7 +59,7 @@ import { TranslationService } from "./services/translation/translation.service";
     AdminAuthModule,
     AttemptAccessCacheModule,
   ],
-  controllers: [AttemptControllerV2],
+  controllers: [AttemptControllerV2, InternalGradingController],
   providers: [
     AttemptServiceV2,
     AttemptSubmissionService,
@@ -74,7 +74,6 @@ import { TranslationService } from "./services/translation/translation.service";
     TextGradingStrategy,
     FileGradingStrategy,
     UrlGradingStrategy,
-    PresentationGradingStrategy,
     ChoiceGradingStrategy,
     TrueFalseGradingStrategy,
     {

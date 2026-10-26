@@ -17,7 +17,7 @@ jest.mock("../api-client", () => {
 });
 
 import { apiClient, APIError } from "../api-client";
-import { createAttempt } from "../learner";
+import { abandonAttempt, createAttempt } from "../learner";
 
 const unprocessable = (body: unknown) =>
   new APIError("Unprocessable Entity", 422, "Unprocessable Entity", body);
@@ -89,5 +89,69 @@ describe("createAttempt 422 handling", () => {
     );
 
     await expect(createAttempt(123)).resolves.toBe("in cooldown period");
+  });
+});
+
+describe("createAttempt 403 handling", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("maps 403 ASSIGNMENT_NOT_PUBLISHED to 'assignment not published'", async () => {
+    (apiClient.post as jest.Mock).mockRejectedValue(
+      new APIError("Forbidden", 403, "Forbidden", {
+        statusCode: 403,
+        code: "ASSIGNMENT_NOT_PUBLISHED",
+        message: "Assignment is not published.",
+      }),
+    );
+
+    await expect(createAttempt(123)).resolves.toBe("assignment not published");
+  });
+
+  it("leaves an uncoded 403 on the generic failure path", async () => {
+    (apiClient.post as jest.Mock).mockRejectedValue(
+      new APIError("Forbidden", 403, "Forbidden", {
+        statusCode: 403,
+        message: "Forbidden resource",
+      }),
+    );
+
+    await expect(createAttempt(123)).resolves.toBeUndefined();
+  });
+});
+
+const { apiClient: mockedClient }: { apiClient: { post: jest.Mock } } =
+  jest.requireMock("../api-client");
+
+describe("plain JSON responses", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("createAttempt asks the client not to transform the response", async () => {
+    (apiClient.post as jest.Mock).mockResolvedValue({
+      id: 9,
+      success: true,
+      serverNow: "2026-10-23T00:00:00.000Z",
+    });
+
+    await expect(createAttempt(123)).resolves.toBe(9);
+    expect(mockedClient.post).toHaveBeenCalledWith(
+      expect.any(String),
+      undefined,
+      expect.objectContaining({ transformResponse: false }),
+    );
+  });
+
+  it("abandonAttempt asks the client not to transform the response", async () => {
+    (apiClient.post as jest.Mock).mockResolvedValue({ id: 9, success: true });
+
+    await expect(abandonAttempt(123, 9)).resolves.toBe(true);
+    expect(mockedClient.post).toHaveBeenCalledWith(
+      expect.stringContaining("/attempts/9/abandon"),
+      {},
+      expect.objectContaining({ transformResponse: false }),
+    );
   });
 });

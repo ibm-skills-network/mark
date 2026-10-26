@@ -26,10 +26,6 @@ describe("AttemptServiceV1.createReport", () => {
       prisma as never,
       undefined as never,
       undefined as never,
-      undefined as never,
-      undefined as never,
-      undefined as never,
-      undefined as never,
       parentLogger as never,
     );
     return { service, prisma };

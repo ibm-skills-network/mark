@@ -96,9 +96,21 @@ export class FilesController {
   }
 
   @Get("public-url")
-  async getPublicUrl(@Query("key") key: string) {
+  @UseGuards(AuthGuard)
+  async getPublicUrl(
+    @Query("key") key: string,
+    @Req() request: UserSessionRequest,
+  ) {
     if (!key) {
       throw new BadRequestException("Missing required parameter: key");
+    }
+    if (!this.isKeyOwnedBy(key, request.userSession)) {
+      this.logger.warn("public_url_denied: key not owned by caller", {
+        denial_reason: "key_not_owned",
+        user_id: sanitizeForLog(request.userSession?.userId),
+        assignment_id: request.userSession?.assignmentId,
+      });
+      throw new NotFoundException();
     }
     return this.filesService.generatePublicUrl(key);
   }
@@ -176,6 +188,10 @@ export class FilesController {
     @Body() uploadRequest: UploadRequestDto,
     @Req() request: UserSessionRequest,
   ) {
+    this.filesService.assertUploadContextMatchesSession(
+      uploadRequest,
+      request.userSession,
+    );
     return this.filesService.generateUploadUrl(
       uploadRequest,
       request.userSession.userId,
@@ -190,6 +206,10 @@ export class FilesController {
     @Body() uploadRequest: UploadRequestDto,
     @Req() request: UserSessionRequest,
   ) {
+    this.filesService.assertUploadContextMatchesSession(
+      uploadRequest,
+      request.userSession,
+    );
     return this.filesService.initiateMultipartUpload(
       uploadRequest,
       request.userSession.userId,
@@ -357,11 +377,26 @@ export class FilesController {
     });
 
     const context = this.parseUploadContext(body.context, userId, source);
+    this.filesService.assertUploadContextMatchesSession(
+      { uploadType: body.uploadType, context },
+      request.userSession,
+    );
 
     // Same resolver as the presigned path: role guard, per-type size limit,
     // key derivation. file.size is the real buffered length, not a
     // client-declared number, so the size check cannot be lied past here.
     const { bucket, key } = this.filesService.resolveUploadTarget(
+      {
+        fileName: file.originalname,
+        fileType: file.mimetype,
+        fileSize: file.size,
+        uploadType: body.uploadType,
+        context,
+      },
+      userId,
+      request.userSession.role,
+    );
+    await this.filesService.assertLearnerFileFitsQuestion(
       {
         fileName: file.originalname,
         fileType: file.mimetype,
@@ -490,7 +525,7 @@ export class FilesController {
   @ApiQuery({
     name: "expiration",
     required: false,
-    description: "URL expiration in seconds (default: 3600)",
+    description: "URL expiration in seconds (default and maximum: 900)",
   })
   @ApiResponse({
     type: Object,
@@ -499,13 +534,13 @@ export class FilesController {
   async getFileAccess(
     @Query("key") key: string,
     @Query("bucket") bucket: string,
-    @Query("expiration") expiration = "3600",
+    @Query("expiration") expiration = "900",
     @Req() request?: UserSessionRequest,
   ): Promise<FileAccessDto> {
     try {
       this.assertAccessAllowed(key, bucket, request?.userSession);
 
-      const expirationSeconds = Number.parseInt(expiration, 10);
+      const expirationSeconds = this.clampAccessExpiration(expiration);
 
       const metadata = await this.s3Service.headObject({
         Bucket: bucket,
@@ -591,13 +626,33 @@ export class FilesController {
     if (!this.s3Service.isConfiguredUploadBucket(bucket)) {
       throw new ForbiddenException();
     }
-    if (userSession.role === UserRole.ADMIN) {
-      return;
-    }
-    const segments = key.split("/").filter(Boolean);
-    if (!segments.includes(userSession.userId)) {
+    if (!this.isKeyOwnedBy(key, userSession)) {
       throw new ForbiddenException();
     }
+  }
+
+  /** An admin, or a key with the caller's user id as one of its segments. */
+  private isKeyOwnedBy(
+    key: string,
+    userSession: UserSession | undefined,
+  ): boolean {
+    if (!userSession?.userId) {
+      return false;
+    }
+    if (userSession.role === UserRole.ADMIN) {
+      return true;
+    }
+    return key.split("/").filter(Boolean).includes(userSession.userId);
+  }
+
+  /** Presigned read URLs live at most 15 minutes, 15 by default. */
+  private clampAccessExpiration(raw: string | undefined): number {
+    const maxSeconds = 900;
+    const parsed = Number.parseInt(raw ?? "", 10);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return maxSeconds;
+    }
+    return Math.min(parsed, maxSeconds);
   }
 
   /**
@@ -836,9 +891,18 @@ export class FilesController {
   }
 
   @Post("folder")
+  @Roles(UserRole.AUTHOR, UserRole.ADMIN)
   @UseGuards(AuthGuard)
-  async createFolder(@Body() createFolderDto: CreateFolderDto) {
-    return this.filesService.createFolder(createFolderDto);
+  async createFolder(
+    @Body() createFolderDto: CreateFolderDto,
+    @Req() request: UserSessionRequest,
+  ) {
+    this.logger.info("files.createFolder", {
+      userId: request.userSession.userId,
+      role: request.userSession.role,
+      uploadType: sanitizeForLog(createFolderDto.uploadType),
+    });
+    return this.filesService.createFolder(createFolderDto, request.userSession);
   }
 
   @Get("download")
@@ -856,24 +920,71 @@ export class FilesController {
   }
 
   @Get("empty-folders")
+  @Roles(UserRole.AUTHOR, UserRole.ADMIN)
   @UseGuards(AuthGuard)
   async listEmptyFolders(
     @Query("uploadType") uploadType: string,
+    @Req() request: UserSessionRequest,
     @Query("groupId") groupId?: string,
   ) {
     if (!uploadType) {
       throw new BadRequestException("Missing required parameter: uploadType");
     }
-    return this.filesService.listEmptyFolders(uploadType, groupId);
+    this.logger.info("files.listEmptyFolders", {
+      userId: request.userSession.userId,
+      role: request.userSession.role,
+      uploadType: sanitizeForLog(uploadType),
+    });
+    return this.filesService.listEmptyFolders(
+      uploadType,
+      request.userSession,
+      groupId,
+    );
   }
 
   @Get()
+  @Roles(UserRole.AUTHOR, UserRole.ADMIN)
   @UseGuards(AuthGuard)
-  async listFiles(@Query("uploadType") uploadType: string) {
+  async listFiles(
+    @Query("uploadType") uploadType: string,
+    @Req() request: UserSessionRequest,
+  ) {
     if (!uploadType) {
       throw new BadRequestException("Missing required parameter: uploadType");
     }
-    return this.filesService.listFiles(uploadType);
+    this.logger.info("files.listFiles", {
+      userId: request.userSession.userId,
+      role: request.userSession.role,
+      uploadType: sanitizeForLog(uploadType),
+    });
+    return this.filesService.listFiles(uploadType, request.userSession);
+  }
+
+  // Registered before `DELETE :fileId`, which would otherwise capture it.
+  @Delete("folder")
+  @Roles(UserRole.AUTHOR, UserRole.ADMIN)
+  @UseGuards(AuthGuard)
+  async deleteFolder(
+    @Query("folderPath") folderPath: string,
+    @Query("uploadType") uploadType: string,
+    @Req() request: UserSessionRequest,
+  ) {
+    if (!uploadType) {
+      throw new BadRequestException("Missing required parameter: uploadType");
+    }
+    if (!folderPath) {
+      throw new BadRequestException("Missing required parameter: folderPath");
+    }
+    this.logger.info("files.deleteFolder", {
+      userId: request.userSession.userId,
+      role: request.userSession.role,
+      uploadType: sanitizeForLog(uploadType),
+    });
+    return this.filesService.deleteFolder(
+      uploadType,
+      folderPath,
+      request.userSession,
+    );
   }
 
   @Delete(":fileId")
@@ -881,6 +992,7 @@ export class FilesController {
   async deleteFile(
     @Param("fileId") fileId: string,
     @Query("uploadType") uploadType: string,
+    @Req() request: UserSessionRequest,
     @Query("key") key?: string,
   ) {
     if (!uploadType) {
@@ -893,6 +1005,11 @@ export class FilesController {
     }
 
     if (key) {
+      this.filesService.assertDeleteAllowed(
+        uploadType,
+        key,
+        request.userSession,
+      );
       return this.filesService.deleteFile(uploadType, key);
     }
 
@@ -901,31 +1018,34 @@ export class FilesController {
     );
   }
 
-  @Delete("folder")
-  @UseGuards(AuthGuard)
-  async deleteFolder(
-    @Query("folderPath") folderPath: string,
-    @Query("uploadType") uploadType: string,
-  ) {
-    if (!uploadType) {
-      throw new BadRequestException("Missing required parameter: uploadType");
-    }
-    if (!folderPath) {
-      throw new BadRequestException("Missing required parameter: folderPath");
-    }
-    return this.filesService.deleteFolder(uploadType, folderPath);
-  }
-
   @Put("move")
+  @Roles(UserRole.AUTHOR, UserRole.ADMIN)
   @UseGuards(AuthGuard)
-  async moveFile(@Body() moveFileDto: MoveFileDto) {
-    return this.filesService.moveFile(moveFileDto);
+  async moveFile(
+    @Body() moveFileDto: MoveFileDto,
+    @Req() request: UserSessionRequest,
+  ) {
+    this.logger.info("files.moveFile", {
+      userId: request.userSession.userId,
+      role: request.userSession.role,
+      uploadType: sanitizeForLog(moveFileDto.uploadType),
+    });
+    return this.filesService.moveFile(moveFileDto, request.userSession);
   }
 
   @Put("rename")
+  @Roles(UserRole.AUTHOR, UserRole.ADMIN)
   @UseGuards(AuthGuard)
-  async renameFile(@Body() renameFileDto: RenameFileDto) {
-    return this.filesService.renameFile(renameFileDto);
+  async renameFile(
+    @Body() renameFileDto: RenameFileDto,
+    @Req() request: UserSessionRequest,
+  ) {
+    this.logger.info("files.renameFile", {
+      userId: request.userSession.userId,
+      role: request.userSession.role,
+      uploadType: sanitizeForLog(renameFileDto.uploadType),
+    });
+    return this.filesService.renameFile(renameFileDto, request.userSession);
   }
 
   @Get("bucket-info")

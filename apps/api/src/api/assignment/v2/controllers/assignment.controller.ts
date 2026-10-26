@@ -45,6 +45,8 @@ import { JobStateRecord } from "src/job-queue/job-state.types";
 import { Logger } from "winston";
 import { ReportRequestDTO } from "../../attempt/dto/assignment-attempt/post.assignment.report.dto";
 import { ASSIGNMENT_SCHEMA_URL } from "../../constants";
+import { DataTransform } from "src/common/interceptors/data-transform.interceptor";
+import { normalizeLangQuery } from "src/helpers/query-language";
 import { BaseAssignmentResponseDto } from "../../dto/base.assignment.response.dto";
 import {
   AssignmentResponseDto,
@@ -59,7 +61,10 @@ import {
   QuestionDto,
   UpdateAssignmentQuestionsDto,
 } from "../../dto/update.questions.request.dto";
-import { AssignmentAccessControlGuard } from "../../guards/assignment.access.control.guard";
+import {
+  AssignmentAccessControlGuard,
+  NoGroupLinkHeal,
+} from "../../guards/assignment.access.control.guard";
 import {
   CompleteAssignmentFileDto,
   InitiateAssignmentFilesDto,
@@ -179,6 +184,7 @@ export class AssignmentControllerV2 {
   @Get(":id")
   @Roles(UserRole.AUTHOR, UserRole.LEARNER)
   @UseGuards(AssignmentAccessControlGuard)
+  @DataTransform({ encodeResponse: false })
   @ApiOperation({ summary: "Get assignment" })
   @ApiParam({ name: "id", required: true, description: "Assignment ID" })
   @ApiExtraModels(GetAssignmentResponseDto, LearnerGetAssignmentResponseDto)
@@ -198,9 +204,13 @@ export class AssignmentControllerV2 {
   async getAssignment(
     @Param("id", ParseIntPipe) id: number,
     @Req() request: UserSessionRequest,
-    @Query("lang") lang?: string,
+    @Query("lang") lang?: unknown,
   ): Promise<GetAssignmentResponseDto | LearnerGetAssignmentResponseDto> {
-    return this.assignmentService.getAssignment(id, request.userSession, lang);
+    return this.assignmentService.getAssignment(
+      id,
+      request.userSession,
+      normalizeLangQuery(lang),
+    );
   }
 
   /**
@@ -565,6 +575,9 @@ export class AssignmentControllerV2 {
    */
   @Get(":id/languages")
   @Roles(UserRole.LEARNER, UserRole.AUTHOR)
+  @UseGuards(AssignmentAccessControlGuard)
+  @NoGroupLinkHeal()
+  @DataTransform({ encodeResponse: false })
   @ApiOperation({ summary: "Get available languages" })
   @ApiParam({ name: "id", required: true, description: "Assignment ID" })
   @ApiResponse({

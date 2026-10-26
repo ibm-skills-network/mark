@@ -57,7 +57,6 @@ export function getApiRoutes() {
 
     reports: `${BASE_API_PATH}/reports`,
 
-    github: `${BASE_API_PATH}/github`,
     chats: `${getBaseApiPath("v1")}/chats`,
     aiStatus: `${getBaseApiPath("v1")}/ai-status`,
   };

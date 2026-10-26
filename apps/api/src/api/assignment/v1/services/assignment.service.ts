@@ -35,7 +35,7 @@ import { BaseAssignmentResponseDto } from "../../dto/base.assignment.response.dt
 import {
   AssignmentResponseDto,
   GetAssignmentResponseDto,
-  LearnerGetAssignmentResponseDto,
+  LegacyLearnerGetAssignmentResponseDto,
 } from "../../dto/get.assignment.response.dto";
 import { EnhancedQuestionsToGenerate } from "../../dto/post.assignment.request.dto";
 import { ReplaceAssignmentRequestDto } from "../../dto/replace.assignment.request.dto";
@@ -75,7 +75,7 @@ export class AssignmentServiceV1 {
     assignmentId: number,
     userSession: UserSession,
     lang?: string,
-  ): Promise<GetAssignmentResponseDto | LearnerGetAssignmentResponseDto> {
+  ): Promise<GetAssignmentResponseDto | LegacyLearnerGetAssignmentResponseDto> {
     const backendData = await this.findOne(Number(assignmentId), userSession);
 
     // English is the authored content; stored "en" rows are machine
@@ -127,7 +127,7 @@ export class AssignmentServiceV1 {
   async findOne(
     id: number,
     userSession: UserSession,
-  ): Promise<GetAssignmentResponseDto | LearnerGetAssignmentResponseDto> {
+  ): Promise<GetAssignmentResponseDto | LegacyLearnerGetAssignmentResponseDto> {
     const isLearner = userSession.role === UserRole.LEARNER;
 
     let result: any;
@@ -260,7 +260,7 @@ export class AssignmentServiceV1 {
       return {
         ...result,
         success: true,
-      } as LearnerGetAssignmentResponseDto;
+      } as LegacyLearnerGetAssignmentResponseDto;
     }
 
     return {

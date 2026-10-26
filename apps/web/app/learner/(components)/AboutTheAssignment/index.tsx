@@ -84,8 +84,18 @@ const AssignmentSection: FC<AssignmentSectionProps> = ({ title, content }) => {
   );
 };
 
+/** The learner assignment read sends these text fields as JSON null when unset. */
+type LearnerAboutAssignment = Omit<
+  Assignment,
+  "introduction" | "instructions" | "gradingCriteriaOverview"
+> & {
+  introduction?: string | null;
+  instructions?: string | null;
+  gradingCriteriaOverview?: string | null;
+};
+
 interface AboutTheAssignmentProps {
-  assignment: Assignment;
+  assignment: LearnerAboutAssignment;
   attempts: AssignmentAttempt[];
   role: "learner" | "author";
   assignmentId: number;
@@ -165,7 +175,18 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
     async function fetchLanguages() {
       if (!assignmentId) return;
       setIsLoading(true);
-      const supportedLanguages = await getSupportedLanguages(assignmentId);
+      let supportedLanguages: string[];
+      try {
+        supportedLanguages = await getSupportedLanguages(assignmentId);
+      } catch (error) {
+        // The languages route can refuse (403/404); the picker still works
+        // with the authored language.
+        console.warn(
+          `Supported languages unavailable for assignment ${assignmentId}; falling back to English`,
+          error,
+        );
+        supportedLanguages = ["en"];
+      }
       const sortedLanguages = [...supportedLanguages].sort((a, b) =>
         getLanguageName(a).localeCompare(getLanguageName(b)),
       );
@@ -474,16 +495,19 @@ const AboutTheAssignment: FC<AboutTheAssignmentProps> = ({
               </div>
               <div className="border-t border-gray-200 dark:border-gray-700 px-4 sm:px-6 py-4">
                 <RichTextViewer className="text-gray-600 dark:text-gray-300 text-sm sm:text-base">
-                  {introduction}
+                  {introduction ?? ""}
                 </RichTextViewer>
               </div>
             </div>
           </div>
 
-          <AssignmentSection title="Instructions" content={instructions} />
+          <AssignmentSection
+            title="Instructions"
+            content={instructions ?? ""}
+          />
           <AssignmentSection
             title="Grading Criteria"
-            content={gradingCriteriaOverview}
+            content={gradingCriteriaOverview ?? ""}
           />
 
           {(() => {

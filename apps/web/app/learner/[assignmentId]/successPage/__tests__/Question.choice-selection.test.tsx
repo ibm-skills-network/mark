@@ -2,26 +2,23 @@
  * @jest-environment jsdom
  */
 
-import { render } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 
-import { QuestionStore } from "@/config/types";
+import type {
+  CompletedAttemptChoice,
+  CompletedAttemptQuestion,
+  Feedback,
+} from "@/config/types";
 
 import Question from "../Question";
 
-jest.mock("@/lib/talkToBackend", () => ({
-  AuthorizeGithubBackend: jest.fn(),
-  getStoredGithubToken: jest.fn(),
-}));
-jest.mock("@octokit/rest", () => ({ Octokit: class {} }));
 jest.mock("sonner", () => ({
   toast: { error: jest.fn(), success: jest.fn(), warning: jest.fn() },
 }));
 jest.mock("@/stores/learner", () => ({
   useAssignmentDetails: (selector: (state: unknown) => unknown) =>
     selector({ assignmentDetails: { questionControls: {} } }),
-  useLearnerOverviewStore: (selector: (state: unknown) => unknown) =>
-    selector({ assignmentId: 3601 }),
 }));
 jest.mock("@/components/MarkdownViewer", () => ({
   __esModule: true,
@@ -62,48 +59,64 @@ const choiceQuestion = ({
   choices,
   correct,
   storedResponse,
-  learnerChoices,
+  revealCorrect = true,
+  points = 1,
+  feedback = [],
 }: {
   type?: ChoiceType;
   choices: string[];
   correct: string[];
-  storedResponse?: string;
-  learnerChoices?: string[];
-}): QuestionStore =>
-  ({
-    id: 26299,
-    question: "Pick one",
-    totalPoints: 1,
-    type,
-    choices: choices.map((choice) => ({
-      choice,
-      isCorrect: correct.includes(choice),
-      points: correct.includes(choice) ? 1 : 0,
-      feedback: "",
-    })),
-    learnerChoices,
-    questionResponses:
-      storedResponse === undefined
-        ? []
-        : [{ id: 1, points: 1, feedback: [], learnerResponse: storedResponse }],
-    // A fixture, not a real store entry: only the fields the choice list reads
-    // are populated.
-  }) as unknown as QuestionStore;
+  storedResponse?: unknown;
+  revealCorrect?: boolean;
+  points?: number | null;
+  feedback?: Feedback[] | null;
+}): CompletedAttemptQuestion => ({
+  id: 26299,
+  question: "Pick one",
+  totalPoints: 1,
+  type,
+  responseType: null,
+  scoring: null,
+  choices: choices.map(
+    (choice, index): CompletedAttemptChoice =>
+      revealCorrect
+        ? {
+            id: index,
+            choice,
+            isCorrect: correct.includes(choice),
+            feedback: correct.includes(choice) ? "Right" : "Wrong",
+          }
+        : { id: index, choice },
+  ),
+  response:
+    storedResponse === undefined
+      ? null
+      : { learnerResponse: storedResponse, points, feedback },
+});
 
-const selectedChoices = (question: QuestionStore): string[] => {
-  const { container } = render(
+const renderQuestion = (
+  question: CompletedAttemptQuestion,
+  overrides: Partial<{
+    showSubmissionFeedback: boolean;
+    showQuestionScore: boolean;
+  }> = {},
+) =>
+  render(
     <Question
       question={question}
       number={7}
       language="en"
-      showSubmissionFeedback
-      showCorrectAnswer
+      showSubmissionFeedback={overrides.showSubmissionFeedback ?? true}
+      showQuestionScore={overrides.showQuestionScore ?? true}
       correctAnswerVisibility="ALWAYS"
     />,
   );
+
+const selectedChoices = (question: CompletedAttemptQuestion): string[] => {
+  const { container } = renderQuestion(question);
   return Array.from(container.querySelectorAll("li"))
     .filter((li) => li.querySelector<HTMLInputElement>("input")?.checked)
-    .map((li) => li.textContent?.trim() ?? "");
+    .map((li) => li.querySelector(".font-medium")?.textContent?.trim() ?? "");
 };
 
 describe("results page — which choices show as selected", () => {
@@ -144,13 +157,13 @@ describe("results page — which choices show as selected", () => {
     ).toEqual(["3", "1"]);
   });
 
-  it("matches the server's learnerChoices by text, not by position", () => {
+  it("matches an already-parsed answer by text, not by position", () => {
     expect(
       selectedChoices(
         choiceQuestion({
           choices: ["0", "1", "2"],
           correct: ["2"],
-          learnerChoices: ["1"],
+          storedResponse: ["1"],
         }),
       ),
     ).toEqual(["1"]);
@@ -190,5 +203,99 @@ describe("results page — which choices show as selected", () => {
         }),
       ),
     ).toEqual(["2"]);
+  });
+});
+
+describe("results page — what the server chose to show", () => {
+  it("marks right and wrong choices only when the server sent isCorrect", () => {
+    const { container } = renderQuestion(
+      choiceQuestion({
+        choices: ["Paris", "Rome"],
+        correct: ["Paris"],
+        storedResponse: JSON.stringify(["Rome"]),
+        points: 0,
+      }),
+    );
+
+    expect(container.querySelectorAll("li.bg-green-50")).toHaveLength(1);
+    expect(container.querySelectorAll("li.bg-red-50")).toHaveLength(1);
+    expect(screen.getByText("Wrong")).toBeTruthy();
+  });
+
+  it("marks nothing as correct when the server withheld the answer key", () => {
+    const { container } = renderQuestion(
+      choiceQuestion({
+        choices: ["Paris", "Rome"],
+        correct: ["Paris"],
+        storedResponse: JSON.stringify(["Rome"]),
+        revealCorrect: false,
+        points: 0,
+      }),
+    );
+
+    expect(container.querySelectorAll("li.bg-green-50")).toHaveLength(0);
+    expect(container.querySelectorAll("li.bg-red-50")).toHaveLength(0);
+    expect(screen.queryByText("Wrong")).toBeNull();
+  });
+
+  it("shows the score when points are present", () => {
+    renderQuestion(
+      choiceQuestion({
+        choices: ["Paris", "Rome"],
+        correct: ["Paris"],
+        storedResponse: JSON.stringify(["Paris"]),
+      }),
+    );
+
+    expect(screen.getByText("1/1")).toBeTruthy();
+  });
+
+  it("says the points are hidden when the server sent null points", () => {
+    renderQuestion(
+      choiceQuestion({
+        choices: ["Paris", "Rome"],
+        correct: ["Paris"],
+        storedResponse: JSON.stringify(["Paris"]),
+        points: null,
+      }),
+    );
+
+    expect(screen.getByText("Points hidden")).toBeTruthy();
+    expect(screen.queryByText("1/1")).toBeNull();
+  });
+
+  it("says the feedback is hidden when the server sent null feedback", () => {
+    renderQuestion(
+      choiceQuestion({
+        choices: ["Paris", "Rome"],
+        correct: ["Paris"],
+        storedResponse: JSON.stringify(["Paris"]),
+        feedback: null,
+      }),
+    );
+
+    expect(
+      screen.getByText(/Feedback has been hidden by the instructor/),
+    ).toBeTruthy();
+  });
+
+  it("shows a notice instead of an answer for an unsupported recording question", () => {
+    renderQuestion({
+      id: 9,
+      question: "Record a pitch",
+      totalPoints: 5,
+      type: "UPLOAD",
+      responseType: "LIVE_RECORDING",
+      choices: null,
+      scoring: null,
+      response: null,
+    });
+
+    expect(
+      screen.getByText(
+        "This question type is no longer supported and is not graded.",
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText("Not graded")).toBeTruthy();
   });
 });
