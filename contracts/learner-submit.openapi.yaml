@@ -33,9 +33,6 @@ info:
       options or answer only when the answer key is revealed
       (`correctAnswerVisibility`).
     - Uploaded files must be the learner's own uploads for that question.
-    - The submit body is limited to 16 MiB (413 above it) and is read only
-      after the access check. Lone UTF-16 surrogate escapes in it are
-      replaced with U+FFFD instead of failing the parse.
     - The GitHub file picker and its `/v1/github/*` routes no longer exist.
 
 servers:
@@ -660,7 +657,7 @@ paths:
         attempt must be the learner's, on this assignment, with a current
         group link.
 
-        Order for a learner (the body is read only after the access check):
+        Order for a learner:
         1. An in-flight grading job for this attempt -> 200 `SubmitQueued`
            with that job's id; the new payload is discarded.
         2. Attempt submitted -> 409 ATTEMPT_ALREADY_SUBMITTED, or
@@ -780,19 +777,6 @@ paths:
                       code: AI_TEMPORARILY_DISABLED,
                       message: This activity is temporarily out of service. Please try again later.,
                     }
-        "413":
-          description: |
-            Body above 16 MiB. Answered before routing (plain-text body) when
-            `Content-Length` says so, otherwise when the body is read.
-          content:
-            application/json:
-              schema: { $ref: "#/components/schemas/Error" }
-              example:
-                {
-                  message: request entity too large,
-                  error: Payload Too Large,
-                  statusCode: 413,
-                }
         "422":
           description: Nothing gradable was served, required questions unanswered, or a source that cannot be processed (inline path).
           content:
