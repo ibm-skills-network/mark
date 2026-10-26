@@ -179,7 +179,7 @@ export function defaultIssueMessage(
   const fileLower = source?.fileName ? `"${source.fileName}"` : "your file";
   switch (code) {
     case "url_unreachable": {
-      return `We couldn't open ${url}. Check the address and whether the page opens without signing in. If you own the page, check its sharing settings. Otherwise, try another publicly accessible source that meets the assignment requirements. If no suitable link works, contact course support.`;
+      return `We couldn't open ${url}. The page may be private or the address may be incorrect. Check whether it opens without signing in. If you own the page, check its sharing settings. Otherwise, try another publicly accessible source that meets the assignment requirements. If no suitable link works, contact course support.`;
     }
     case "url_placeholder": {
       return `The link ${url} still contains placeholder text (like "your-username"). Replace it with your own GitHub username and repository name, then submit again.`;
