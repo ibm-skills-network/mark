@@ -6,6 +6,8 @@
  * "GitHub Respositry" used to show the grader no URL at all, and learners were
  * told their repository link was missing.
  */
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { Logger } from "@nestjs/common";
 import { PDFDocument, PDFName, PDFString, StandardFonts } from "pdf-lib";
 import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
@@ -14,6 +16,7 @@ import {
   DocumentLinkCollector,
   MAX_DOCUMENT_LINKS,
   MAX_LINK_URL_LENGTH,
+  collectPdfAnnotationLinks,
   formatLinksBlock,
   normalizeExternalLinkTarget,
 } from "../document-links.util";
@@ -161,6 +164,27 @@ describe("PDF links: plain-text extraction", () => {
 
     expect(result?.text.split(REPO_URL)).toHaveLength(2);
   });
+
+  it("reads labelled links from a committed PDF", async () => {
+    const pdf = readFileSync(
+      join(__dirname, "fixtures", "pdf-labeled-links.pdf"),
+    );
+
+    const result = await createService().extractByExtension(
+      pdf,
+      "capstone.pdf",
+      "pdf",
+    );
+
+    expect(result?.text).toContain(
+      "--- LINKS (page 1) ---\nGitHub Repository → https://github.com/example-org/capstone",
+    );
+    expect(result?.text).toContain(
+      "--- LINKS (page 2) ---\n" +
+        "Source code → https://github.com/example-org/capstone-api\n" +
+        "Lab notebook → https://github.com/example-org/notebook",
+    );
+  });
 });
 
 // ─── PDF structured extraction (pdfjs is stubbed under jest) ────────────────
@@ -286,6 +310,31 @@ describe("PDF links: structured extraction", () => {
     const linkChunk = chunks.find((chunk) => chunk.text.includes(REPO_URL));
     expect(linkChunk?.text).toContain(`GitHub Respositry → ${REPO_URL}`);
     expect(linkChunk?.anchor).toMatchObject({ page: 1 });
+  });
+
+  it("keeps a link target written without a scheme", async () => {
+    stubPdfDocument([
+      fakePage(
+        [{ str: "Source code", x: 72, y: 700 }],
+        async (): Promise<FakeAnnotation[]> => [
+          {
+            subtype: "Link",
+            unsafeUrl: "github.com/example-org/capstone-api",
+            rect: [70, 696, 200, 714],
+          },
+        ],
+      ),
+    ]);
+
+    const { submission } =
+      await createStructuredExtractor().extractStructuredContent(
+        Buffer.from("%PDF-1.7"),
+        "capstone.pdf",
+      );
+
+    expect(blockTexts(submission.pages)).toContain(
+      "--- LINKS (page 1) ---\nSource code → https://github.com/example-org/capstone-api",
+    );
   });
 
   it("drops unsafe and malformed annotations without failing the page", async () => {
@@ -570,6 +619,55 @@ describe("DOCX links", () => {
 });
 
 // ─── Sanitization ───────────────────────────────────────────────────────────
+
+describe("collectPdfAnnotationLinks", () => {
+  it("adds https:// only to scheme-less targets that start with a host", () => {
+    const annotations = [
+      "github.com/example-org/capstone-api",
+      "www.github.com/example-org/site",
+      "  github.com/example-org/padded ",
+      "javascript:alert(1)",
+      "file:///etc/passwd",
+      "docs/readme.md",
+      "report.pdf",
+      "../notes.md",
+      "docs.v2/readme.md",
+      "1.0/notes.txt",
+      "-.-/x",
+      "github.com",
+    ].map((unsafeUrl) => ({ subtype: "Link", unsafeUrl }));
+
+    const links = collectPdfAnnotationLinks(
+      annotations,
+      [],
+      new DocumentLinkCollector(),
+      "page 1",
+    );
+
+    expect(links).toEqual([
+      { url: "https://github.com/example-org/capstone-api" },
+      { url: "https://www.github.com/example-org/site" },
+      { url: "https://github.com/example-org/padded" },
+    ]);
+  });
+
+  it("prefers pdfjs's url over unsafeUrl", () => {
+    const links = collectPdfAnnotationLinks(
+      [
+        {
+          subtype: "Link",
+          url: REPO_URL,
+          unsafeUrl: "github.com/example-org/other",
+        },
+      ],
+      [],
+      new DocumentLinkCollector(),
+      "page 1",
+    );
+
+    expect(links).toEqual([{ url: REPO_URL }]);
+  });
+});
 
 describe("normalizeExternalLinkTarget", () => {
   it.each([
