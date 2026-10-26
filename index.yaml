@@ -3,7 +3,24 @@ entries:
   mark:
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2026-10-26T15:24:32.037176411Z"
+    created: "2026-10-26T19:21:43.483287-04:00"
+    dependencies:
+    - name: lti-gateway
+      repository: https://raw.githubusercontent.com/ibm-skills-network/helm-chart-releases/master
+      version: 1.0.2
+    - name: sn-common
+      repository: https://raw.githubusercontent.com/ibm-skills-network/helm-chart-releases/master
+      version: 1.x.x
+    description: A Helm chart for Kubernetes
+    digest: 3de66f974c46a21a2bc8a96d3ea44e86cf7889a7e9b9ed1756aa8e4d567c5084
+    name: mark
+    type: application
+    urls:
+    - https://raw.githubusercontent.com/ibm-skills-network/mark/gh-pages/mark-1.4.22.tgz
+    version: 1.4.22
+  - apiVersion: v2
+    appVersion: 1.0.0
+    created: "2026-10-26T19:21:43.482138-04:00"
     dependencies:
     - name: lti-gateway
       repository: https://raw.githubusercontent.com/ibm-skills-network/helm-chart-releases/master
@@ -20,7 +37,7 @@ entries:
     version: 1.4.21
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2026-10-26T15:24:32.036369933Z"
+    created: "2026-10-26T19:21:43.481279-04:00"
     dependencies:
     - name: lti-gateway
       repository: https://raw.githubusercontent.com/ibm-skills-network/helm-chart-releases/master
@@ -37,7 +54,7 @@ entries:
     version: 1.4.20
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2026-10-26T15:24:32.033818305Z"
+    created: "2026-10-26T19:21:43.479652-04:00"
     dependencies:
     - name: lti-gateway
       repository: https://raw.githubusercontent.com/ibm-skills-network/helm-chart-releases/master
@@ -54,7 +71,7 @@ entries:
     version: 1.4.19
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2026-10-26T15:24:32.03282816Z"
+    created: "2026-10-26T19:21:43.478621-04:00"
     dependencies:
     - name: lti-gateway
       repository: https://raw.githubusercontent.com/ibm-skills-network/helm-chart-releases/master
@@ -71,7 +88,7 @@ entries:
     version: 1.4.18
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2026-10-26T15:24:32.031803443Z"
+    created: "2026-10-26T19:21:43.477053-04:00"
     dependencies:
     - name: lti-gateway
       repository: https://raw.githubusercontent.com/ibm-skills-network/helm-chart-releases/master
@@ -88,7 +105,7 @@ entries:
     version: 1.4.17
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2026-10-26T15:24:32.030672706Z"
+    created: "2026-10-26T19:21:43.476148-04:00"
     dependencies:
     - name: lti-gateway
       repository: https://raw.githubusercontent.com/ibm-skills-network/helm-chart-releases/master
@@ -105,7 +122,7 @@ entries:
     version: 1.4.16
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2026-10-26T15:24:32.028663117Z"
+    created: "2026-10-26T19:21:43.475008-04:00"
     dependencies:
     - name: lti-gateway
       repository: https://raw.githubusercontent.com/ibm-skills-network/helm-chart-releases/master
@@ -122,7 +139,7 @@ entries:
     version: 1.4.15
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2026-10-26T15:24:32.027700183Z"
+    created: "2026-10-26T19:21:43.473937-04:00"
     dependencies:
     - name: lti-gateway
       repository: https://raw.githubusercontent.com/ibm-skills-network/helm-chart-releases/master
@@ -139,7 +156,7 @@ entries:
     version: 1.4.14
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2026-10-26T15:24:32.026915328Z"
+    created: "2026-10-26T19:21:43.473071-04:00"
     dependencies:
     - name: lti-gateway
       repository: https://raw.githubusercontent.com/ibm-skills-network/helm-chart-releases/master
@@ -156,7 +173,7 @@ entries:
     version: 1.4.13
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2026-10-26T15:24:32.026093387Z"
+    created: "2026-10-26T19:21:43.471896-04:00"
     dependencies:
     - name: lti-gateway
       repository: https://raw.githubusercontent.com/ibm-skills-network/helm-chart-releases/master
@@ -173,7 +190,7 @@ entries:
     version: 1.4.11
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2026-10-26T15:24:32.025268952Z"
+    created: "2026-10-26T19:21:43.471266-04:00"
     dependencies:
     - name: lti-gateway
       repository: https://raw.githubusercontent.com/ibm-skills-network/helm-chart-releases/master
@@ -190,7 +207,7 @@ entries:
     version: 1.4.10
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2026-10-26T15:24:32.042909551Z"
+    created: "2026-10-26T19:21:43.488992-04:00"
     dependencies:
     - name: lti-gateway
       repository: https://raw.githubusercontent.com/ibm-skills-network/helm-chart-releases/master
@@ -207,7 +224,7 @@ entries:
     version: 1.4.9
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2026-10-26T15:24:32.042217797Z"
+    created: "2026-10-26T19:21:43.487954-04:00"
     dependencies:
     - name: lti-gateway
       repository: https://raw.githubusercontent.com/ibm-skills-network/helm-chart-releases/master
@@ -224,7 +241,7 @@ entries:
     version: 1.4.8
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2026-10-26T15:24:32.041532021Z"
+    created: "2026-10-26T19:21:43.487263-04:00"
     dependencies:
     - name: lti-gateway
       repository: https://raw.githubusercontent.com/ibm-skills-network/helm-chart-releases/master
@@ -241,7 +258,7 @@ entries:
     version: 1.4.7
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2026-10-26T15:24:32.04080918Z"
+    created: "2026-10-26T19:21:43.486569-04:00"
     dependencies:
     - name: lti-gateway
       repository: https://raw.githubusercontent.com/ibm-skills-network/helm-chart-releases/master
@@ -258,7 +275,7 @@ entries:
     version: 1.4.6
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2026-10-26T15:24:32.03923597Z"
+    created: "2026-10-26T19:21:43.485865-04:00"
     dependencies:
     - name: lti-gateway
       repository: https://raw.githubusercontent.com/ibm-skills-network/helm-chart-releases/master
@@ -275,7 +292,7 @@ entries:
     version: 1.4.5
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2026-10-26T15:24:32.038544947Z"
+    created: "2026-10-26T19:21:43.485166-04:00"
     dependencies:
     - name: lti-gateway
       repository: https://raw.githubusercontent.com/ibm-skills-network/helm-chart-releases/master
@@ -292,7 +309,7 @@ entries:
     version: 1.4.4
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2026-10-26T15:24:32.037880043Z"
+    created: "2026-10-26T19:21:43.484456-04:00"
     dependencies:
     - name: lti-gateway
       repository: https://raw.githubusercontent.com/ibm-skills-network/helm-chart-releases/master
@@ -309,7 +326,7 @@ entries:
     version: 1.4.3
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2026-10-26T15:24:32.034986605Z"
+    created: "2026-10-26T19:21:43.480329-04:00"
     dependencies:
     - name: lti-gateway
       repository: https://raw.githubusercontent.com/ibm-skills-network/helm-chart-releases/master
@@ -326,7 +343,7 @@ entries:
     version: 1.4.2
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2026-10-26T15:24:32.02371681Z"
+    created: "2026-10-26T19:21:43.470587-04:00"
     dependencies:
     - name: lti-gateway
       repository: https://raw.githubusercontent.com/ibm-skills-network/helm-chart-releases/master
@@ -343,7 +360,7 @@ entries:
     version: 1.4.1
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2026-10-26T15:24:32.022884764Z"
+    created: "2026-10-26T19:21:43.469845-04:00"
     dependencies:
     - name: lti-gateway
       repository: https://raw.githubusercontent.com/ibm-skills-network/helm-chart-releases/master
@@ -360,7 +377,7 @@ entries:
     version: 1.4.0
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2026-10-26T15:24:32.021991285Z"
+    created: "2026-10-26T19:21:43.469091-04:00"
     dependencies:
     - name: lti-gateway
       repository: https://raw.githubusercontent.com/ibm-skills-network/helm-chart-releases/master
@@ -377,7 +394,7 @@ entries:
     version: 1.3.0
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2026-10-26T15:24:32.02118011Z"
+    created: "2026-10-26T19:21:43.468396-04:00"
     dependencies:
     - name: lti-gateway
       repository: https://raw.githubusercontent.com/ibm-skills-network/helm-chart-releases/master
@@ -394,7 +411,7 @@ entries:
     version: 1.2.0
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2026-10-26T15:24:32.020467794Z"
+    created: "2026-10-26T19:21:43.467691-04:00"
     dependencies:
     - name: lti-gateway
       repository: https://raw.githubusercontent.com/ibm-skills-network/helm-chart-releases/master
@@ -411,7 +428,7 @@ entries:
     version: 1.1.0
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2026-10-26T15:24:32.019714687Z"
+    created: "2026-10-26T19:21:43.466403-04:00"
     dependencies:
     - name: lti-gateway
       repository: https://raw.githubusercontent.com/ibm-skills-network/helm-chart-releases/master
@@ -428,7 +445,7 @@ entries:
     version: 1.0.7
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2026-10-26T15:24:32.018117857Z"
+    created: "2026-10-26T19:21:43.465618-04:00"
     dependencies:
     - name: lti-gateway
       repository: https://raw.githubusercontent.com/ibm-skills-network/helm-chart-releases/master
@@ -445,7 +462,7 @@ entries:
     version: 1.0.6
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2026-10-26T15:24:32.017123676Z"
+    created: "2026-10-26T19:21:43.464898-04:00"
     dependencies:
     - name: lti-gateway
       repository: https://raw.githubusercontent.com/ibm-skills-network/helm-chart-releases/master
@@ -462,7 +479,7 @@ entries:
     version: 1.0.5
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2026-10-26T15:24:32.016327093Z"
+    created: "2026-10-26T19:21:43.464197-04:00"
     dependencies:
     - name: lti-gateway
       repository: https://raw.githubusercontent.com/ibm-skills-network/helm-chart-releases/master
@@ -479,7 +496,7 @@ entries:
     version: 1.0.4
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2026-10-26T15:24:32.015617151Z"
+    created: "2026-10-26T19:21:43.463463-04:00"
     dependencies:
     - name: lti-gateway
       repository: https://raw.githubusercontent.com/ibm-skills-network/helm-chart-releases/master
@@ -496,7 +513,7 @@ entries:
     version: 1.0.3
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2026-10-26T15:24:32.014932157Z"
+    created: "2026-10-26T19:21:43.462439-04:00"
     dependencies:
     - name: lti-gateway
       repository: https://raw.githubusercontent.com/ibm-skills-network/helm-chart-releases/master
@@ -513,7 +530,7 @@ entries:
     version: 1.0.2
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2026-10-26T15:24:32.014169866Z"
+    created: "2026-10-26T19:21:43.461603-04:00"
     dependencies:
     - name: lti-gateway
       repository: https://raw.githubusercontent.com/ibm-skills-network/helm-chart-releases/master
@@ -530,7 +547,7 @@ entries:
     version: 1.0.1
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2026-10-26T15:24:32.013387685Z"
+    created: "2026-10-26T19:21:43.460428-04:00"
     dependencies:
     - name: lti-gateway
       repository: https://raw.githubusercontent.com/ibm-skills-network/helm-chart-releases/master
@@ -548,7 +565,7 @@ entries:
   mark-jobs:
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2026-10-26T15:24:32.043418339Z"
+    created: "2026-10-26T19:21:43.489807-04:00"
     description: Mark background job worker service
     digest: e423dd481d1859aa5b5f213239dd1205deb45419607c21e99c2da640ca7549a9
     name: mark-jobs
@@ -558,7 +575,7 @@ entries:
     version: 0.1.10
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2026-10-26T15:24:32.046285768Z"
+    created: "2026-10-26T19:21:43.492209-04:00"
     description: Mark background job worker service
     digest: 848d0db4a17620106552b54874f93b6e35444f0d2cf408620a2df0a997c90624
     name: mark-jobs
@@ -568,7 +585,7 @@ entries:
     version: 0.1.9
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2026-10-26T15:24:32.045898203Z"
+    created: "2026-10-26T19:21:43.491824-04:00"
     description: Mark background job worker service
     digest: af9c8f01bd423650e13f14755a5ab976b83b5fed279952aa980dabb5e54030f2
     name: mark-jobs
@@ -578,7 +595,7 @@ entries:
     version: 0.1.8
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2026-10-26T15:24:32.045245032Z"
+    created: "2026-10-26T19:21:43.491348-04:00"
     description: Mark background job worker service
     digest: e87a951fccedb890249d1cb9ffd966676f510cfaacda5e6820c3b535bb9e1c5e
     name: mark-jobs
@@ -588,7 +605,7 @@ entries:
     version: 0.1.7
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2026-10-26T15:24:32.044480924Z"
+    created: "2026-10-26T19:21:43.490966-04:00"
     description: Mark background job worker service
     digest: 24d0bc2e7e3e663eee550a81821d500e5eb125347aa96f5ae61f3a67edadc42e
     name: mark-jobs
@@ -598,7 +615,7 @@ entries:
     version: 0.1.6
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2026-10-26T15:24:32.044141551Z"
+    created: "2026-10-26T19:21:43.490645-04:00"
     description: Mark background job worker service
     digest: 186482249e15430b11771c412792033d7c7c7df70f86e3696b40d334d0fa6eea
     name: mark-jobs
@@ -608,7 +625,7 @@ entries:
     version: 0.1.5
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2026-10-26T15:24:32.043838734Z"
+    created: "2026-10-26T19:21:43.490329-04:00"
     description: Mark background job worker service
     digest: 6b1bbf6a70f1cf2747c8f24567303808aa79275c4b4847f008e1b034437375e3
     name: mark-jobs
@@ -618,7 +635,7 @@ entries:
     version: 0.1.3
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2026-10-26T15:24:32.043570409Z"
+    created: "2026-10-26T19:21:43.490022-04:00"
     description: Mark background job worker service
     digest: a6cabcb1a6bf56b6b2cdc55606e0265f14c35b041f0bd9e78e920990eac92f2e
     name: mark-jobs
@@ -628,7 +645,7 @@ entries:
     version: 0.1.2
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2026-10-26T15:24:32.04303448Z"
+    created: "2026-10-26T19:21:43.489358-04:00"
     description: Mark background job worker service
     digest: e66fce157cac781936b7286258cd998a9e69d84404e77adf2eda91a1e3f3e692
     name: mark-jobs
@@ -639,7 +656,7 @@ entries:
   mark-rust:
   - apiVersion: v2
     appVersion: 1.0.0
-    created: "2026-10-26T15:24:32.046638951Z"
+    created: "2026-10-26T19:21:43.49255-04:00"
     description: Mark's Rust API and worker, released separately from the mark chart
       so they roll only after it
     digest: d5ec9e851e6f1416a0c3e091e3426fb1af105e5f976d0d88521b0e6bd0608486
@@ -648,4 +665,16 @@ entries:
     urls:
     - https://raw.githubusercontent.com/ibm-skills-network/mark/gh-pages/mark-rust-0.1.0.tgz
     version: 0.1.0
-generated: "2026-10-26T15:24:32.012382167Z"
+  mark-v3:
+  - apiVersion: v2
+    appVersion: 1.0.0
+    created: "2026-10-26T19:21:43.492856-04:00"
+    description: Mark's v3 API and worker, released separately from the mark chart
+      so they roll only after it
+    digest: 35868cf0c4103c257da04add2346a343f642d5f23b19e87fbee0d5ab2c712790
+    name: mark-v3
+    type: application
+    urls:
+    - https://raw.githubusercontent.com/ibm-skills-network/mark/gh-pages/mark-v3-0.1.0.tgz
+    version: 0.1.0
+generated: "2026-10-26T19:21:43.459534-04:00"
