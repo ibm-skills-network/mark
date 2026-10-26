@@ -22,7 +22,9 @@ class ReadinessTimeoutError extends Error {
   }
 }
 
-async function pingDatabase(prisma: HealthOptions["prisma"]): Promise<void> {
+export async function pingDatabase(
+  prisma: HealthOptions["prisma"],
+): Promise<void> {
   let timer: NodeJS.Timeout | undefined;
   const timeout = new Promise<never>((_, reject) => {
     timer = setTimeout(
