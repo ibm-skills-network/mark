@@ -51,7 +51,7 @@ describe("v3 routing", () => {
       ["GET", "/api/v1/ai-status", "session-meta"],
       [
         "GET",
-        "/api/v2/assignments/12/attempts/345/grading/9/status-stream",
+        "/api/v2/assignments/12/attempts/345/grading/0b6d0f3c-9a0e-4a5c-9d0e-1f2a3b4c5d6e/status-stream",
         "learner-submit",
       ],
       ["GET", "/api/v2/assignments/12", "learner-reads"],
@@ -112,10 +112,17 @@ describe("v3 routing", () => {
       ["PATCH", "/api/v2/assignments/12/attempts/345/grade-sync-status"],
       [
         "GET",
+        "/api/v2/assignments/12/attempts/345/grading/0B6D0F3C-9A0E-4A5C-9D0E-1F2A3B4C5D6E/status-stream",
+      ],
+      ["GET", "/api/v2/assignments/12/attempts/345/grading/9/status-stream"],
+      [
+        "POST",
         "/api/v2/assignments/12/attempts/345/grading/0b6d0f3c-9a0e-4a5c-9d0e-1f2a3b4c5d6e/status-stream",
       ],
-      ["POST", "/api/v2/assignments/12/attempts/345/grading/9/status-stream"],
-      ["GET", "/api/v2/assignments/12/attempts/345/grading/9/status-stream/x"],
+      [
+        "GET",
+        "/api/v2/assignments/12/attempts/345/grading/0b6d0f3c-9a0e-4a5c-9d0e-1f2a3b4c5d6e/status-stream/x",
+      ],
       ["POST", "/api/v1/user-session"],
       ["GET", "/api/v1/user-session/x"],
       ["POST", "/api/v2/assignments/12/questions/7/translations"],
@@ -227,7 +234,7 @@ describe("v3 routing", () => {
         resolveDownstream(
           makeRequest(
             "GET",
-            "/api/v2/assignments/12/attempts/345/grading/9/status-stream",
+            "/api/v2/assignments/12/attempts/345/grading/0b6d0f3c-9a0e-4a5c-9d0e-1f2a3b4c5d6e/status-stream",
             UserRole.AUTHOR,
           ),
           config,

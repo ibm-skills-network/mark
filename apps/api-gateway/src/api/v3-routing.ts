@@ -25,6 +25,7 @@ interface RouteMatcher {
 // Ids are digit-only so a crafted segment can never widen a match.
 const ID = String.raw`\d+`;
 const ASSIGNMENT = String.raw`/api/v2/assignments/${ID}`;
+const UUID = String.raw`[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`;
 const ATTEMPT = `${ASSIGNMENT}/attempts/${ID}`;
 
 const exact = (method: string, path: string): RouteMatcher => ({
@@ -82,7 +83,7 @@ export const ROUTE_FAMILIES: ReadonlyMap<string, RouteFamily> = new Map([
         exact("GET", `${ATTEMPT}/submission-status`),
         exact("POST", `${ATTEMPT}/notify`),
         exact("GET", `${ATTEMPT}/grade-sync-status`),
-        exact("GET", `${ATTEMPT}/grading/${ID}/status-stream`),
+        exact("GET", `${ATTEMPT}/grading/${UUID}/status-stream`),
       ],
     },
   ],
