@@ -1,0 +1,132 @@
+# v3 API and worker. Installed as its own release next to the `mark` release in the same namespace;
+# helmfile orders it after `mark` (`needs`).
+
+global:
+  imagePullSecrets:
+    - name: icr-global
+
+# Pod selector labels are immutable; keep this value once installed.
+selectorInstance: mark-v3
+
+# The gateway that may call the v3 API (network policy ingress).
+apiGateway:
+  name: mark-api-gateway
+
+postgres:
+  username: ""
+  password: ""
+  hostname: ""
+  port: 5432
+  dbName: mark
+
+v3Api:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: ghcr.io/ibm-skills-network/mark/mark-apiv3
+    tag: ""
+    pullPolicy: IfNotPresent
+  # Also rendered as PORT in the ConfigMap.
+  containerPort: 3000
+  service:
+    type: ClusterIP
+    port: 80
+  # Node drains and rollouts keep at least this many pods serving.
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  livenessProbe:
+    initialDelaySeconds: 5
+    timeoutSeconds: 1
+    periodSeconds: 15
+  readinessProbe:
+    initialDelaySeconds: 5
+    timeoutSeconds: 3
+    periodSeconds: 10
+  podAnnotations: {}
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  config:
+    SERVICE_NAME: "mark-v3-api"
+    LOG_LEVEL: "info"
+    # Validate responses against their schemas; costs CPU, meant for staging.
+    V3_VALIDATE_RESPONSES: "false"
+  secrets:
+    # Built from the postgres values when empty.
+    DATABASE_URL: ""
+
+v3Worker:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: ghcr.io/ibm-skills-network/mark/mark-apiv3
+    tag: ""
+    pullPolicy: IfNotPresent
+  # Health probe port; also rendered as WORKER_HEALTH_PORT in the ConfigMap.
+  containerPort: 8081
+  # A single worker may be evicted for a drain; work is leased, not lost.
+  podDisruptionBudget:
+    enabled: true
+    maxUnavailable: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 1
+      memory: 1Gi
+  livenessProbe:
+    initialDelaySeconds: 5
+    timeoutSeconds: 1
+    periodSeconds: 15
+  readinessProbe:
+    initialDelaySeconds: 5
+    timeoutSeconds: 3
+    periodSeconds: 10
+  podAnnotations: {}
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    runAsGroup: 1000
+    fsGroup: 1000
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    readOnlyRootFilesystem: true
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop:
+        - ALL
+  nodeSelector: {}
+  tolerations: []
+  affinity: {}
+  config:
+    SERVICE_NAME: "mark-v3-worker"
+    LOG_LEVEL: "info"
+    # Execution switches; keep "false" until the v3 path is cut over.
+    V3_CONSUME_WORK: "false"
+    V3_DISPATCH_EXTERNAL_EFFECTS: "false"
+  secrets:
+    # Built from the postgres values when empty.
+    DATABASE_URL: ""

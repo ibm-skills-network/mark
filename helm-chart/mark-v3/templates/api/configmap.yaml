@@ -1,0 +1,16 @@
+{{- if .Values.v3Api.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "mark-v3.api.name" . }}-config
+  labels:
+    {{- include "mark-v3.api.labels" . | nindent 4 }}
+data:
+  PORT: {{ .Values.v3Api.containerPort | quote }}
+{{- range $name, $value := .Values.v3Api.config }}
+{{- if ne $name "PORT" }}
+  {{ $name }}: {{ $value | toString | quote }}
+{{- end }}
+{{- end }}
+{{- end }}

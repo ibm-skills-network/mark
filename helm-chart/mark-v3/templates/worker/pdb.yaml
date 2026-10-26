@@ -1,0 +1,13 @@
+{{- if and .Values.v3Worker.enabled .Values.v3Worker.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "mark-v3.worker.name" . }}
+  labels:
+    {{- include "mark-v3.worker.labels" . | nindent 4 }}
+spec:
+  maxUnavailable: {{ .Values.v3Worker.podDisruptionBudget.maxUnavailable }}
+  selector:
+    matchLabels:
+      {{- include "mark-v3.worker.selectorLabels" . | nindent 6 }}
+{{- end }}

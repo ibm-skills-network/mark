@@ -1,0 +1,6 @@
+apiVersion: v2
+name: mark-v3
+description: Mark's v3 API and worker, released separately from the mark chart so they roll only after it
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
