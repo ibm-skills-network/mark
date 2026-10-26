@@ -29,6 +29,18 @@ describe("architecture lint rules", () => {
       'import { Injectable } from "@nestjs/common"; export { Injectable };',
       "no-restricted-imports",
     ],
+    [
+      'import x from "../../api/dist/main"; export { x };',
+      "no-restricted-imports",
+    ],
+    ['import x from "../../api"; export { x };', "no-restricted-imports"],
+    ['import "api";', "no-restricted-imports"],
+    ['import "jobs/src/x";', "no-restricted-imports"],
+    ['import "web";', "no-restricted-imports"],
+    [
+      "export const a = {} as Foo; interface Foo { b: number }",
+      "@typescript-eslint/consistent-type-assertions",
+    ],
     ['import "reflect-metadata";', "no-restricted-imports"],
     ["export const a: any = 1;", "@typescript-eslint/no-explicit-any"],
     ["export const a = 1 as unknown as string;", "no-restricted-syntax"],
@@ -36,6 +48,14 @@ describe("architecture lint rules", () => {
     ["console.log(1);", "no-console"],
   ])("rejects %s", async (code, rule) => {
     expect(await ruleIds(code)).toContain(rule);
+  });
+
+  it("accepts apiv3's own api module and a plain `as unknown`", async () => {
+    const ids = await ruleIds(
+      'import { x } from "../modules/api/routes.js";\nexport const y = x as unknown;\n',
+    );
+    expect(ids).not.toContain("no-restricted-imports");
+    expect(ids).not.toContain("no-restricted-syntax");
   });
 
   it("accepts clean code", async () => {

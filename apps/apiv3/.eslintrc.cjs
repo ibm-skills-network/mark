@@ -1,3 +1,12 @@
+// Relative paths that climb straight into a sibling app (../../api, ../api/dist/x).
+// Anchored on leading ".." segments so apiv3's own src/modules/api stays legal.
+const siblingApps = ["api", "jobs", "web"].flatMap((app) =>
+  Array.from({ length: 8 }, (_, i) => {
+    const up = "../".repeat(i + 1);
+    return [`${up}${app}`, `${up}${app}/**`];
+  }).flat(),
+);
+
 module.exports = {
   root: true,
   parser: "@typescript-eslint/parser",
@@ -17,15 +26,16 @@ module.exports = {
     "no-restricted-imports": [
       "error",
       {
+        paths: ["api", "jobs", "web", "reflect-metadata"],
         patterns: [
           "**/apps/api/**",
           "**/apps/jobs/**",
           "**/apps/web/**",
-          "**/api/src/**",
-          "**/jobs/src/**",
-          "**/web/src/**",
+          ...siblingApps,
+          "api/*",
+          "jobs/*",
+          "web/*",
           "@nestjs/*",
-          "reflect-metadata",
         ],
       },
     ],
@@ -37,7 +47,7 @@ module.exports = {
     "no-restricted-syntax": [
       "error",
       {
-        selector: "TSAsExpression[typeAnnotation.type='TSUnknownKeyword']",
+        selector: "TSAsExpression > TSAsExpression[typeAnnotation.type='TSUnknownKeyword']",
         message: "`as unknown as` is banned; narrow the type instead.",
       },
     ],
