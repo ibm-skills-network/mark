@@ -248,7 +248,9 @@ function SuccessPage() {
               const attempts = await getAttempts(assignmentId, undefined, {
                 throwOnAuthError: true,
               });
-              const routeAttempt = attempts?.find((att) => att.id === attemptId);
+              const routeAttempt = attempts?.find(
+                (att) => att.id === attemptId,
+              );
               // Results only exist once submitted: the server answers 404 for
               // an attempt that is still open, so the learner's own open
               // attempt is resumed rather than reported as missing, and only

@@ -368,6 +368,42 @@ describe("rust routing", () => {
       expect(rust.extraHeaders.cookie).toBeDefined();
     });
 
+    it("forwards the resumed quiz credential to both backends", () => {
+      const service = makeService("learner-reads", "http://mark-rust-api");
+      const token = (assignmentID: number, iat: number) =>
+        `h.${Buffer.from(
+          JSON.stringify({
+            userID: "learner@example.com",
+            role: "learner",
+            assignmentID,
+            iat,
+          }),
+        ).toString("base64url")}.s`;
+      const launch = token(34, 2000);
+      const saved = token(12, 1000);
+      const request = makeRequest(
+        "GET",
+        "/api/v2/assignments/12/attempts",
+        UserRole.LEARNER,
+        {
+          cookie: `authentication=${launch}; theme=dark`,
+          "x-mark-learner-assignment": "12",
+        },
+      );
+      request.savedSession = saved;
+
+      for (const backend of [
+        DownstreamService.MARK_API,
+        DownstreamService.MARK_RUST_API,
+      ]) {
+        const { extraHeaders } = service.getForwardingDetails(backend, request);
+        expect(extraHeaders.cookie).toBe(`theme=dark; authentication=${saved}`);
+        expect(JSON.parse(String(extraHeaders["user-session"]))).toEqual(
+          request.user,
+        );
+      }
+    });
+
     it.each([
       "//evil.com/x",
       "@evil.com/api/v2/assignments/12",

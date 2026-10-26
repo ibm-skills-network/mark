@@ -112,7 +112,18 @@ describe("ApiService - Comprehensive Stress Tests (Simplified)", () => {
     it.each([
       "/api/v1/../internal/saved-sessions/lookup",
       "/api/v1/%2e%2e/internal/saved-sessions/lookup",
-    ])("never forwards the saved-session secret (%s)", (originalUrl) => {
+    ])("blocks traversal to the saved-session API (%s)", (originalUrl) => {
+      expect(() =>
+        service.getForwardingDetails(DownstreamService.MARK_API, {
+          originalUrl,
+          user: { userId: "test-user" },
+          headers: { cookie: "authentication=launch" },
+        } as any),
+      ).toThrow(BadRequestException);
+    });
+
+    it("never adds the saved-session secret to forwarded requests", () => {
+      const originalUrl = "/api/v1/user-session";
       const queueSecret = "gateway-queue-secret"; // pragma: allowlist secret
       const environment = process.env;
       process.env = { ...environment, JOB_QUEUE_SECRET: queueSecret }; // pragma: allowlist secret
