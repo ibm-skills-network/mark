@@ -3,19 +3,24 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "scripts": {
     "build": "echo apiv3 build not yet configured",
     "dev": "tsx watch src/http.ts",
-    "lint": "eslint . --no-error-on-unmatched-pattern",
+    "lint": "eslint .",
     "test": "vitest run",
     "start:http": "node dist/http.js",
     "start:worker": "node dist/worker.js"
   },
   "dependencies": {
+    "@fastify/swagger": "^9.5.1",
     "@fastify/sensible": "^6.0.0",
     "@prisma/client": "^5.22.0",
     "fastify": "^5.0.0",
-    "fastify-type-provider-zod": "^4.0.0",
+    "fastify-type-provider-zod": "^7.0.0",
+    "openapi-types": "^12.1.3",
     "pino": "^9.13.0",
     "zod": "^4.6.6"
   },
