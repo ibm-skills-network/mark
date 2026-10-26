@@ -40,7 +40,6 @@
     "prisma:db-pull": "cd ./apps/api && source dev.env && prisma db pull",
     "secrets:audit": "detect-secrets audit .secrets.baseline",
     "check": "yarn lint && yarn test && yarn prisma:generate && yarn build",
-    "check:rust": "scripts/ci/check-rust.sh",
     "secrets:check": "scripts/detect-secrets.sh",
     "secrets:check:staged": "scripts/detect-secrets-staged.sh",
     "secrets:setup": "detect-secrets scan --update .secrets.baseline",
