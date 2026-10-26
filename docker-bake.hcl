@@ -1,6 +1,6 @@
 # Builds every service image in one BuildKit session so the shared stages
 # (base pulls, repo copy, yarn cache mount) are done once instead of per image.
-#   docker buildx bake                 # all four, tagged mark-<service>:dev
+#   docker buildx bake                 # all five, tagged mark-<service>:dev
 #   REGISTRY=ghcr.io/org/repo TAG=abc docker buildx bake --push api jobs
 
 variable "REGISTRY" {
@@ -12,7 +12,7 @@ variable "TAG" {
 }
 
 group "default" {
-  targets = ["api-gateway", "api", "jobs", "web"]
+  targets = ["api-gateway", "api", "jobs", "web", "apiv3"]
 }
 
 target "_common" {
@@ -42,4 +42,10 @@ target "web" {
   inherits   = ["_common"]
   dockerfile = "apps/web/Dockerfile"
   tags       = ["${REGISTRY}/mark-web:${TAG}"]
+}
+
+target "apiv3" {
+  inherits   = ["_common"]
+  dockerfile = "apps/apiv3/Dockerfile"
+  tags       = ["${REGISTRY}/mark-apiv3:${TAG}"]
 }
