@@ -9,6 +9,7 @@ import {
   validatorCompiler,
 } from "fastify-type-provider-zod";
 import type { Logger } from "pino";
+import { principalPlugin } from "../modules/access/plugin.js";
 import { healthRoutes } from "../modules/health/routes.js";
 import type { Config } from "../shared/config.js";
 import { requestIdFrom } from "../shared/ids.js";
@@ -37,12 +38,25 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
 
+  // Rule 3: every route outside /health/ declares a response schema.
+  app.addHook("onRoute", (route) => {
+    if (route.url.startsWith("/health/")) return;
+    if (route.schema?.response === undefined) {
+      const method = Array.isArray(route.method)
+        ? route.method.join(",")
+        : route.method;
+      throw new Error(`route ${method} ${route.url} has no response schema`);
+    }
+  });
+
   await app.register(requestId, { logger });
   await app.register(errorHandler, { logger });
   await app.register(responseValidation, {
     logger,
     enabled: config.validateResponses,
   });
+  // Decorates once at the root; requirePrincipal only adds a hook per scope.
+  await app.register(principalPlugin);
 
   await app.register(healthRoutes, { prisma });
   return app;

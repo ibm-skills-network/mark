@@ -5,9 +5,18 @@ import { ESLint } from "eslint";
 import { afterEach, describe, expect, it } from "vitest";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const fixture = resolve(root, "src/__lint__/sample.ts");
+// Type-aware rules only lint files inside the tsconfig project, so fixtures
+// live under src/ (gitignored) rather than in a temp directory.
+const fixtureDirs = {
+  src: resolve(root, "src/__lint__"),
+  module: resolve(root, "src/modules/__lint__"),
+};
 
-async function ruleIds(code: string): Promise<string[]> {
+async function ruleIds(
+  code: string,
+  where: keyof typeof fixtureDirs = "src",
+): Promise<string[]> {
+  const fixture = resolve(fixtureDirs[where], "sample.ts");
   mkdirSync(dirname(fixture), { recursive: true });
   writeFileSync(fixture, code);
   const eslint = new ESLint({ cwd: root });
@@ -16,7 +25,9 @@ async function ruleIds(code: string): Promise<string[]> {
 }
 
 afterEach(() => {
-  rmSync(fixture, { force: true });
+  for (const dir of Object.values(fixtureDirs)) {
+    rmSync(dir, { recursive: true, force: true });
+  }
 });
 
 describe("architecture lint rules", () => {
@@ -42,6 +53,22 @@ describe("architecture lint rules", () => {
       "@typescript-eslint/consistent-type-assertions",
     ],
     ['import "reflect-metadata";', "no-restricted-imports"],
+    [
+      "function d(..._a: unknown[]): void {}\n@d export class C {}",
+      "no-restricted-syntax",
+    ],
+    [
+      'export async function f(): Promise<unknown> { return import("../../api"); }',
+      "no-restricted-syntax",
+    ],
+    [
+      'export async function f(): Promise<unknown> { return import("../../jobs/src/x.js"); }',
+      "no-restricted-syntax",
+    ],
+    [
+      'export function f(g: () => void, log: { warn(m: string): void }): void { try { g(); } catch { log.warn("x"); } }',
+      "no-restricted-syntax",
+    ],
     ["export const a: any = 1;", "@typescript-eslint/no-explicit-any"],
     ["export const a = 1 as unknown as string;", "no-restricted-syntax"],
     ["export function f(): void { try { f(); } catch {} }", "no-empty"],
@@ -56,6 +83,43 @@ describe("architecture lint rules", () => {
     );
     expect(ids).not.toContain("no-restricted-imports");
     expect(ids).not.toContain("no-restricted-syntax");
+  });
+
+  it("rejects a module importing another module's repo", async () => {
+    expect(
+      await ruleIds(
+        'import { r } from "../other/repo.js";\nexport { r };\n',
+        "module",
+      ),
+    ).toContain("no-restricted-imports");
+    expect(await ruleIds('import "../other/repo";\n', "module")).toContain(
+      "no-restricted-imports",
+    );
+  });
+
+  it("accepts a module importing another module's schema", async () => {
+    expect(
+      await ruleIds(
+        'import { s } from "../other/schema.js";\nexport { s };\n',
+        "module",
+      ),
+    ).not.toContain("no-restricted-imports");
+  });
+
+  it("accepts a dynamic import of apiv3's own modules", async () => {
+    expect(
+      await ruleIds(
+        'export async function f(): Promise<unknown> { return import("../modules/api/routes.js"); }\n',
+      ),
+    ).not.toContain("no-restricted-syntax");
+  });
+
+  it("accepts a catch that logs and then returns", async () => {
+    expect(
+      await ruleIds(
+        'export function f(g: () => number, log: { warn(m: string): void }): number { try { return g(); } catch { log.warn("x"); return 0; } }\n',
+      ),
+    ).not.toContain("no-restricted-syntax");
   });
 
   it("accepts clean code", async () => {

@@ -24,8 +24,10 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
   }
 }
 
+// .on, not .once: a repeated signal must hit the shuttingDown guard instead of
+// falling through to the default handler and killing the process mid-drain.
 for (const signal of ["SIGTERM", "SIGINT"] as const) {
-  process.once(signal, (s) => void shutdown(s));
+  process.on(signal, (s) => void shutdown(s));
 }
 
 try {

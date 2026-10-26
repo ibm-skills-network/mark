@@ -1,8 +1,8 @@
 import type { EventEmitter } from "node:events";
 import type { PrismaClient } from "@prisma/client";
 import type { Logger } from "pino";
-import { pingDatabase } from "../modules/health/routes.js";
 import type { Config } from "../shared/config.js";
+import { pingDatabase } from "../shared/db-ping.js";
 import { buildHealthServer } from "./health.js";
 
 export const IDLE_LOG_INTERVAL_MS = 60000;
@@ -80,14 +80,19 @@ export async function runWorker(deps: WorkerDeps): Promise<Worker> {
     });
   }
 
+  // A failed claim is logged and counted as an empty batch so the loop backs off.
+  async function claimOrZero(): Promise<number> {
+    try {
+      return await claim();
+    } catch (err) {
+      logger.error({ err }, "worker.claim_failed");
+      return 0;
+    }
+  }
+
   async function runClaimLoop(): Promise<void> {
     while (!stopping) {
-      let n = 0;
-      try {
-        n = await claim();
-      } catch (err) {
-        logger.error({ err }, "worker.claim_failed");
-      }
+      const n = await claimOrZero();
       if (stopping) break;
       await sleep(n > 0 ? 0 : EMPTY_CLAIM_BACKOFF_MS);
     }

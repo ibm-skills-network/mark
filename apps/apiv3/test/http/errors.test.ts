@@ -37,7 +37,7 @@ describe("error envelope", () => {
 
   it("hides unexpected errors behind a 500 envelope and logs them", async () => {
     const { app, lines } = await appWith();
-    app.get("/boom", () => {
+    app.get("/boom", { schema: { response: { 200: okSchema } } }, () => {
       throw new Error("boom");
     });
     const res = await app.inject({
@@ -61,7 +61,7 @@ describe("error envelope", () => {
 
   it("returns AppError status and logs 4xx at warn without a stack", async () => {
     const { app, lines } = await appWith();
-    app.get("/bad-request", () => {
+    app.get("/bad-request", { schema: { response: { 200: okSchema } } }, () => {
       throw new BadRequestError();
     });
     const res = await app.inject({ method: "GET", url: "/bad-request" });
@@ -78,7 +78,9 @@ describe("error envelope", () => {
 
   it("rejects malformed JSON bodies with a generic 400", async () => {
     const { app } = await appWith();
-    app.post("/echo", () => ({ ok: true }));
+    app.post("/echo", { schema: { response: { 200: okSchema } } }, () => ({
+      ok: true,
+    }));
     const res = await app.inject({
       method: "POST",
       url: "/echo",
@@ -92,7 +94,9 @@ describe("error envelope", () => {
 
   it("rejects bodies over 1 MiB with 413", async () => {
     const { app } = await appWith();
-    app.post("/echo", () => ({ ok: true }));
+    app.post("/echo", { schema: { response: { 200: okSchema } } }, () => ({
+      ok: true,
+    }));
     const res = await app.inject({
       method: "POST",
       url: "/echo",
@@ -108,7 +112,12 @@ describe("error envelope", () => {
     const { app } = await appWith();
     app.post(
       "/typed",
-      { schema: { body: z.object({ secretField: z.string() }) } },
+      {
+        schema: {
+          body: z.object({ secretField: z.string() }),
+          response: { 200: okSchema },
+        },
+      },
       () => ({ ok: true }),
     );
     const res = await app.inject({
@@ -153,8 +162,14 @@ describe("response validation", () => {
 
   it("checks pre-serialized payloads in onSend when enabled", async () => {
     const { app, lines } = await appWith({ validateResponses: true });
-    app.get("/raw", { config: { responseSchema: okSchema } }, (_req, reply) =>
-      reply.type("application/json").send(JSON.stringify({ extra: 1 })),
+    app.get(
+      "/raw",
+      {
+        schema: { response: { 200: okSchema } },
+        config: { responseSchema: okSchema },
+      },
+      (_req, reply) =>
+        reply.type("application/json").send(JSON.stringify({ extra: 1 })),
     );
     const res = await app.inject({ method: "GET", url: "/raw" });
     expect(res.statusCode).toBe(500);
@@ -165,8 +180,14 @@ describe("response validation", () => {
 
   it("leaves onSend payloads alone when validation is disabled", async () => {
     const { app } = await appWith({ validateResponses: false });
-    app.get("/raw", { config: { responseSchema: okSchema } }, (_req, reply) =>
-      reply.type("application/json").send(JSON.stringify({ extra: 1 })),
+    app.get(
+      "/raw",
+      {
+        schema: { response: { 200: okSchema } },
+        config: { responseSchema: okSchema },
+      },
+      (_req, reply) =>
+        reply.type("application/json").send(JSON.stringify({ extra: 1 })),
     );
     const res = await app.inject({ method: "GET", url: "/raw" });
     expect(res.statusCode).toBe(200);

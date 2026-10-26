@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import { buildApp } from "../../src/http/app.js";
 import { requirePrincipal } from "../../src/modules/access/plugin.js";
 import { parseUserSession } from "../../src/modules/access/principal.js";
 import { BadRequestError, UnauthorizedError } from "../../src/shared/errors.js";
 import { captureLogger, fakePrisma, testConfig } from "../http/helpers.js";
+
+const whoami = z.object({ userId: z.string() });
 
 const valid = {
   userId: "a@b.c",
@@ -22,7 +25,11 @@ async function appWithPrincipal() {
   });
   await app.register((scope, _opts, done) => {
     requirePrincipal(scope);
-    scope.get("/whoami", (request) => ({ userId: request.principal.userId }));
+    scope.get(
+      "/whoami",
+      { schema: { response: { 200: whoami } } },
+      (request) => ({ userId: request.principal.userId }),
+    );
     done();
   });
   return { app, lines };
@@ -162,6 +169,53 @@ describe("requirePrincipal", () => {
     const { app } = await appWithPrincipal();
     const res = await app.inject({ method: "GET", url: "/health/liveness" });
     expect(res.statusCode).toBe(200);
+    await app.close();
+  });
+
+  it("can be called twice in one scope, in sibling scopes and nested", async () => {
+    const { logger } = captureLogger();
+    const app = await buildApp({
+      config: testConfig(),
+      logger,
+      prisma: fakePrisma(() => Promise.resolve([])),
+    });
+    const route = { schema: { response: { 200: whoami } } };
+    for (const prefix of ["/a", "/b"]) {
+      await app.register(
+        (scope, _opts, done) => {
+          requirePrincipal(scope);
+          // A second call in the same scope used to re-decorate and throw.
+          requirePrincipal(scope);
+          scope.get("/me", route, (request) => ({
+            userId: request.principal.userId,
+          }));
+          void scope.register(
+            (inner, _innerOpts, innerDone) => {
+              requirePrincipal(inner);
+              inner.get("/me", route, (request) => ({
+                userId: request.principal.userId,
+              }));
+              innerDone();
+            },
+            { prefix: "/inner" },
+          );
+          done();
+        },
+        { prefix },
+      );
+    }
+    await app.ready();
+    for (const url of ["/a/me", "/b/me", "/a/inner/me"]) {
+      const res = await app.inject({
+        method: "GET",
+        url,
+        headers: { "user-session": JSON.stringify(valid) },
+      });
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toEqual({ userId: "a@b.c" });
+    }
+    const refused = await app.inject({ method: "GET", url: "/a/inner/me" });
+    expect(refused.statusCode).toBe(401);
     await app.close();
   });
 });

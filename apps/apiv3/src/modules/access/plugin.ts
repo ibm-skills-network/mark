@@ -38,9 +38,9 @@ export const principalPlugin = fp(principalDecorator, {
 });
 
 // Call inside an encapsulated scope: every route registered in that scope
-// then requires a valid gateway user-session header.
+// then requires a valid gateway user-session header. buildApp registers
+// principalPlugin once, so this may be called in sibling and nested scopes.
 export function requirePrincipal(app: FastifyInstance): void {
-  void app.register(principalPlugin);
   app.addHook("onRequest", (request, _reply, done) => {
     try {
       request.principal = parseUserSession(

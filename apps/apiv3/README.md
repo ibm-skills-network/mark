@@ -18,12 +18,12 @@ src/
 
 ## Rules
 
-1. Modules import only `shared/` and `ops/`, never another module's repo, never `apps/api`, `apps/jobs`, `apps/web`.
-2. No decorators, no DI container, no global interceptors: a route is a function with a schema, composed in `http/app.ts` and `worker/main.ts`.
-3. Every route has a zod request schema and a zod response schema; the response serializer always enforces the schema (unknown keys stripped, type mismatch is a 500 `RESPONSE_SCHEMA_VIOLATION`) and `V3_VALIDATE_RESPONSES=true` adds a stricter re-parse for staging.
+1. Modules import only `shared/` and `ops/`, never another module's repo, never `apps/api`, `apps/jobs`, `apps/web` (lint errors, static and dynamic imports).
+2. No decorators (lint error), no DI container, no global interceptors: a route is a function with a schema, composed in `http/app.ts` and `worker/main.ts`.
+3. Every route has a zod request schema and a zod response schema (`buildApp` refuses to register a route outside `/health/` without `schema.response`); the response serializer always enforces the schema (unknown keys stripped, type mismatch is a 500 `RESPONSE_SCHEMA_VIOLATION`) and `V3_VALIDATE_RESPONSES=true` adds a stricter re-parse for staging.
 4. Every route and handler logs entry, outcome and each external call with `requestId` and the ids it knows, never headers, cookies, secrets or bodies.
 5. A route's query count is asserted in its test with `expectQueries`.
-6. No `any`, no `as unknown as`, no empty catch, no `console` (lint errors).
+6. No `any`, no `as unknown as`, no empty catch, no catch that only logs, no `console` (lint errors). A catch must rethrow or return a typed result after logging.
 7. One file per external system under `shared/clients/`.
 
 ## Configuration

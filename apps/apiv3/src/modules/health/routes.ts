@@ -2,8 +2,7 @@ import type { PrismaClient } from "@prisma/client";
 import type { FastifyPluginAsync } from "fastify";
 import type { ZodTypeProvider } from "fastify-type-provider-zod";
 import { z } from "zod";
-
-export const READINESS_TIMEOUT_MS = 2000;
+import { pingDatabase } from "../../shared/db-ping.js";
 
 const liveness = z.object({ status: z.literal("ok") });
 const readiness = z.object({
@@ -14,30 +13,6 @@ const readiness = z.object({
 type HealthOptions = {
   prisma: Pick<PrismaClient, "$queryRaw">;
 };
-
-class ReadinessTimeoutError extends Error {
-  constructor() {
-    super(`database check exceeded ${READINESS_TIMEOUT_MS} ms`);
-    this.name = "ReadinessTimeoutError";
-  }
-}
-
-export async function pingDatabase(
-  prisma: HealthOptions["prisma"],
-): Promise<void> {
-  let timer: NodeJS.Timeout | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(
-      () => reject(new ReadinessTimeoutError()),
-      READINESS_TIMEOUT_MS,
-    );
-  });
-  try {
-    await Promise.race([prisma.$queryRaw`SELECT 1`, timeout]);
-  } finally {
-    clearTimeout(timer);
-  }
-}
 
 export const healthRoutes: FastifyPluginAsync<HealthOptions> = (
   base,
