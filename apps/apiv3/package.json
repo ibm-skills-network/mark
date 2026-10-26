@@ -10,7 +10,7 @@
     "build": "echo apiv3 build not yet configured",
     "dev": "tsx watch src/http.ts",
     "lint": "eslint .",
-    "test": "vitest run",
+    "test": "tsc -p tsconfig.test.json --noEmit && vitest run",
     "start:http": "node dist/http.js",
     "start:worker": "node dist/worker.js"
   },
