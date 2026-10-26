@@ -24,10 +24,11 @@ postgres:
   extraParams: {}
 
 v3Api:
-  enabled: true
+  # Enabled per environment in the deploy values.
+  enabled: false
   replicaCount: 1
   image:
-    repository: ghcr.io/ibm-skills-network/mark/mark-apiv3
+    repository: icr.io/skills-network/mark-apiv3
     tag: ""
     pullPolicy: IfNotPresent
   # Also rendered as PORT in the ConfigMap.
@@ -35,10 +36,10 @@ v3Api:
   service:
     type: ClusterIP
     port: 80
-  # Node drains and rollouts keep at least this many pods serving.
+  # A single replica must stay evictable on the shared cluster; minAvailable, if set, wins.
   podDisruptionBudget:
     enabled: true
-    minAvailable: 1
+    maxUnavailable: 1
   resources:
     requests:
       cpu: 100m
@@ -81,10 +82,11 @@ v3Api:
     DATABASE_URL: ""
 
 v3Worker:
-  enabled: true
+  # Enabled per environment in the deploy values.
+  enabled: false
   replicaCount: 1
   image:
-    repository: ghcr.io/ibm-skills-network/mark/mark-apiv3
+    repository: icr.io/skills-network/mark-apiv3
     tag: ""
     pullPolicy: IfNotPresent
   # Health probe port; also rendered as WORKER_HEALTH_PORT in the ConfigMap.

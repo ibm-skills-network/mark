@@ -26,6 +26,8 @@ spec:
       imagePullSecrets:
         {{- include "mark-v3.imagePullSecrets" $ | nindent 8 }}
       serviceAccountName: default
+      # preStop lets the endpoint removal propagate before SIGTERM closes the server.
+      terminationGracePeriodSeconds: 30
       securityContext:
         {{- toYaml .podSecurityContext | nindent 8 }}
       containers:
@@ -34,6 +36,10 @@ spec:
             {{- toYaml .securityContext | nindent 12 }}
           image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
           imagePullPolicy: {{ .image.pullPolicy }}
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sleep", "5"]
           ports:
             - name: http
               containerPort: {{ .containerPort }}
