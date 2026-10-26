@@ -42,6 +42,7 @@ const backends = args.backend.split(",").map((b) => {
 const concs = ints(args.conc, "--conc");
 const counts = ints(args.n, "--n");
 if (concs.some((c) => c < 1)) fail("--conc values must be >= 1");
+if (counts.some((c) => c < 1)) fail("--n values must be >= 1");
 if (counts.length !== concs.length)
   fail("--n needs one count per --conc level");
 const warmup = ints(args.warmup, "--warmup")[0];
@@ -50,6 +51,9 @@ const headers = {};
 if (args.session)
   headers["user-session"] = JSON.stringify(
     JSON.parse(readFileSync(args.session, "utf8")),
+  ).replace(
+    /[\u007f-\uffff]/g,
+    (c) => "\\u" + c.charCodeAt(0).toString(16).padStart(4, "0"),
   );
 
 const subst = (path) =>
@@ -72,14 +76,16 @@ async function hit(url) {
   const t = performance.now();
   let ok = false;
   let bytes = 0;
+  let error;
   try {
-    const r = await fetch(url, { headers });
+    const r = await fetch(url, { headers, signal: AbortSignal.timeout(30000) });
     bytes = (await r.arrayBuffer()).byteLength;
     ok = r.status === 200;
-  } catch {
+  } catch (e) {
     // a thrown fetch is counted as an error; latency is still recorded
+    error = e instanceof Error ? e.message : String(e);
   }
-  return { ms: performance.now() - t, ok, bytes };
+  return { ms: performance.now() - t, ok, bytes, error };
 }
 
 async function run(base, path, n, conc) {
@@ -89,6 +95,7 @@ async function run(base, path, n, conc) {
   let errors = 0;
   let bytes = 0;
   let next = 0;
+  let firstError;
   const worker = async () => {
     while (next < n) {
       next++;
@@ -96,12 +103,17 @@ async function run(base, path, n, conc) {
       lat.push(r.ms);
       bytes += r.bytes;
       if (!r.ok) errors++;
+      firstError ??= r.error;
     }
   };
   const t0 = performance.now();
   await Promise.all(Array.from({ length: conc }, worker));
   const wall = performance.now() - t0;
   lat.sort((a, b) => a - b);
+  if (firstError)
+    process.stderr.write(
+      `bench: ${path} @ ${base} conc=${conc}: ${firstError}\n`,
+    );
   return {
     p50: +pct(lat, 0.5).toFixed(1),
     p95: +pct(lat, 0.95).toFixed(1),

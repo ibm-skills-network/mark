@@ -12,6 +12,7 @@ node bench.mjs --backend mark-api,mark-v3-api --routes routes.learner.json \
 - `--session`: optional JSON object sent as the `user-session` header. Omit for no header.
 - `--conc` / `--n`: concurrency levels and one request count per level.
 - Output is a markdown table (`route | conc | backend | p50 | p95 | p99 | rps | errors | bytes`), latencies in ms. Any non-200 or thrown fetch is an error. `--json` also writes the raw rows.
+- `bytes` is the mean response body size per request.
 
 Route sets: `routes.health.json` (liveness, readiness) and `routes.learner.json` (the four learner reads).
 
