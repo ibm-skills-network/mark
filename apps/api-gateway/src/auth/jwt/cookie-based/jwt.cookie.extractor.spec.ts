@@ -7,6 +7,18 @@ import {
 const makeToken = (iat: number, marker = "h"): string =>
   `${marker}.${Buffer.from(JSON.stringify({ iat })).toString("base64url")}.s`;
 
+const session = (claims: Record<string, unknown>): string =>
+  `h.${Buffer.from(
+    JSON.stringify({
+      userID: "learner@example.test",
+      role: "learner",
+      ...claims,
+    }),
+  ).toString("base64url")}.s`;
+const quiz = { "x-mark-learner-assignment": "4892" };
+const launch = session({ iat: 2000, assignmentID: 4941 });
+const saved = session({ iat: 1000, assignmentID: 4892 });
+
 type RequestLike = Parameters<typeof selectAuthenticationCookie>[0];
 
 const requestWith = (
@@ -109,6 +121,26 @@ describe("selectAuthenticationCookie", () => {
     expect(result.token).toBe(real);
     expect(result.candidateCount).toBe(1);
   });
+
+  it("selects the saved session for the quiz context", () => {
+    const result = selectAuthenticationCookie({
+      headers: { cookie: `authentication=${launch}`, ...quiz },
+      savedSession: saved,
+    });
+
+    expect(result.token).toBe(saved);
+  });
+
+  it("ignores per-quiz session cookies", () => {
+    const result = selectAuthenticationCookie({
+      headers: {
+        cookie: `authentication=${launch}; mark_learner_4892=${saved}`,
+        ...quiz,
+      },
+    });
+
+    expect(result.token).toBe(launch);
+  });
 });
 
 describe("dedupeAuthenticationCookieHeader", () => {
@@ -145,5 +177,15 @@ describe("dedupeAuthenticationCookieHeader", () => {
     );
 
     expect(rebuilt).toBe("authentication=first-garbage");
+  });
+
+  it("forwards the saved session and drops per-quiz cookies", () => {
+    const rebuilt = dedupeAuthenticationCookieHeader(
+      `theme=dark; authentication=${launch}; mark_learner_4892=${saved}`,
+      quiz,
+      saved,
+    );
+
+    expect(rebuilt).toBe(`theme=dark; authentication=${saved}`);
   });
 });
