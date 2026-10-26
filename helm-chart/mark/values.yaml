@@ -135,7 +135,7 @@ jobs:
 # v3 API (released by the mark-v3 chart); the gateway routes the listed families to it.
 v3Api:
   enabled: false
-  # Service name and port of the v3 API in this namespace.
+  # Service name and port of the v3 API in this namespace; the mark-v3 release must be named `mark-v3`.
   name: mark-v3-api
   port: 80
   # Route families sent to the v3 API (e.g. learner-reads); empty routes nothing.

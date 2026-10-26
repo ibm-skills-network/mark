@@ -45,9 +45,23 @@ app.kubernetes.io/name: {{ include "mark-v3.worker.name" . }}
 {{ include "mark-v3.commonLabels" . }}
 {{- end }}
 
+{{/* Credentials are percent-encoded (urlquery turns a space into "+", so map it to %20). */}}
 {{- define "mark-v3.databaseUrl" -}}
 {{- $v := .Values.postgres -}}
-{{- printf "postgresql://%s:%s@%s:%v/%s" $v.username $v.password $v.hostname $v.port $v.dbName }} {{- /* # pragma: allowlist secret */}}
+{{- $user := $v.username | toString | urlquery | replace "+" "%20" -}}
+{{- $pass := $v.password | toString | urlquery | replace "+" "%20" -}}
+{{- $params := list -}}
+{{- if $v.usePgBouncer -}}
+{{- $params = append $params "pgbouncer=true" -}}
+{{- end -}}
+{{- range $k, $val := $v.extraParams -}}
+{{- $params = append $params (printf "%s=%s" ($k | urlquery) ($val | toString | urlquery)) -}}
+{{- end -}}
+{{- $query := "" -}}
+{{- if $params -}}
+{{- $query = printf "?%s" (join "&" $params) -}}
+{{- end -}}
+{{- printf "postgresql://%s:%s@%s:%v/%s%s" $user $pass $v.hostname $v.port $v.dbName $query }} {{- /* # pragma: allowlist secret */}}
 {{- end }}
 
 {{- define "mark-v3.imagePullSecrets" -}}

@@ -18,6 +18,10 @@ postgres:
   hostname: ""
   port: 5432
   dbName: mark
+  # Adds pgbouncer=true; the pods reach postgres through pgbouncer in transaction mode.
+  usePgBouncer: true
+  # Extra connection parameters appended as &key=value (values URL-encoded).
+  extraParams: {}
 
 v3Api:
   enabled: true

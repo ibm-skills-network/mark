@@ -54,11 +54,19 @@ spec:
             periodSeconds: {{ .readinessProbe.periodSeconds }}
           resources:
             {{- toYaml .resources | nindent 12 }}
+          # The root filesystem is read-only; /tmp is the only writable path.
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           envFrom:
             - configMapRef:
                 name: {{ include "mark-v3.api.name" $ }}-config
             - secretRef:
                 name: {{ include "mark-v3.api.name" $ }}-secrets
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
       {{- with .nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
