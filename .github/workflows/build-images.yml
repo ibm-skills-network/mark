@@ -248,7 +248,7 @@ jobs:
 
       - name: Run tests for ${{ matrix.service }}
         if: steps.changes.outputs.needs_build == 'true'
-        run: yarn workspace ${{ matrix.service }} run test --watchAll=false
+        run: yarn workspace ${{ matrix.service }} run test ${{ matrix.service != 'apiv3' && '--watchAll=false' || '' }}
         timeout-minutes: 10
 
   playwright:
@@ -528,7 +528,10 @@ jobs:
           CHANGED=$(git diff --name-only "$BASE_SHA"...${{ github.sha }})
           TARGETS=""
           for SERVICE in api-gateway api jobs web apiv3; do
-            if echo "$CHANGED" | grep -qE "(^apps/${SERVICE}/|^package\.json|^yarn\.lock|^turbo\.json|^docker-bake\.hcl|^\.github/workflows/)"; then
+            # apiv3 generates its Prisma client from the api schema.
+            EXTRA=""
+            if [[ "$SERVICE" == "apiv3" ]]; then EXTRA="|^apps/api/prisma/"; fi
+            if echo "$CHANGED" | grep -qE "(^apps/${SERVICE}/${EXTRA}|^package\.json|^yarn\.lock|^turbo\.json|^docker-bake\.hcl|^\.github/workflows/)"; then
               TARGETS="${TARGETS:+$TARGETS }$SERVICE"
             fi
           done
