@@ -4,12 +4,10 @@ info:
   version: 2.1.0
   description: |
     Authoritative contract for the six routes a learner uses between opening
-    `/learner/:assignmentId` and seeing the first question. Both backends
-    (`apps/api` NestJS and `rust/crates/api`) implement this shape byte for
-    byte so the gateway can route either way.
+    `/learner/:assignmentId` and seeing the first question, as served by
+    `apps/api`.
 
-    Differences from the legacy wire format, applied in both backends in the
-    same release:
+    Differences from the legacy wire format:
     - No base64 response encoding. Text fields are plain JSON strings or null.
     - No answer key. Learner responses never carry `currentVersion`, `versions`,
       `questionVariants`, `assignmentVersion.questionVersions`, `answer`,
@@ -34,7 +32,7 @@ info:
     - `grade` is null whenever `showAssignmentScore` is false, on every route.
 
     Authentication: the api-gateway verifies the session cookie and forwards
-    a `user-session` header (ASCII-escaped JSON `UserSession`). Backends trust
+    a `user-session` header (ASCII-escaped JSON `UserSession`). The API trusts
     that header and must only be reachable from the gateway. Missing header
     -> 401, unparsable -> 400.
 
@@ -548,7 +546,7 @@ components:
       content:
         { application/json: { schema: { $ref: "#/components/schemas/Error" } } }
     Unavailable:
-      description: Database unreachable, pool exhausted, lock or statement timeout, serialisation failure or deadlock, or writes disabled on this backend. The web client retries this; it never retries 500.
+      description: Database unreachable, pool exhausted, lock or statement timeout, serialisation failure or deadlock. The web client retries this; it never retries 500.
       headers: { Retry-After: { $ref: "#/components/headers/RetryAfter" } }
       content:
         application/json:
@@ -636,8 +634,7 @@ paths:
         `expiresAt` is null or in the future exists, its id is returned with no
         further checks. Otherwise, inside one transaction serialised by
         `pg_advisory_xact_lock(hashtextextended('<userId>:<assignmentId>', 0))`
-        (transaction-scoped, so safe behind pgbouncer and shared with the
-        legacy backend), re-check for a resumable attempt, then validate in
+        (transaction-scoped, so safe behind pgbouncer), re-check for a resumable attempt, then validate in
         this order with these statuses:
 
         1. `published` false -> 403 `ASSIGNMENT_NOT_PUBLISHED`

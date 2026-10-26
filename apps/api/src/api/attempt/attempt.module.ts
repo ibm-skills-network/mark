@@ -1,6 +1,5 @@
 import { Module } from "@nestjs/common";
 import { AdminAuthModule } from "../../auth/admin-auth.module";
-import { InternalGradingController } from "../../job-queue/internal-grading.controller";
 import { JobQueueModule } from "../../job-queue/job-queue.module";
 import { AssignmentAttemptAccessControlGuard } from "../assignment/attempt/guards/assignment.attempt.access.control.guard";
 import { QuestionService } from "../assignment/question/question.service";
@@ -59,7 +58,7 @@ import { TranslationService } from "./services/translation/translation.service";
     AdminAuthModule,
     AttemptAccessCacheModule,
   ],
-  controllers: [AttemptControllerV2, InternalGradingController],
+  controllers: [AttemptControllerV2],
   providers: [
     AttemptServiceV2,
     AttemptSubmissionService,
