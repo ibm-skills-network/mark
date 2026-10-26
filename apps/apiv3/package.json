@@ -12,7 +12,8 @@
     "lint": "eslint .",
     "test": "tsc -p tsconfig.test.json --noEmit && vitest run",
     "start:http": "node dist/http.js",
-    "start:worker": "node dist/worker.js"
+    "start:worker": "node dist/worker.js",
+    "prisma:generate": "prisma generate --schema=../api/prisma/schema.prisma"
   },
   "dependencies": {
     "@fastify/swagger": "^9.5.1",

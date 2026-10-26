@@ -239,6 +239,11 @@ jobs:
           HUSKY: 0
         timeout-minutes: 15
 
+      # apiv3 types against the API's generated client; there is no root schema.
+      - name: Generate Prisma client for apiv3
+        if: steps.changes.outputs.needs_build == 'true' && matrix.service == 'apiv3'
+        run: yarn prisma generate --schema=apps/api/prisma/schema.prisma
+
       # Skip lint on tagged releases — tags are produced from already-merged
       # code that passed lint on its PR. Tests still run on tags as a real
       # correctness gate; lint is style-only and runs identically anywhere.

@@ -43,6 +43,15 @@ Booleans are true only for the literal `true`. Anything else is false.
 
 ## Running locally
 
+apiv3 uses the same generated Prisma client as the API, built from
+`apps/api/prisma/schema.prisma`. The root `resolutions` pin `@prisma/client`
+and `prisma` to 5.3.1, so both apps get the same version. Generate the client
+before linting, testing or building:
+
+```sh
+yarn workspace apiv3 prisma:generate
+```
+
 ```sh
 yarn workspace apiv3 dev          # HTTP server with reload
 yarn workspace apiv3 build        # bundle to dist/
