@@ -10,4 +10,3 @@ dist
 coverage
 out
 .tmp
-rust/target
