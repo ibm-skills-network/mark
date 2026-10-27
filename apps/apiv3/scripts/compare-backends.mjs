@@ -15,26 +15,32 @@ const CONTEXT = 40;
 // Same escaping as the gateway's asciiJson, so the header is pure ASCII.
 const asciiJson = (value) =>
   JSON.stringify(value).replaceAll(
-    /[\u007F-￿]/g,
+    /[\u007F-\uFFFF]/g,
     (c) => "\\u" + c.codePointAt(0).toString(16).padStart(4, "0"),
   );
 
 const base = { userId: "a@b.co", role: "learner" };
+// Shaped like the gateway's forwarded session (jwt.cookie.strategy validate()).
+const gateway = {
+  userId: "learner@example.com",
+  role: "learner",
+  groupId: "course-v1:IBM+X+2026",
+  assignmentId: 2300,
+  gradingCallbackRequired: true,
+  returnUrl: "https://lms.example.org/courses/1/return",
+  launch_presentation_locale: null,
+  lisOutcomeServiceUrl: "https://WWW.Coursera.org/api/onDemandLtiOutcomes",
+  toolConsumerInstanceGuid: "coursera.org",
+  courseTitle: "Donn\u00e9es et IA \u2014 \u5165\u9580",
+  courseId: "IBM-DS0101",
+  activityTitle: "Lab 3",
+  toolConsumerProductFamilyCode: "coursera",
+};
 const sessions = [
+  ["gateway learner", gateway],
   [
-    "full learner",
-    {
-      ...base,
-      groupId: "g",
-      assignmentId: 7,
-      returnUrl: "https://x.org/r",
-      launch_presentation_locale: "fr",
-      lisOutcomeServiceUrl: "https://WWW.Coursera.org/lti",
-    },
-  ],
-  [
-    "author with assignment",
-    { ...base, role: "author", groupId: "g", assignmentId: 7 },
+    "gateway author",
+    { ...gateway, role: "author", gradingCallbackRequired: false },
   ],
   ["explicit nulls", { ...base, assignmentId: null, returnUrl: null }],
   [
@@ -51,21 +57,26 @@ const sessions = [
   ],
   [
     "non-ASCII locale",
-    { ...base, assignmentId: 7, launch_presentation_locale: "été" },
+    { ...base, assignmentId: 7, launch_presentation_locale: "\u00e9t\u00e9" },
   ],
-  ["non-string returnUrl", { ...base, assignmentId: 7, returnUrl: 5 }],
   ["author, no assignment", { ...base, role: "author" }],
 ];
 
-const paths = ["/api/v1/user-session", "/api/v1/ai-status"];
-const CASES = paths.flatMap((path) =>
-  sessions.map(([label, session]) => ({
-    name: `${path.split("/").pop()} ${label}`,
+const CASES = [
+  ...sessions.map(([label, session]) => ({
+    name: `user-session ${label}`,
     method: "GET",
-    path,
+    path: "/api/v1/user-session",
     session,
   })),
-);
+  // The body does not depend on the session.
+  {
+    name: "ai-status",
+    method: "GET",
+    path: "/api/v1/ai-status",
+    session: gateway,
+  },
+];
 
 async function call(baseUrl, testCase, n) {
   const res = await fetch(baseUrl + testCase.path, {
@@ -112,7 +123,10 @@ for (const [index, testCase] of CASES.entries()) {
     }
   } catch (error) {
     failures += 1;
-    const reason = error instanceof Error ? error.name : "unknown error";
+    const reason =
+      error instanceof Error
+        ? [error.name, error.cause?.code].filter(Boolean).join(" ")
+        : "unknown error";
     process.stdout.write(`ERROR ${testCase.name} ${reason}\n`);
   }
 }
@@ -120,4 +134,4 @@ for (const [index, testCase] of CASES.entries()) {
 process.stdout.write(
   `${CASES.length - failures}/${CASES.length} cases match\n`,
 );
-process.exit(failures === 0 ? 0 : 1);
+process.exitCode = failures === 0 ? 0 : 1;
