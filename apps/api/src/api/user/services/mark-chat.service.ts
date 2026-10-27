@@ -9,7 +9,7 @@ import {
   Inject,
   Injectable,
 } from "@nestjs/common";
-import { CoreMessage, stepCountIs, streamText, tool, ToolSet } from "ai";
+import { ModelMessage, stepCountIs, streamText, tool, ToolSet } from "ai";
 import { Response } from "express";
 import { AiFeatureComponent } from "src/api/ai-feature-flags/ai-feature-flags.constants";
 import { AiFeatureFlagsService } from "src/api/ai-feature-flags/ai-feature-flags.service";
@@ -25,9 +25,19 @@ import {
 import { ChatRole, Prisma } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
-import { AUTHOR_OPERATIONS } from "mark-chat-ops";
+import {
+  AGENT_LOOP_PROTOCOL,
+  AUTHOR_OPERATIONS,
+  ChatStreamEvent,
+} from "mark-chat-ops";
 import { z } from "zod";
 import { ChatRepository } from "../repositories/chat.repository";
+import {
+  assistantModelMessages,
+  attachOutcomes,
+  pendingToolCalls,
+  readStoredToolCalls,
+} from "./agent-loop";
 import {
   collectToolResultsAcrossSteps,
   partitionClientExecutions,
@@ -40,6 +50,8 @@ interface MarkChatMessage {
   role: MarkChatRole;
   content: string;
   id?: string;
+  /** Agent-loop calls and outcomes on assistant messages; other UI data. */
+  toolCalls?: unknown;
 }
 
 type MarkChatToolRole = "author" | "learner";
@@ -51,8 +63,12 @@ interface MarkChatRequest {
    * prompt follow the authenticated session.
    */
   userRole?: MarkChatToolRole;
-  userText: string;
+  /** Absent on an agent-loop continuation. */
+  userText?: string;
   conversation: MarkChatMessage[];
+  protocol?: string;
+  /** Stored assistant message whose operation outcomes are being reported. */
+  resultsForMessageId?: number;
 }
 
 const STANDARD_ERROR_MESSAGE =
@@ -79,6 +95,10 @@ const DEFAULT_FILE_EXTRACT_CHARS = 20 * 1000;
 const MAX_FILE_EXTRACT_CHARS_HARD_CAP = 500 * 1000;
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const MAX_TOOL_STEPS = 5;
+const AUTHOR_OPERATION_RESULTS_GUIDANCE = `AUTHOR OPERATION RESULTS:
+- Author operations (creating, generating, modifying, or deleting questions and their parts) run in the author's browser. After you call them you receive each one's result: whether it succeeded, a message, and the questions it created or changed, with their IDs.
+- Do not say an operation is done until its result has come back, and report what the result says.
+- Use the question IDs from results to refer to, change, or remove questions you created.`;
 const FILE_SECTION_HEADERS = [
   "files already available in this chat session:",
   "files available in this chat:",
@@ -210,7 +230,7 @@ export class MarkChatService {
   private getConversationHistoryBudgetTokens(parameters: {
     systemPrompt: string;
     systemContextMessages: MarkChatMessage[];
-    userText: string;
+    userText?: string;
   }): number {
     const systemContextText = parameters.systemContextMessages
       .map((message) => message.content)
@@ -263,7 +283,11 @@ export class MarkChatService {
     for (let index = messages.length - 1; index >= 0; index -= 1) {
       const message = messages[index];
       const messageTokens =
-        this.estimateTokens(message.content) + MESSAGE_TOKEN_OVERHEAD;
+        this.estimateTokens(message.content) +
+        this.estimateTokens(
+          message.toolCalls ? JSON.stringify(message.toolCalls) : "",
+        ) +
+        MESSAGE_TOKEN_OVERHEAD;
 
       if (usedTokens + messageTokens <= safeBudget) {
         selected.push(message);
@@ -384,16 +408,22 @@ export class MarkChatService {
     userSession: UserSession,
     response: Response,
   ): Promise<void> {
-    const { userText, conversation } = request;
+    const { userText, conversation, protocol, resultsForMessageId } = request;
+    const agentLoop = protocol === AGENT_LOOP_PROTOCOL;
+    const mode = agentLoop ? "agent-loop" : "stream";
 
-    if (!userText || !conversation) {
+    if (!conversation || (!userText && !agentLoop)) {
       throw new BadRequestException("Missing required fields");
+    }
+    if (!userText && !this.endsWithReportedOutcomes(conversation)) {
+      throw new BadRequestException("Nothing to continue");
     }
 
     const userRole = this.resolveChatRole(userSession, request.userRole, {
       chatId,
-      mode: "stream",
+      mode,
     });
+    const output = this.streamWriter(response, agentLoop);
 
     // Kill-switch: stream a single polite message and end the response without
     // touching the provider when the AI chat component is disabled.
@@ -401,21 +431,22 @@ export class MarkChatService {
       this.logger.info("ai.killswitch.chat.blocked", {
         chatId,
         userRole,
-        mode: "stream",
+        mode,
       });
-      response.setHeader("Content-Type", "text/plain; charset=utf-8");
-      response.setHeader("Cache-Control", "no-cache, no-transform");
-      response.setHeader("X-Content-Type-Options", "nosniff");
-      response.flushHeaders();
-      response.write(CHAT_DISABLED_MESSAGE);
+      output.start();
+      output.text(CHAT_DISABLED_MESSAGE);
       response.end();
       return;
+    }
+
+    if (agentLoop && resultsForMessageId) {
+      await this.saveToolOutcomes(chatId, resultsForMessageId, conversation);
     }
 
     const { systemPrompt, systemContextMessages, assignmentInfo } =
       this.getSystemPromptParts(userRole, conversation, userSession, {
         chatId,
-        mode: "stream",
+        mode,
       });
 
     const conversationHistoryBudget = this.getConversationHistoryBudgetTokens({
@@ -437,18 +468,23 @@ export class MarkChatService {
     );
     const roleTools =
       userRole === "author"
-        ? this.authorTools()
+        ? this.authorTools(agentLoop)
         : this.learnerTools(userSession, assignmentInfo);
     const tools: ToolSet = {
       ...roleTools,
       ...this.fileTools(allowedLinks),
     };
+    const operationGuidance =
+      agentLoop && userRole === "author"
+        ? `\n\n${AUTHOR_OPERATION_RESULTS_GUIDANCE}`
+        : "";
 
     const result = streamText({
       model: openai(chatModel),
       providerOptions: CHAT_PROVIDER_OPTIONS,
       system:
         systemPrompt +
+        operationGuidance +
         (systemContextMessages.length > 0
           ? "\n\n" +
             systemContextMessages.map((message) => message.content).join("\n\n")
@@ -467,23 +503,16 @@ export class MarkChatService {
       return;
     }
 
-    response.setHeader("Content-Type", "text/plain; charset=utf-8");
-    response.setHeader("Cache-Control", "no-cache, no-transform");
-    response.setHeader("X-Content-Type-Options", "nosniff");
-    response.flushHeaders();
+    output.start();
 
     const reader = result.textStream.getReader();
     let fullContent = "";
-
-    const writeChunk = (chunk: string) => {
-      response.write(chunk);
-    };
 
     try {
       if (formattedConversation.contextTrimmed) {
         const warningChunk = `${CONTEXT_WINDOW_WARNING}\n\n`;
         fullContent += warningChunk;
-        writeChunk(warningChunk);
+        output.text(warningChunk);
       }
 
       let done = false;
@@ -493,7 +522,7 @@ export class MarkChatService {
         if (!done) {
           const value = readResult.value;
           fullContent += value;
-          writeChunk(value);
+          output.text(value);
         }
       }
 
@@ -506,38 +535,55 @@ export class MarkChatService {
       if (!fullContent.trim() && nonClientToolOutputs.length > 0) {
         const fallback = this.buildToolOnlyFallback(nonClientToolOutputs);
         fullContent += fallback;
-        writeChunk(fallback);
+        output.text(fallback);
       }
 
-      if (trackedClientExecutions.length > 0) {
-        const marker = `\n\n<!-- CLIENT_EXECUTION_MARKER\n${JSON.stringify(trackedClientExecutions)}\n-->`;
-        writeChunk(marker);
+      const pending = agentLoop ? pendingToolCalls(steps) : [];
+      const marker = `\n\n<!-- CLIENT_EXECUTION_MARKER\n${JSON.stringify(trackedClientExecutions)}\n-->`;
+
+      if (agentLoop) {
+        if (trackedClientExecutions.length > 0) {
+          output.event({
+            type: "client-actions",
+            actions: trackedClientExecutions,
+          });
+        }
+        if (pending.length > 0) {
+          output.event({ type: "tool-calls", calls: pending });
+        }
+      } else if (trackedClientExecutions.length > 0) {
+        response.write(marker);
       }
 
       logAiInvocation(this.logger, {
         modelKey: chatModel,
         purpose: "chat_assistant",
-        prompt: userText,
+        prompt: userText ?? "(continuation after operation results)",
         response: fullContent,
-        context: { chat_id: chatId, user_role: userRole, mode: "stream" },
+        context: { chat_id: chatId, user_role: userRole, mode },
       });
 
+      const storedToolCalls = [...trackedClientExecutions, ...pending];
       const hasContent = fullContent.trim().length > 0;
-      const hasToolCalls = trackedClientExecutions.length > 0;
+      const hasToolCalls = storedToolCalls.length > 0;
       if (hasContent || hasToolCalls) {
         try {
-          const contentForDatabase = hasToolCalls
-            ? `${fullContent}\n\n<!-- CLIENT_EXECUTION_MARKER\n${JSON.stringify(trackedClientExecutions)}\n-->`
-            : fullContent;
+          const contentForDatabase =
+            hasToolCalls && !agentLoop
+              ? `${fullContent}${marker}`
+              : fullContent;
           const toolCallsForDatabase = hasToolCalls
-            ? (trackedClientExecutions as unknown as Prisma.JsonValue)
+            ? (storedToolCalls as unknown as Prisma.JsonValue)
             : undefined;
-          await this.chatRepository.addMessage(
+          const saved = await this.chatRepository.addMessage(
             chatId,
             ChatRole.ASSISTANT,
             contentForDatabase,
             toolCallsForDatabase,
           );
+          if (agentLoop) {
+            output.event({ type: "saved", messageId: saved.id });
+          }
         } catch (persistError) {
           console.error(
             "MarkChatService.respondStream: failed to persist assistant message",
@@ -609,9 +655,9 @@ export class MarkChatService {
 
   private formatMessages(
     conversation: MarkChatMessage[],
-    userText: string,
+    userText: string | undefined,
     historyTokenBudget: number,
-  ): { messages: CoreMessage[]; contextTrimmed: boolean } {
+  ): { messages: ModelMessage[]; contextTrimmed: boolean } {
     const regularMessages = conversation.filter(
       (message) =>
         message.role !== "system" || !message.id?.includes("context"),
@@ -622,28 +668,118 @@ export class MarkChatService {
     );
     const budgetedMessages = budgetSelection.messages;
 
-    const mapped: CoreMessage[] = budgetedMessages.map((message) =>
-      this.toCoreMessage(message),
+    const mapped = budgetedMessages.flatMap((message) =>
+      this.toModelMessages(message),
     );
 
     return {
-      messages: [...mapped, { role: "user", content: userText }],
+      messages: userText
+        ? [...mapped, { role: "user", content: userText }]
+        : mapped,
       contextTrimmed: budgetSelection.contextTrimmed,
     };
   }
 
-  private toCoreMessage(message: MarkChatMessage): CoreMessage {
+  private toModelMessages(message: MarkChatMessage): ModelMessage[] {
     switch (message.role) {
       case "system": {
-        return { role: "system", content: message.content };
+        return [{ role: "system", content: message.content }];
       }
       case "assistant": {
-        return { role: "assistant", content: message.content };
+        return assistantModelMessages(message.content, message.toolCalls);
       }
       default: {
-        return { role: "user", content: message.content };
+        return [{ role: "user", content: message.content }];
       }
     }
+  }
+
+  /** A continuation must follow operations whose outcomes were reported. */
+  private endsWithReportedOutcomes(conversation: MarkChatMessage[]): boolean {
+    const last = conversation
+      .filter((message) => message.role !== "system")
+      .at(-1);
+    return (
+      last?.role === "assistant" &&
+      readStoredToolCalls(last.toolCalls).some(
+        (call) => call.output !== undefined,
+      )
+    );
+  }
+
+  /**
+   * Saves the outcomes the browser reported onto the stored assistant message
+   * that made the calls, so a reloaded chat replays them to the model.
+   */
+  private async saveToolOutcomes(
+    chatId: string,
+    messageId: number,
+    conversation: MarkChatMessage[],
+  ): Promise<void> {
+    const reported = readStoredToolCalls(
+      conversation.filter((message) => message.role === "assistant").at(-1)
+        ?.toolCalls,
+    );
+    if (reported.length === 0) return;
+
+    try {
+      const stored = await this.chatRepository.findAssistantMessage(
+        chatId,
+        messageId,
+      );
+      if (!stored) {
+        this.logger.warn("agent_loop: outcomes for an unknown message", {
+          chat_id: chatId,
+          message_id: messageId,
+        });
+        return;
+      }
+      const { toolCalls, attached } = attachOutcomes(
+        stored.toolCalls,
+        reported,
+      );
+      if (attached > 0) {
+        await this.chatRepository.updateMessageToolCalls(
+          chatId,
+          messageId,
+          toolCalls as Prisma.JsonValue,
+        );
+      }
+    } catch (error) {
+      this.logger.error("agent_loop: failed to save operation outcomes", {
+        chat_id: chatId,
+        message_id: messageId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  /** Writes the response as plain text, or as agent-loop events. */
+  private streamWriter(response: Response, agentLoop: boolean) {
+    const event = (value: ChatStreamEvent) => {
+      response.write(`${JSON.stringify(value)}\n`);
+    };
+    return {
+      start: () => {
+        response.setHeader(
+          "Content-Type",
+          agentLoop
+            ? "application/x-ndjson; charset=utf-8"
+            : "text/plain; charset=utf-8",
+        );
+        response.setHeader("Cache-Control", "no-cache, no-transform");
+        response.setHeader("X-Content-Type-Options", "nosniff");
+        response.flushHeaders();
+      },
+      text: (delta: string) => {
+        if (agentLoop) {
+          event({ type: "text", delta });
+        } else {
+          response.write(delta);
+        }
+      },
+      event,
+    };
   }
 
   private getSystemPromptParts(
@@ -945,7 +1081,7 @@ FILE LINK WORKFLOW:
       {
         description: string;
         inputSchema: z.ZodTypeAny;
-        execute: (input: any) => Promise<unknown> | unknown;
+        execute?: (input: any) => Promise<unknown> | unknown;
       }
     >,
   ): ToolSet {
@@ -969,27 +1105,31 @@ FILE LINK WORKFLOW:
    * hands its input back as a clientExecution signal, which respondStream
    * forwards to the client in the execution marker.
    */
-  private authorOperationTools() {
+  private authorOperationTools(browserReportsOutcomes: boolean) {
     return Object.fromEntries(
       Object.entries(AUTHOR_OPERATIONS).map(([name, operation]) => [
         name,
         {
           description: operation.description,
           inputSchema: operation.input,
-          execute: async (parameters: any) =>
-            JSON.stringify({
-              clientExecution: true,
-              function: name,
-              params: parameters,
-            }),
+          // With no execute, the SDK ends the turn on the call and hands it to
+          // us; the browser runs it and reports the outcome on the next turn.
+          execute: browserReportsOutcomes
+            ? undefined
+            : async (parameters: any) =>
+                JSON.stringify({
+                  clientExecution: true,
+                  function: name,
+                  params: parameters,
+                }),
         },
       ]),
     );
   }
 
-  private authorTools(): ToolSet {
+  private authorTools(browserReportsOutcomes = false): ToolSet {
     return this.toToolSet({
-      ...this.authorOperationTools(),
+      ...this.authorOperationTools(browserReportsOutcomes),
       searchKnowledgeBase: {
         description:
           "Search the knowledge base for information about the platform or features",

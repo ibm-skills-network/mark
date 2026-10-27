@@ -108,6 +108,24 @@ export const useAuthorContext = (): UseAuthorContextInterface => {
   }, []);
 
   const getContextMessage = useCallback(async () => {
+    // Read the store now, not the last render: the chat calls this again right
+    // after its operations change the draft, before React re-renders.
+    const {
+      name,
+      introduction,
+      instructions,
+      gradingCriteriaOverview,
+      questions,
+      questionOrder,
+      activeAssignmentId,
+      focusedQuestionId,
+      learningObjectives,
+      fileUploaded,
+    } = useAuthorStore.getState();
+    const currentQuestion = Array.isArray(questions)
+      ? (questions.find((q) => q.id === focusedQuestionId) ?? questions[0])
+      : null;
+
     let contextContent = "MARK ASSISTANT CONTEXT (AUTHOR MODE):\n\n";
 
     contextContent += `Assignment: ${name || "Untitled Assignment"}\n`;
@@ -243,19 +261,7 @@ export const useAuthorContext = (): UseAuthorContextInterface => {
       role: "system",
       content: contextContent,
     };
-  }, [
-    name,
-    activeAssignmentId,
-    questions,
-    learningObjectives,
-    fileUploaded,
-    introduction,
-    instructions,
-    gradingCriteriaOverview,
-    questionOrder,
-    currentQuestion,
-    hasRubrics,
-  ]);
+  }, [hasRubrics]);
 
   const getCurrentQuestionInfo = useCallback(() => {
     if (!currentQuestion) return null;

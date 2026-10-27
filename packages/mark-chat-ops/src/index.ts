@@ -202,3 +202,48 @@ export type ClientOperation =
       function: typeof REPORT_PREVIEW_OPERATION;
       params: Record<string, unknown>;
     };
+
+/**
+ * Agent-loop protocol. A browser that sends `protocol: AGENT_LOOP_PROTOCOL`
+ * gets newline-delimited `ChatStreamEvent` JSON instead of plain text, runs
+ * the author operations the model calls, and sends their outcomes back so the
+ * model sees what happened before it answers. Browsers that don't send it
+ * keep the plain-text stream.
+ */
+export const AGENT_LOOP_PROTOCOL = "agent-loop-1";
+
+/** An author operation the model called; the browser runs it. */
+export interface PendingToolCall {
+  toolCallId: string;
+  toolName: AuthorOperationName;
+  input: unknown;
+}
+
+/** What the browser reports back for one operation. */
+export interface OperationOutcome {
+  success: boolean;
+  message: string;
+  /** Questions the operation created or changed, as they now stand. */
+  questions?: Array<{ id: number; type: string; question: string }>;
+}
+
+/**
+ * One entry in a stored assistant message's `toolCalls`: the call, and its
+ * outcome once the browser has run it. Older rows hold `{ function, params }`
+ * entries instead, which only drive UI such as the report preview.
+ */
+export interface StoredToolCall extends PendingToolCall {
+  output?: OperationOutcome;
+}
+
+export type ChatStreamEvent =
+  | { type: "text"; delta: string }
+  /** Run these, then continue with their outcomes. */
+  | { type: "tool-calls"; calls: PendingToolCall[] }
+  /** UI to open with no outcome to report, e.g. the report preview. */
+  | {
+      type: "client-actions";
+      actions: Array<{ function: string; params: unknown }>;
+    }
+  /** The stored assistant message, for attaching outcomes to it. */
+  | { type: "saved"; messageId: number };

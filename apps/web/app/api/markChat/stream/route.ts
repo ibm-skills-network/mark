@@ -1,26 +1,56 @@
 import { getBaseApiPath } from "@/config/constants";
 import { authorizeChatRequest, VerifiedChatSession } from "@/lib/chat-session";
+import type { AGENT_LOOP_PROTOCOL } from "mark-chat-ops";
 
 const BACKEND_SOURCE_HEADER = "x-mark-chat-backend";
 const LOG_EVENT = "markChat.stream.request";
 
+const AGENT_LOOP = "agent-loop-1" satisfies typeof AGENT_LOOP_PROTOCOL;
+
 interface ChatPayload {
   userRole: "author" | "learner";
-  userText: string;
+  /** Absent only when an agent-loop browser continues after running operations. */
+  userText?: string;
   conversation: unknown[];
+  protocol?: typeof AGENT_LOOP;
+  resultsForMessageId?: number;
 }
 
 /** The browser decides what to ask, never who is asking or what shape it sends. */
 function parsePayload(body: unknown): ChatPayload | null {
   if (typeof body !== "object" || body === null) return null;
 
-  const { userRole, userText, conversation } = body as Record<string, unknown>;
+  const { userRole, userText, conversation, protocol, resultsForMessageId } =
+    body as Record<string, unknown>;
 
   if (userRole !== "author" && userRole !== "learner") return null;
-  if (typeof userText !== "string" || userText.length === 0) return null;
   if (!Array.isArray(conversation)) return null;
+  if (protocol !== undefined && protocol !== AGENT_LOOP) return null;
 
-  return { userRole, userText, conversation };
+  const agentLoop = protocol === AGENT_LOOP;
+  const hasText = typeof userText === "string" && userText.length > 0;
+  if (!hasText && !(agentLoop && userText === undefined)) return null;
+
+  if (
+    resultsForMessageId !== undefined &&
+    !(
+      agentLoop &&
+      Number.isInteger(resultsForMessageId) &&
+      (resultsForMessageId as number) > 0
+    )
+  ) {
+    return null;
+  }
+
+  return {
+    userRole,
+    conversation,
+    ...(hasText ? { userText: userText } : {}),
+    ...(agentLoop ? { protocol: AGENT_LOOP } : {}),
+    ...(resultsForMessageId === undefined
+      ? {}
+      : { resultsForMessageId: resultsForMessageId as number }),
+  };
 }
 
 function textResponse(message: string, status: number): Response {
@@ -95,7 +125,9 @@ async function callBackendChatStream(
 
     return new Response(respondRes.body, {
       headers: {
-        "Content-Type": "text/plain; charset=utf-8",
+        // Plain text, or agent-loop events (application/x-ndjson).
+        "Content-Type":
+          respondRes.headers.get("content-type") ?? "text/plain; charset=utf-8",
         "Cache-Control": "no-cache, no-transform",
         "X-Content-Type-Options": "nosniff",
         "X-Chat-ID": chatData.id,
@@ -146,7 +178,8 @@ export async function POST(req: Request) {
     caller,
     userRole: payload.userRole,
     // Lengths only: the message is learner content.
-    characters: payload.userText.length,
+    characters: payload.userText?.length ?? 0,
+    agentLoop: payload.protocol === AGENT_LOOP,
     turns: payload.conversation.length,
   });
 

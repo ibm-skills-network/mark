@@ -4,6 +4,13 @@
 
 import { searchKnowledgeBase } from "../knowledgebase";
 import * as authorStoreUtils from "../store/authorStoreUtil";
+import {
+  AGENT_LOOP,
+  isAgentLoopResponse,
+  MAX_CONTINUATIONS,
+  readAgentTurn,
+  runPendingCalls,
+} from "./agentLoop";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
@@ -14,6 +21,8 @@ export interface ChatMessage {
   content: string;
   timestamp?: string;
   toolCalls?: any;
+  /** Shown in the chat but never sent to the API (e.g. the ✅ summary). */
+  displayOnly?: boolean;
 }
 
 interface SendMessageOptions {
@@ -23,6 +32,8 @@ interface SendMessageOptions {
   toolCalls?: any;
   // Lets callers provide the exact conversation snapshot to send.
   conversation?: ChatMessage[];
+  // Fresh assignment context for each continuation after operations run.
+  getContext?: () => Promise<ChatMessage | null>;
 }
 
 interface MarkChatUsage {
@@ -266,151 +277,112 @@ export const useMarkChatStore = create<MarkChatState>()(
           isTyping: true,
         });
 
-        try {
-          // Strip the UI-only `toolCalls` metadata from user messages — file chips are
-          // local only and should not reach the API. However, file s3Links must reach
-          // the backend so it can grant extractFileFromLink tool access. Reconstruct a
-          // system-files-* message for each user message that carried file attachments
-          // so history reloads and post-refresh sessions restore tool access correctly.
-          const conversationMessages: ChatMessage[] = [];
-          for (const msg of conversation) {
-            // NOTE: do NOT drop `system-context-*` messages here. The backend
-            // (mark-chat.service.getSystemPromptParts) keys on
-            // `role === "system" && id.includes("context")` to build the LLM
-            // system prompt and detect assignment mode/id. Stripping them blinds
-            // the chatbot to the current app/session (assignment, question,
-            // responses, feedback). See useLearnerContext/useAuthorContext.
-            if (
-              msg.role === "user" &&
-              msg.toolCalls?.type === "file_attachments"
-            ) {
-              const files: Array<{
-                filename?: string;
-                size?: number;
-                contentType?: string;
-                extension?: string;
-                s3Link?: string;
-              }> = msg.toolCalls.files ?? [];
-              if (files.length > 0) {
-                let fileContent = "Files attached in this conversation:\n\n";
-                files.forEach((file, index) => {
-                  fileContent += `${index + 1}. ${file.filename ?? "file"}\n`;
-                  if (file.s3Link) fileContent += `S3 Link: ${file.s3Link}\n`;
-                  fileContent += "\n";
-                });
-                conversationMessages.push({
-                  id: `system-files-restored-${msg.id}`,
-                  role: "system",
-                  content: fileContent,
-                });
-              }
-              const { toolCalls: _tc, ...safeMessage } = msg;
-              conversationMessages.push(safeMessage);
-            } else {
-              conversationMessages.push(msg);
-            }
-          }
-
-          const response = await fetch("/api/markChat/stream", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              userRole,
-              userText: userMsg.content,
-              conversation: conversationMessages,
-            }),
-          });
-
-          if (!response.ok) {
-            throw new Error(`Server error: ${response.status}`);
-          }
-
-          if (!response.body) {
-            throw new Error("No response body");
-          }
-
-          const newId = `assistant-${Date.now()}`;
+        const updateMessage = (id: string, change: Partial<ChatMessage>) =>
           set((s) => ({
-            messages: [
-              ...s.messages,
-              { id: newId, role: "assistant", content: "" },
-            ],
-
-            isTyping: true,
+            messages: s.messages.map((message) =>
+              message.id === id ? { ...message, ...change } : message,
+            ),
           }));
 
-          const reader = response.body.getReader();
-          const decoder = new TextDecoder();
-          let accumulatedContent = "";
+        try {
+          // What precedes each request: the history before the user's
+          // message, then (on continuations) everything up to the outcomes.
+          let history = conversation;
+          let userText: string | undefined = userMsg.content;
+          let resultsForMessageId: number | undefined;
 
-          try {
-            while (true) {
-              const { value, done } = await reader.read();
+          for (let round = 0; ; round++) {
+            const response = await fetch("/api/markChat/stream", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                userRole,
+                ...(userText ? { userText } : {}),
+                conversation: toConversationPayload(history),
+                protocol: AGENT_LOOP,
+                ...(resultsForMessageId ? { resultsForMessageId } : {}),
+              }),
+            });
 
-              if (done) break;
+            if (!response.ok) {
+              throw new Error(`Server error: ${response.status}`);
+            }
 
-              const chunk = decoder.decode(value, { stream: true });
-              accumulatedContent += chunk;
+            if (!response.body) {
+              throw new Error("No response body");
+            }
 
-              const markerMatch = accumulatedContent.match(
-                /<!-- CLIENT_EXECUTION_MARKER\n([\s\S]*?)\n-->/,
-              );
-              let contentToDisplay = accumulatedContent;
+            const assistantId = `assistant-${Date.now()}-${round}`;
+            set((s) => ({
+              messages: [
+                ...s.messages,
+                { id: assistantId, role: "assistant", content: "" },
+              ],
+              isTyping: true,
+            }));
 
-              if (markerMatch) {
-                contentToDisplay = accumulatedContent.replace(
-                  /<!-- CLIENT_EXECUTION_MARKER\n[\s\S]*?\n-->/g,
-                  "",
-                );
-              }
+            if (!isAgentLoopResponse(response)) {
+              // An API without the agent loop (e.g. rolled back) streams text.
+              await readLegacyTurn(response.body, assistantId);
+              break;
+            }
 
-              set((s) => {
-                const clone = [...s.messages];
-                const idx = clone.findIndex((m) => m.id === newId);
-                if (idx !== -1) {
-                  clone[idx] = {
-                    ...clone[idx],
-                    content: contentToDisplay,
-                  };
-                }
-                return { messages: clone };
+            let text = "";
+            const turn = await readAgentTurn(response.body, (delta) => {
+              text += delta;
+              updateMessage(assistantId, { content: text });
+            });
+            if (turn.actions.length > 0 || turn.calls.length > 0) {
+              updateMessage(assistantId, {
+                toolCalls: [...turn.actions, ...turn.calls],
               });
             }
-          } catch (streamError) {
-          } finally {
-            set({ isTyping: false });
 
-            const markerMatch = accumulatedContent.match(
-              /<!-- CLIENT_EXECUTION_MARKER\n([\s\S]*?)\n-->/,
+            if (turn.calls.length === 0 || round >= MAX_CONTINUATIONS) break;
+
+            set({ isExecutingClientSide: true });
+            const completed = await runPendingCalls(turn.calls);
+            set((s) => ({
+              isExecutingClientSide: false,
+              messages: [
+                ...s.messages.map((message) =>
+                  message.id === assistantId
+                    ? { ...message, toolCalls: [...turn.actions, ...completed] }
+                    : message,
+                ),
+                {
+                  id: `assistant-operations-${Date.now()}`,
+                  role: "assistant",
+                  content: processOperationResults(
+                    completed.map((call) =>
+                      call.output?.success
+                        ? {
+                            success: true,
+                            function: call.toolName,
+                            result: { message: call.output.message },
+                          }
+                        : {
+                            success: false,
+                            function: call.toolName,
+                            error: call.output?.message,
+                          },
+                    ),
+                  ),
+                  displayOnly: true,
+                },
+              ],
+              usage: {
+                ...s.usage,
+                functionCalls: s.usage.functionCalls + completed.length,
+              },
+            }));
+
+            history = withFreshContext(
+              get().messages,
+              (await options?.getContext?.()) ?? null,
             );
-
-            if (markerMatch) {
-              try {
-                const operations = JSON.parse(markerMatch[1]);
-
-                const cleanContent = accumulatedContent.replace(
-                  /<!-- CLIENT_EXECUTION_MARKER\n[\s\S]*?\n-->/g,
-                  "",
-                );
-
-                set((s) => {
-                  const clone = [...s.messages];
-                  const idx = clone.findIndex((m) => m.id === newId);
-                  if (idx !== -1) {
-                    clone[idx] = {
-                      ...clone[idx],
-                      content: cleanContent,
-                      toolCalls: operations,
-                    };
-                  }
-                  return { messages: clone };
-                });
-
-                await get().executeOperations(operations);
-              } catch (err) {
-                console.error("Error processing client execution marker:", err);
-              }
-            }
+            userText = undefined;
+            resultsForMessageId = turn.savedMessageId;
           }
           return true;
         } catch (err: any) {
@@ -426,6 +398,38 @@ export const useMarkChatStore = create<MarkChatState>()(
           }));
           // Caller uses this flag to decide whether attachments should be cleared.
           return false;
+        } finally {
+          set({ isTyping: false, isExecutingClientSide: false });
+        }
+
+        /** The pre-agent-loop stream: text, then an execution marker. */
+        async function readLegacyTurn(
+          body: ReadableStream<Uint8Array>,
+          assistantId: string,
+        ) {
+          const reader = body.getReader();
+          const decoder = new TextDecoder();
+          let accumulatedContent = "";
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            accumulatedContent += decoder.decode(value, { stream: true });
+            updateMessage(assistantId, {
+              content: accumulatedContent.replace(LEGACY_MARKER_GLOBAL, ""),
+            });
+          }
+          const markerMatch = accumulatedContent.match(LEGACY_MARKER);
+          if (!markerMatch) return;
+          try {
+            const operations = JSON.parse(markerMatch[1]);
+            updateMessage(assistantId, {
+              content: accumulatedContent.replace(LEGACY_MARKER_GLOBAL, ""),
+              toolCalls: operations,
+            });
+            await get().executeOperations(operations);
+          } catch (err) {
+            console.error("Error processing client execution marker:", err);
+          }
         }
       },
 
@@ -477,6 +481,76 @@ export const useMarkChatStore = create<MarkChatState>()(
     },
   ),
 );
+
+const LEGACY_MARKER = /<!-- CLIENT_EXECUTION_MARKER\n([\s\S]*?)\n-->/;
+const LEGACY_MARKER_GLOBAL = /<!-- CLIENT_EXECUTION_MARKER\n[\s\S]*?\n-->/g;
+
+/**
+ * The conversation as the API receives it: display-only messages left out,
+ * and file attachments turned into the system note that grants file access.
+ */
+function toConversationPayload(messages: ChatMessage[]): ChatMessage[] {
+  const payload: ChatMessage[] = [];
+  for (const msg of messages) {
+    if (msg.displayOnly) continue;
+    // NOTE: do NOT drop `system-context-*` messages here. The backend
+    // (mark-chat.service.getSystemPromptParts) keys on
+    // `role === "system" && id.includes("context")` to build the LLM
+    // system prompt and detect assignment mode/id. Stripping them blinds
+    // the chatbot to the current app/session (assignment, question,
+    // responses, feedback). See useLearnerContext/useAuthorContext.
+    if (msg.role === "user" && msg.toolCalls?.type === "file_attachments") {
+      // Strip the UI-only `toolCalls` metadata from user messages — file chips are
+      // local only and should not reach the API. However, file s3Links must reach
+      // the backend so it can grant extractFileFromLink tool access. Reconstruct a
+      // system-files-* message for each user message that carried file attachments
+      // so history reloads and post-refresh sessions restore tool access correctly.
+      const files: Array<{
+        filename?: string;
+        size?: number;
+        contentType?: string;
+        extension?: string;
+        s3Link?: string;
+      }> = msg.toolCalls.files ?? [];
+      if (files.length > 0) {
+        let fileContent = "Files attached in this conversation:\n\n";
+        files.forEach((file, index) => {
+          fileContent += `${index + 1}. ${file.filename ?? "file"}\n`;
+          if (file.s3Link) fileContent += `S3 Link: ${file.s3Link}\n`;
+          fileContent += "\n";
+        });
+        payload.push({
+          id: `system-files-restored-${msg.id}`,
+          role: "system",
+          content: fileContent,
+        });
+      }
+      const { toolCalls: _tc, ...safeMessage } = msg;
+      payload.push(safeMessage);
+    } else {
+      payload.push(msg);
+    }
+  }
+  return payload;
+}
+
+/** Messages with the assignment context replaced by a fresh one. */
+function withFreshContext(
+  messages: ChatMessage[],
+  context: ChatMessage | null,
+): ChatMessage[] {
+  if (!context) return messages;
+  const withoutContext = messages.filter(
+    (message) => message.role !== "system" || !message.id.includes("context"),
+  );
+  const lastUserIndex = withoutContext
+    .map((message, index) => (message.role === "user" ? index : -1))
+    .filter((index) => index !== -1)
+    .pop();
+  const result = [...withoutContext];
+  result.splice(lastUserIndex ?? 0, 0, context);
+  return result;
+}
 
 function processOperationResults(results) {
   if (!results || results.length === 0) {

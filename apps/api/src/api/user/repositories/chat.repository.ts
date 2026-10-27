@@ -176,6 +176,28 @@ export class ChatRepository {
     return result;
   }
 
+  /** One assistant message of this chat, or null. */
+  async findAssistantMessage(
+    chatId: string,
+    messageId: number,
+  ): Promise<ChatMessage | null> {
+    return this.prisma.chatMessage.findFirst({
+      where: { id: messageId, chatId, role: ChatRole.ASSISTANT },
+    });
+  }
+
+  /** Replaces a message's toolCalls; scoped to the chat it belongs to. */
+  async updateMessageToolCalls(
+    chatId: string,
+    messageId: number,
+    toolCalls: Prisma.JsonValue,
+  ): Promise<void> {
+    await this.prisma.chatMessage.updateMany({
+      where: { id: messageId, chatId },
+      data: { toolCalls: toolCalls ?? undefined },
+    });
+  }
+
   /**
    * Get messages for a chat with pagination
    */

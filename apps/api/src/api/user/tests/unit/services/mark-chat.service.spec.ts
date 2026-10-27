@@ -56,7 +56,11 @@ interface GenerateCall {
 describe("MarkChatService role resolution", () => {
   let service: MarkChatService;
   let warn: jest.Mock;
-  let chatRepository: { addMessage: jest.Mock };
+  let chatRepository: {
+    addMessage: jest.Mock;
+    findAssistantMessage: jest.Mock;
+    updateMessageToolCalls: jest.Mock;
+  };
 
   const learnerSession: UserSession = {
     userId: "learner-1@example.test",
@@ -115,7 +119,11 @@ describe("MarkChatService role resolution", () => {
     };
     logger.child.mockReturnValue(logger);
 
-    chatRepository = { addMessage: jest.fn().mockResolvedValue({ id: "m-1" }) };
+    chatRepository = {
+      addMessage: jest.fn().mockResolvedValue({ id: 41 }),
+      findAssistantMessage: jest.fn().mockResolvedValue(null),
+      updateMessageToolCalls: jest.fn().mockResolvedValue(undefined),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -323,5 +331,112 @@ describe("MarkChatService role resolution", () => {
 
     expect(response.write).toHaveBeenCalledWith("ok");
     expect(Object.keys(lastStreamCall().tools)).toContain("requestRegrading");
+  });
+  describe("agent-loop protocol", () => {
+    const deleteCall = {
+      toolCallId: "c1",
+      toolName: "deleteQuestion",
+      input: { questionId: 7 },
+    };
+    const deleteOutcome = {
+      success: true,
+      message: "Successfully deleted question 7.",
+    };
+
+    const events = (response: ReturnType<typeof makeResponse>) =>
+      (response.write.mock.calls as [string][])
+        .map(([chunk]) => chunk)
+        .join("")
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line) as Record<string, unknown>);
+
+    it("hands the browser the operations to run and stores them", async () => {
+      streamTextMock.mockReturnValue({
+        textStream: textStreamOf(["Deleting it."]),
+        steps: Promise.resolve([{ toolCalls: [deleteCall], content: [] }]),
+      });
+      const response = makeResponse();
+
+      await service.respondStream(
+        "chat-1",
+        { ...body("author"), protocol: "agent-loop-1" },
+        authorSession,
+        response,
+      );
+
+      expect(events(response)).toEqual([
+        { type: "text", delta: "Deleting it." },
+        { type: "tool-calls", calls: [deleteCall] },
+        { type: "saved", messageId: 41 },
+      ]);
+      expect(chatRepository.addMessage).toHaveBeenCalledWith(
+        "chat-1",
+        "ASSISTANT",
+        "Deleting it.",
+        [deleteCall],
+      );
+      const tools = lastStreamCall().tools as Record<
+        string,
+        { execute?: unknown }
+      >;
+      expect(tools.deleteQuestion.execute).toBeUndefined();
+      expect(lastStreamCall().system).toContain("AUTHOR OPERATION RESULTS");
+    });
+
+    it("refuses a continuation with no reported outcomes", async () => {
+      await expect(
+        service.respondStream(
+          "chat-1",
+          { userRole: "author", conversation: [], protocol: "agent-loop-1" },
+          authorSession,
+          makeResponse(),
+        ),
+      ).rejects.toThrow("Nothing to continue");
+    });
+
+    it("saves reported outcomes and replays them to the model", async () => {
+      chatRepository.findAssistantMessage.mockResolvedValue({
+        id: 41,
+        toolCalls: [deleteCall],
+      });
+
+      await service.respondStream(
+        "chat-1",
+        {
+          userRole: "author",
+          protocol: "agent-loop-1",
+          resultsForMessageId: 41,
+          conversation: [
+            { role: "user", content: "remove question 7" },
+            {
+              role: "assistant",
+              content: "Deleting it.",
+              toolCalls: [{ ...deleteCall, output: deleteOutcome }],
+            },
+          ],
+        },
+        authorSession,
+        makeResponse(),
+      );
+
+      expect(chatRepository.findAssistantMessage).toHaveBeenCalledWith(
+        "chat-1",
+        41,
+      );
+      expect(chatRepository.updateMessageToolCalls).toHaveBeenCalledWith(
+        "chat-1",
+        41,
+        [{ ...deleteCall, output: deleteOutcome }],
+      );
+      const { messages } = streamTextMock.mock.calls.at(-1)?.[0] as {
+        messages: Array<{ role: string }>;
+      };
+      expect(messages.map((message) => message.role)).toEqual([
+        "user",
+        "assistant",
+        "tool",
+      ]);
+    });
   });
 });

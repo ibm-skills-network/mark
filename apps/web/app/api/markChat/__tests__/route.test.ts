@@ -421,4 +421,81 @@ describe("POST /api/markChat/stream", () => {
     expect(logged).not.toContain("learner.name@example.test");
     expect(logged).not.toContain("secret-token-value");
   });
+  it("forwards an agent-loop continuation, which has no user text", async () => {
+    const conversation = [
+      { role: "user", content: "remove question 7" },
+      {
+        role: "assistant",
+        content: "Deleting it.",
+        toolCalls: [
+          {
+            toolCallId: "c1",
+            toolName: "deleteQuestion",
+            input: { questionId: 7 },
+            output: { success: true, message: "Deleted." },
+          },
+        ],
+      },
+    ];
+    const { chatCalls } = mockUpstream({ userId: "verified@example.test" });
+
+    const response = await POST(
+      buildRequest({
+        body: {
+          userRole: "author",
+          conversation,
+          protocol: "agent-loop-1",
+          resultsForMessageId: 41,
+        },
+      }),
+    );
+
+    expect(response.status).toBe(200);
+    expect(requestBody(chatCalls[1][1])).toEqual({
+      userRole: "author",
+      conversation,
+      protocol: "agent-loop-1",
+      resultsForMessageId: 41,
+    });
+  });
+
+  it("refuses a message with no user text outside the agent loop", async () => {
+    const { chatCalls } = mockUpstream({ userId: "verified@example.test" });
+
+    const response = await POST(
+      buildRequest({ body: { userRole: "author", conversation: [] } }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(chatCalls).toHaveLength(0);
+  });
+
+  it("refuses a protocol it does not speak", async () => {
+    const { chatCalls } = mockUpstream({ userId: "verified@example.test" });
+
+    const response = await POST(
+      buildRequest({ body: { ...VALID_PAYLOAD, protocol: "agent-loop-9" } }),
+    );
+
+    expect(response.status).toBe(400);
+    expect(chatCalls).toHaveLength(0);
+  });
+
+  it("refuses a malformed message reference", async () => {
+    const { chatCalls } = mockUpstream({ userId: "verified@example.test" });
+
+    for (const resultsForMessageId of ["41", -1, 1.5]) {
+      const response = await POST(
+        buildRequest({
+          body: {
+            ...VALID_PAYLOAD,
+            protocol: "agent-loop-1",
+            resultsForMessageId,
+          },
+        }),
+      );
+      expect(response.status).toBe(400);
+    }
+    expect(chatCalls).toHaveLength(0);
+  });
 });

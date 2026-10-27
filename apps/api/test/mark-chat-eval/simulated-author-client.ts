@@ -6,10 +6,10 @@
  * It mirrors the current web client so a replay sees what production sees.
  * When the client changes, change this to match:
  * - context message      apps/web/app/chatbot/store/useAuthorContext.ts (getContextMessage)
- * - conversation sent    apps/web/app/chatbot/components/MarkChat.tsx + store/useMarkChatStore.ts (sendMessage)
- * - marker parsing       apps/web/app/chatbot/store/useMarkChatStore.ts (CLIENT_EXECUTION_MARKER)
+ * - conversation sent    apps/web/app/chatbot/store/useMarkChatStore.ts (sendMessage, toConversationPayload)
+ * - agent loop           apps/web/app/chatbot/store/agentLoop.ts (events, runPendingCalls)
  * - operation results    apps/web/app/chatbot/store/AuthorStoreBridge.ts + authorStoreUtil.ts
- * - result message       apps/web/app/chatbot/store/useMarkChatStore.ts (processOperationResults)
+ * - ✅ summary           apps/web/app/chatbot/store/useMarkChatStore.ts (processOperationResults)
  * - generation counts    apps/web/lib/question-generation/client.ts
  * - publish ID remap     apps/web/app/author/(components)/Header/index.tsx
  *
@@ -41,6 +41,21 @@ export interface ChatMessage {
   id: string;
   role: "system" | "user" | "assistant";
   content: string;
+  toolCalls?: unknown;
+  /** Shown in the chat, never sent to the API. */
+  displayOnly?: boolean;
+}
+
+/** An author operation the model called, with its outcome once run. */
+export interface ToolCall {
+  toolCallId: string;
+  toolName: string;
+  input: any;
+  output?: {
+    success: boolean;
+    message: string;
+    questions?: Array<{ id: number; type: string; question: string }>;
+  };
 }
 
 export interface ClientOperation {
@@ -53,13 +68,12 @@ export interface OperationResult {
   params: any;
   success: boolean;
   message: string;
+  /** Questions an operation added. */
+  questionIds?: number[];
 }
 
 const GREETING =
   "Hello, I'm Mark! How can I help you with your assignment today?";
-const CLIENT_EXECUTION_MARKER = /<!-- CLIENT_EXECUTION_MARKER\n([\S\s]*?)\n-->/;
-const CLIENT_EXECUTION_MARKER_GLOBAL =
-  /<!-- CLIENT_EXECUTION_MARKER\n[\S\s]*?\n-->/g;
 
 const DEFAULT_CHAT_COUNT = 5;
 const DEFAULT_CHAT_QUESTION_TYPES = [
@@ -143,6 +157,7 @@ export class SimulatedAuthorClient {
 
   private generatedCount = 0;
   private nextMessageId = 1;
+  private nextSeedCallId = 1;
 
   constructor(options: SimulatedAuthorClientOptions) {
     this.assignmentId = options.assignmentId;
@@ -178,7 +193,9 @@ export class SimulatedAuthorClient {
    */
   conversationForSend(): ChatMessage[] {
     const history = this.messages.filter(
-      (message) => message.role !== "system" || !message.id.includes("context"),
+      (message) =>
+        !message.displayOnly &&
+        (message.role !== "system" || !message.id.includes("context")),
     );
     const context = this.buildContextMessage();
     const lastUserIndex = history
@@ -195,37 +212,132 @@ export class SimulatedAuthorClient {
   }
 
   /**
-   * Stores the streamed reply the way the client does (marker stripped) and
-   * returns the operations the marker carried.
+   * Reads one agent-loop response (newline-delimited events) and stores the
+   * assistant message the way the client does.
    */
-  receiveAssistantReply(streamed: string): {
+  receiveAgentTurn(raw: string): {
     reply: string;
-    operations: ClientOperation[];
+    calls: ToolCall[];
+    savedMessageId?: number;
   } {
-    const markerMatch = streamed.match(CLIENT_EXECUTION_MARKER);
-    const reply = streamed.replace(CLIENT_EXECUTION_MARKER_GLOBAL, "");
+    let reply = "";
+    const calls: ToolCall[] = [];
+    const actions: unknown[] = [];
+    let savedMessageId: number | undefined;
+
+    for (const line of raw.split("\n").filter((entry) => entry.trim())) {
+      const event = JSON.parse(line) as Record<string, any>;
+      if (event.type === "text") reply += event.delta;
+      if (event.type === "tool-calls") calls.push(...event.calls);
+      if (event.type === "client-actions") actions.push(...event.actions);
+      if (event.type === "saved") savedMessageId = event.messageId;
+    }
+
+    this.messages.push({
+      id: this.messageId("assistant"),
+      role: "assistant",
+      content: reply,
+      ...(calls.length > 0 || actions.length > 0
+        ? { toolCalls: [...actions, ...calls] }
+        : {}),
+    });
+    return { reply, calls, savedMessageId };
+  }
+
+  /**
+   * Runs the calls of the last assistant message, records their outcomes on
+   * it, and shows the ✅ summary, like runPendingCalls + sendMessage.
+   */
+  runPendingCalls(calls: ToolCall[]): OperationResult[] {
+    const results = calls.map((call) =>
+      this.applyOperation({ function: call.toolName, params: call.input }),
+    );
+    const completed = calls.map((call, index) => ({
+      ...call,
+      output: this.outcomeOf(call, results[index]),
+    }));
+
+    const assistant = this.messages
+      .filter((message) => message.role === "assistant" && !message.displayOnly)
+      .at(-1);
+    if (assistant) {
+      const others = Array.isArray(assistant.toolCalls)
+        ? (assistant.toolCalls as Array<{ toolCallId?: string }>).filter(
+            (entry) => entry.toolCallId === undefined,
+          )
+        : [];
+      assistant.toolCalls = [...others, ...completed];
+    }
+
+    this.messages.push({
+      id: this.messageId("assistant-operations"),
+      role: "assistant",
+      content: processOperationResults(results),
+      displayOnly: true,
+    });
+    return results;
+  }
+
+  /**
+   * Adds a past turn as the client would hold it: the model's calls with
+   * their outcomes, the ✅ summary, then the reply it gave after them.
+   */
+  seedTurn(
+    userText: string,
+    reply: string,
+    operations: ClientOperation[] = [],
+  ): void {
+    this.addUserMessage(userText);
+    if (operations.length > 0) {
+      const calls = operations.map((operation) => ({
+        toolCallId: `seed-call-${this.nextSeedCallId++}`,
+        toolName: operation.function,
+        input: operation.params,
+      }));
+      this.messages.push({
+        id: this.messageId("assistant"),
+        role: "assistant",
+        content: "",
+        toolCalls: calls,
+      });
+      this.runPendingCalls(calls);
+    }
     this.messages.push({
       id: this.messageId("assistant"),
       role: "assistant",
       content: reply,
     });
-    const operations = markerMatch
-      ? (JSON.parse(markerMatch[1]) as ClientOperation[])
-      : [];
-    return { reply, operations };
   }
 
-  /** Runs the operations and appends the ✅ result message, like executeOperations. */
-  executeOperations(operations: ClientOperation[]): OperationResult[] {
-    if (operations.length === 0) return [];
+  /** Runs one operation as the author store bridge would. */
+  applyOperation(operation: ClientOperation): OperationResult {
+    return this.runOperation(operation);
+  }
 
-    const results = operations.map((operation) => this.runOperation(operation));
-    this.messages.push({
-      id: this.messageId("assistant-operations"),
-      role: "assistant",
-      content: processOperationResults(results),
-    });
-    return results;
+  /** The outcome the client reports: message plus the questions touched. */
+  private outcomeOf(
+    call: ToolCall,
+    result: OperationResult,
+  ): ToolCall["output"] {
+    if (!result.success) return { success: false, message: result.message };
+    const touched =
+      result.questionIds ??
+      (call.toolName !== "deleteQuestion" &&
+      typeof call.input?.questionId === "number"
+        ? [call.input.questionId as number]
+        : []);
+    const questions = this.questions
+      .filter((question) => touched.includes(question.id))
+      .map((question) => ({
+        id: question.id,
+        type: question.type,
+        question: question.question.slice(0, 300),
+      }));
+    return {
+      success: true,
+      message: result.message,
+      ...(questions.length > 0 ? { questions } : {}),
+    };
   }
 
   /**
@@ -350,10 +462,13 @@ export class SimulatedAuthorClient {
       case "generateQuestionsFromObjectives": {
         try {
           const added = this.generate(parameters);
-          return outcome(
-            true,
-            `Successfully generated ${added.length} questions based on your learning objectives.`,
-          );
+          return {
+            ...outcome(
+              true,
+              `Successfully generated ${added.length} questions based on your learning objectives.`,
+            ),
+            questionIds: added.map((question) => question.id),
+          };
         } catch (error) {
           return outcome(
             false,
@@ -377,10 +492,13 @@ export class SimulatedAuthorClient {
           );
         }
         const [question] = this.addGenerated([type]);
-        return outcome(
-          true,
-          `Successfully created a new ${type} question with ID ${question.id}.`,
-        );
+        return {
+          ...outcome(
+            true,
+            `Successfully created a new ${type} question with ID ${question.id}.`,
+          ),
+          questionIds: [question.id],
+        };
       }
 
       case "modifyQuestion": {

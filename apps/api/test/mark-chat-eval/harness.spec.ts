@@ -1,12 +1,18 @@
 /**
  * Checks the Mark chat eval harness itself, with the model scripted: that the
- * simulated browser reproduces what the real client sends and shows, and that
- * scenarios score the recorded behaviour correctly. No network or credentials.
+ * simulated browser runs the agent loop the way the real client does, and
+ * that scenarios score the recorded behaviour correctly. No network or
+ * credentials.
  *
  * Runs with the unit tests: yarn test test/mark-chat-eval/harness.spec.ts
  */
 import { MarkChatService } from "../../src/api/user/services/mark-chat.service";
-import { createMarkChatService, runScenarioOnce, runTurn } from "./harness";
+import {
+  createMarkChatService,
+  InMemoryChatRepository,
+  runScenarioOnce,
+  runTurn,
+} from "./harness";
 import { SCENARIOS } from "./scenarios";
 import {
   ClientOperation,
@@ -20,11 +26,12 @@ interface ScriptedReply {
 
 interface StreamCall {
   system: string;
-  messages: Array<{ role: string; content: string }>;
+  messages: Array<{ role: string; content: unknown }>;
 }
 
 const streamTextMock = jest.fn();
 let script: ScriptedReply[] = [];
+let nextCallId = 1;
 
 jest.mock("@ai-sdk/openai", () => ({
   openai: jest.fn(() => "scripted-model"),
@@ -39,7 +46,10 @@ jest.mock("ai", () => {
   };
 });
 
-/** What streamText yields when the model calls client-executed tools. */
+/**
+ * What streamText yields when the model calls author operations, which have
+ * no execute in the agent loop: the step ends on the calls.
+ */
 function scriptedStream(reply: ScriptedReply) {
   const chunks = [reply.text];
   return {
@@ -55,14 +65,12 @@ function scriptedStream(reply: ScriptedReply) {
     },
     steps: Promise.resolve([
       {
-        toolResults: (reply.operations ?? []).map((operation) => ({
+        toolCalls: (reply.operations ?? []).map((operation) => ({
+          toolCallId: `call-${nextCallId++}`,
           toolName: operation.function,
-          output: JSON.stringify({
-            clientExecution: true,
-            function: operation.function,
-            params: operation.params,
-          }),
+          input: operation.params,
         })),
+        content: [],
       },
     ]),
   };
@@ -116,50 +124,71 @@ describe("Mark chat eval harness", () => {
     });
   });
 
-  it("runs the operations and shows the result message from the recording", async () => {
+  it("runs the operations the model calls and shows the recording's summary", async () => {
     const client = oneAuthorQuestion();
     script = [
       { text: "Absolutely!", operations: [generateAnatomy("SINGLE_CORRECT")] },
+      { text: "Added 5 questions." },
     ];
 
     const turn = await runTurn(service, client, "quiz on anatomy");
 
-    // The client strips the marker but keeps the separator the server writes before it.
-    expect(turn.reply).toBe("Absolutely!\n\n");
+    expect(turn.reply).toBe("Absolutely!\n\nAdded 5 questions.");
     expect(turn.results.every((result) => result.success)).toBe(true);
     expect(client.markQuestions).toHaveLength(5);
-    expect(client.messages.at(-1)?.content).toBe(
+    expect(
+      client.messages.find((message) => message.displayOnly)?.content,
+    ).toBe(
       "✅ I've completed 1 operation.\n\n1. GenerateQuestionsFromObjectives: Successfully completed - Successfully generated 5 questions based on your learning objectives.\n",
     );
   });
 
-  it("sends the next turn the history and fresh context the browser would", async () => {
+  it("continues with the outcomes and a fresh context before the model answers", async () => {
     const client = oneAuthorQuestion();
     script = [
       { text: "Absolutely!", operations: [generateAnatomy("SINGLE_CORRECT")] },
-      { text: "Sure." },
+      { text: "Added 5 questions." },
     ];
 
     await runTurn(service, client, "quiz on anatomy");
-    await runTurn(service, client, "make it multi select");
 
-    const second = streamTextMock.mock.calls[1][0] as StreamCall;
-    expect(second.system).toContain("MARK ASSISTANT CONTEXT (AUTHOR MODE)");
-    expect(second.system).toContain("Number of Questions: 6");
-    expect(second.messages.map((message) => message.role)).toEqual([
+    const continuation = streamTextMock.mock.calls[1][0] as StreamCall;
+    expect(continuation.system).toContain("Number of Questions: 6");
+    expect(continuation.messages.map((message) => message.role)).toEqual([
       "assistant",
       "user",
       "assistant",
-      "assistant",
-      "user",
+      "tool",
     ]);
-    expect(second.messages[3].content).toContain("✅ I've completed");
-    expect(second.messages.at(-1)?.content).toBe("make it multi select");
+    const [result] = continuation.messages[3].content as Array<{
+      output: { value: { questions: Array<{ id: number }> } };
+    }>;
+    expect(
+      result.output.value.questions.map((question) => question.id),
+    ).toEqual(client.markQuestions.map((question) => question.id));
+  });
+
+  it("saves the outcomes onto the stored assistant message", async () => {
+    const repository = new InMemoryChatRepository();
+    const storingService = await createMarkChatService(repository);
+    script = [
+      { text: "Absolutely!", operations: [generateAnatomy("SINGLE_CORRECT")] },
+      { text: "Added 5 questions." },
+    ];
+
+    await runTurn(storingService, oneAuthorQuestion(), "quiz on anatomy");
+
+    const [call] = repository.messages[0].toolCalls as Array<{
+      output?: { success: boolean };
+    }>;
+    expect(call.output?.success).toBe(true);
+    expect(repository.messages).toHaveLength(2);
   });
 
   it("fails the complaint scenario when Mark generates again, passes when it does not", async () => {
     script = [
       { text: "Sorry!", operations: [generateAnatomy("MULTIPLE_CORRECT")] },
+      { text: "Added 5 more." },
     ];
     const regenerated = await runScenarioOnce(service, scenario("S4"));
     expect(regenerated.pass).toBe(false);
@@ -178,6 +207,7 @@ describe("Mark chat eval harness", () => {
     const client = oneAuthorQuestion();
     script = [
       { text: "Absolutely!", operations: [generateAnatomy("SINGLE_CORRECT")] },
+      { text: "Done." },
     ];
     await runTurn(service, client, "quiz on anatomy");
     const temporaryId = client.markQuestions[0].id;
@@ -191,10 +221,12 @@ describe("Mark chat eval harness", () => {
     expect(client.markQuestions.map((question) => question.id)).toEqual([
       1002, 1003, 1004, 1005, 1006,
     ]);
-    const [stale] = client.executeOperations([
-      { function: "deleteQuestion", params: { questionId: temporaryId } },
-    ]);
-    expect(stale).toMatchObject({
+    expect(
+      client.applyOperation({
+        function: "deleteQuestion",
+        params: { questionId: temporaryId },
+      }),
+    ).toMatchObject({
       success: false,
       message: `Failed to delete question: Question with ID ${temporaryId} not found`,
     });
@@ -202,12 +234,10 @@ describe("Mark chat eval harness", () => {
 
   it("writes an unvalidated question type through, like the bridge", () => {
     const client = oneAuthorQuestion();
-    const [result] = client.executeOperations([
-      {
-        function: "modifyQuestion",
-        params: { questionId: 1001, questionType: "MULTIPLE_SELECT" },
-      },
-    ]);
+    const result = client.applyOperation({
+      function: "modifyQuestion",
+      params: { questionId: 1001, questionType: "MULTIPLE_SELECT" },
+    });
     expect(result.success).toBe(true);
     expect(client.questions[0].type).toBe("MULTIPLE_SELECT");
   });

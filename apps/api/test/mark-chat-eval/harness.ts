@@ -19,12 +19,71 @@ import {
   SimulatedQuestion,
 } from "./simulated-author-client";
 
+/** Continuations per user message; matches MAX_CONTINUATIONS in the web client. */
+const MAX_CONTINUATIONS = 5;
+const AGENT_LOOP = "agent-loop-1";
+
+interface StoredMessage {
+  id: number;
+  chatId: string;
+  role: string;
+  content: string;
+  toolCalls: unknown;
+}
+
+/** Chat messages kept in memory, so stored outcomes round-trip as in the app. */
+export class InMemoryChatRepository {
+  readonly messages: StoredMessage[] = [];
+
+  addMessage(
+    chatId: string,
+    role: string,
+    content: string,
+    toolCalls?: unknown,
+  ) {
+    const message = {
+      id: this.messages.length + 1,
+      chatId,
+      role,
+      content,
+      toolCalls: toolCalls ?? null,
+    };
+    this.messages.push(message);
+    return Promise.resolve(message);
+  }
+
+  findAssistantMessage(chatId: string, messageId: number) {
+    return Promise.resolve(
+      this.messages.find(
+        (message) =>
+          message.id === messageId &&
+          message.chatId === chatId &&
+          message.role === "ASSISTANT",
+      ) ?? null,
+    );
+  }
+
+  updateMessageToolCalls(
+    chatId: string,
+    messageId: number,
+    toolCalls: unknown,
+  ) {
+    const message = this.messages.find(
+      (candidate) => candidate.id === messageId && candidate.chatId === chatId,
+    );
+    if (message) message.toolCalls = toolCalls;
+    return Promise.resolve();
+  }
+}
+
 /**
  * The real MarkChatService (prompt, tools, history budgeting, streaming,
  * marker), with only storage and the logger stubbed. Whatever model
  * `ai`/`@ai-sdk/openai` resolve to is what answers.
  */
-export async function createMarkChatService(): Promise<MarkChatService> {
+export async function createMarkChatService(
+  repository: InMemoryChatRepository = new InMemoryChatRepository(),
+): Promise<MarkChatService> {
   const logger = {
     child: () => logger,
     info: () => undefined,
@@ -44,10 +103,7 @@ export async function createMarkChatService(): Promise<MarkChatService> {
           getAuthorizedChatFileLinks: () => Promise.resolve(new Set<string>()),
         },
       },
-      {
-        provide: ChatRepository,
-        useValue: { addMessage: () => Promise.resolve({ id: "eval" }) },
-      },
+      { provide: ChatRepository, useValue: repository },
       { provide: FileProcessingBudgetService, useValue: {} },
       { provide: AiFeatureFlagsService, useValue: { isDisabled: () => false } },
       { provide: WINSTON_MODULE_PROVIDER, useValue: logger },
@@ -91,36 +147,64 @@ function captureResponse(): { response: Response; text: () => string } {
 
 export interface TurnRecord {
   userText: string;
+  /** Everything the assistant said this turn, across continuations. */
   reply: string;
+  /** Every operation the browser ran this turn, in order. */
   operations: ClientOperation[];
   results: OperationResult[];
   before: SimulatedQuestion[];
   after: SimulatedQuestion[];
 }
 
-/** One author turn: send, stream the reply, run the operations client-side. */
+/**
+ * One author turn as the browser runs it: send, read the events, run the
+ * operations the model called, and continue with their outcomes until the
+ * model stops calling operations.
+ */
 export async function runTurn(
   service: MarkChatService,
   client: SimulatedAuthorClient,
   userText: string,
 ): Promise<TurnRecord> {
   const before = client.snapshot();
-  const conversation = client.conversationForSend();
+  const replies: string[] = [];
+  const operations: ClientOperation[] = [];
+  const results: OperationResult[] = [];
+
+  let conversation = client.conversationForSend();
   client.addUserMessage(userText);
+  let request: { userText?: string; resultsForMessageId?: number } = {
+    userText,
+  };
 
-  const capture = captureResponse();
-  await service.respondStream(
-    "mark-chat-eval",
-    { userRole: "author", userText, conversation },
-    authorSession(client.assignmentId),
-    capture.response,
-  );
+  for (let round = 0; ; round++) {
+    const capture = captureResponse();
+    await service.respondStream(
+      "mark-chat-eval",
+      { userRole: "author", conversation, protocol: AGENT_LOOP, ...request },
+      authorSession(client.assignmentId),
+      capture.response,
+    );
 
-  const { reply, operations } = client.receiveAssistantReply(capture.text());
-  const results = client.executeOperations(operations);
+    const turn = client.receiveAgentTurn(capture.text());
+    if (turn.reply.trim()) replies.push(turn.reply.trim());
+    if (turn.calls.length === 0 || round >= MAX_CONTINUATIONS) break;
+
+    operations.push(
+      ...turn.calls.map((call) => ({
+        function: call.toolName,
+        params: call.input,
+      })),
+    );
+    results.push(...client.runPendingCalls(turn.calls));
+
+    conversation = client.conversationForSend();
+    request = { resultsForMessageId: turn.savedMessageId };
+  }
+
   return {
     userText,
-    reply,
+    reply: replies.join("\n\n"),
     operations,
     results,
     before,

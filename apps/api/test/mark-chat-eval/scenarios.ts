@@ -87,9 +87,7 @@ function seedTurn(
   reply: string,
   operations: ClientOperation[] = [],
 ): void {
-  client.addUserMessage(userText);
-  client.receiveAssistantReply(reply);
-  client.executeOperations(operations);
+  client.seedTurn(userText, reply, operations);
 }
 
 const generateAnatomy = (questionType: string): ClientOperation => ({

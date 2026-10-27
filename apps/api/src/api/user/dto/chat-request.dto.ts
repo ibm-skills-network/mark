@@ -1,3 +1,4 @@
+import { AGENT_LOOP_PROTOCOL } from "mark-chat-ops";
 import {
   ArrayMaxSize,
   IsArray,
@@ -44,10 +45,15 @@ export class RespondChatDto {
   @IsIn(CHAT_CLIENT_ROLES)
   userRole?: ChatClientRole;
 
+  /**
+   * The new user message. Absent when an agent-loop browser continues a turn
+   * after running the operations the model called.
+   */
+  @IsOptional()
   @IsString()
   @IsNotEmpty()
   @MaxLength(MAX_USER_TEXT_CHARS)
-  userText!: string;
+  userText?: string;
 
   @IsArray()
   @ArrayMaxSize(MAX_CONVERSATION_MESSAGES)
@@ -55,5 +61,20 @@ export class RespondChatDto {
     role: "system" | "user" | "assistant";
     content: string;
     id?: string;
+    toolCalls?: unknown;
   }[];
+
+  /** Set by browsers that speak the agent-loop protocol (mark-chat-ops). */
+  @IsOptional()
+  @IsIn([AGENT_LOOP_PROTOCOL])
+  protocol?: typeof AGENT_LOOP_PROTOCOL;
+
+  /**
+   * On a continuation, the stored assistant message whose operations the
+   * browser just ran; their outcomes are saved onto it.
+   */
+  @IsOptional()
+  @IsInt()
+  @IsPositive()
+  resultsForMessageId?: number;
 }

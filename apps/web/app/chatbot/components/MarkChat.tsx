@@ -2305,6 +2305,14 @@ export const MarkChat = () => {
       didSendSucceed = await sendMessage({
         userText: messageContent,
         toolCalls: fileToolCalls,
+        getContext: async () => {
+          try {
+            return await context.getContextMessage();
+          } catch (error) {
+            console.warn("Failed to build context message:", error);
+            return null;
+          }
+        },
       });
     } catch (error) {
       toast.error("Failed to send message. Please try again.");
