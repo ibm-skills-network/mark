@@ -9,6 +9,12 @@ export type Config = {
   consumeWork: boolean;
   dispatchExternalEffects: boolean;
   workerHealthPort: number;
+  aiFeatures: {
+    allDisabled: boolean;
+    gradingDisabled: boolean;
+    chatDisabled: boolean;
+    authoringDisabled: boolean;
+  };
 };
 
 export class ConfigError extends Error {
@@ -22,6 +28,14 @@ const flag = z
   .string()
   .optional()
   .transform((v) => v === "true");
+
+// Legacy idiom (1/true/yes, case-insensitive, trimmed), deliberately wider than the "true"-only flag above.
+const aiFlag = z
+  .string()
+  .optional()
+  .transform((v) =>
+    ["1", "true", "yes"].includes((v ?? "").toLowerCase().trim()),
+  );
 
 const portSchema = (fallback: number) =>
   z
@@ -41,6 +55,10 @@ const schema = z.object({
   V3_CONSUME_WORK: flag,
   V3_DISPATCH_EXTERNAL_EFFECTS: flag,
   WORKER_HEALTH_PORT: portSchema(8081),
+  AI_FEATURES_DISABLED: aiFlag,
+  AI_GRADING_DISABLED: aiFlag,
+  AI_CHAT_DISABLED: aiFlag,
+  AI_AUTHORING_DISABLED: aiFlag,
 });
 
 export function loadConfig(env: NodeJS.ProcessEnv): Config {
@@ -66,5 +84,11 @@ export function loadConfig(env: NodeJS.ProcessEnv): Config {
     consumeWork: v.V3_CONSUME_WORK,
     dispatchExternalEffects: v.V3_DISPATCH_EXTERNAL_EFFECTS,
     workerHealthPort: v.WORKER_HEALTH_PORT,
+    aiFeatures: {
+      allDisabled: v.AI_FEATURES_DISABLED,
+      gradingDisabled: v.AI_GRADING_DISABLED,
+      chatDisabled: v.AI_CHAT_DISABLED,
+      authoringDisabled: v.AI_AUTHORING_DISABLED,
+    },
   };
 }

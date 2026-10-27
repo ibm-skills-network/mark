@@ -14,6 +14,12 @@ describe("loadConfig", () => {
       consumeWork: false,
       dispatchExternalEffects: false,
       workerHealthPort: 8081,
+      aiFeatures: {
+        allDisabled: false,
+        gradingDisabled: false,
+        chatDisabled: false,
+        authoringDisabled: false,
+      },
     });
   });
 
@@ -51,5 +57,28 @@ describe("loadConfig", () => {
     expect(
       loadConfig({ ...base, V3_VALIDATE_RESPONSES: "true" }).validateResponses,
     ).toBe(true);
+  });
+
+  it("reads AI flags with the legacy 1/true/yes idiom", () => {
+    const flags = (value: string) =>
+      loadConfig({ ...base, AI_FEATURES_DISABLED: value }).aiFeatures
+        .allDisabled;
+    expect(flags(" Yes ")).toBe(true);
+    expect(flags("1")).toBe(true);
+    expect(flags("TRUE")).toBe(true);
+    expect(flags("on")).toBe(false);
+    expect(flags("")).toBe(false);
+    const each = loadConfig({
+      ...base,
+      AI_GRADING_DISABLED: "yes",
+      AI_CHAT_DISABLED: "1",
+      AI_AUTHORING_DISABLED: "true",
+    }).aiFeatures;
+    expect(each).toEqual({
+      allDisabled: false,
+      gradingDisabled: true,
+      chatDisabled: true,
+      authoringDisabled: true,
+    });
   });
 });

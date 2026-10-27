@@ -11,6 +11,7 @@ import {
 import type { Logger } from "pino";
 import { principalPlugin } from "../modules/access/plugin.js";
 import { healthRoutes } from "../modules/health/routes.js";
+import { sessionMetaRoutes } from "../modules/session-meta/routes.js";
 import type { Config } from "../shared/config.js";
 import { requestIdFrom } from "../shared/ids.js";
 import errorHandler from "./plugins/error-handler.js";
@@ -59,5 +60,6 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   await app.register(principalPlugin);
 
   await app.register(healthRoutes, { prisma });
+  await app.register(sessionMetaRoutes, { aiFeatures: config.aiFeatures });
   return app;
 }

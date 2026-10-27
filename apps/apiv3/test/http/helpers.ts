@@ -35,6 +35,12 @@ export function testConfig(overrides: Partial<Config> = {}): Config {
     consumeWork: false,
     dispatchExternalEffects: false,
     workerHealthPort: 0,
+    aiFeatures: {
+      allDisabled: false,
+      gradingDisabled: false,
+      chatDisabled: false,
+      authoringDisabled: false,
+    },
     ...overrides,
   };
 }
