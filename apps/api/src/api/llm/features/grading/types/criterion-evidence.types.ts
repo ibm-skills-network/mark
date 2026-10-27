@@ -73,6 +73,10 @@ export interface ExtractedChunk {
      * excerpt cap would undo the merge.
      */
     section?: boolean;
+    /** Chunk of a file fetched from a URL; quotes carry its full text like code. */
+    linkedFile?: boolean;
+    /** The URL the learner submitted, as its own pinned line of evidence. */
+    submittedUrl?: boolean;
     /**
      * Synthetic pinned whole-document view (page-labelled prose aggregate).
      * Learner-facing citations strip its marker header lines.

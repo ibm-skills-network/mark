@@ -502,7 +502,7 @@ export class CriterionEvidenceRetrievalService {
 
   // Fragment-sized prose chunks keep the historical short cap. Chunks whose
   // whole point is carrying a full unit of work — code-like chunks (source
-  // files, notebook cells), merged prose sections (a page/slide of a
+  // files, notebook cells, files fetched from a link), merged prose sections (a page/slide of a
   // document), and pinned whole-submission views — carry their full text:
   // truncating them back to a fragment would undo the merge that made them
   // usable evidence. Their builders bound them at or below this cap.
@@ -513,6 +513,7 @@ export class CriterionEvidenceRetrievalService {
   private buildExcerpt(chunk: ExtractedChunk, proseCap: number): string {
     const fullLength =
       isCodeLikeFilename(chunk.metadata?.filename) ||
+      chunk.metadata?.linkedFile ||
       chunk.metadata?.section ||
       chunk.metadata?.pinned;
     const cap = fullLength
