@@ -10,6 +10,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const fixtureDirs = {
   src: resolve(root, "src/__lint__"),
   module: resolve(root, "src/modules/__lint__"),
+  test: resolve(root, "test/__lint__"),
 };
 
 async function ruleIds(
@@ -124,5 +125,38 @@ describe("architecture lint rules", () => {
 
   it("accepts clean code", async () => {
     expect(await ruleIds("export const a = 1;\n")).toEqual([]);
+  });
+
+  const mock = "declare const m: { (): void; not: unknown };\n";
+  it.each([
+    ["expect(1).toBeDefined();", "existence-only assertion"],
+    ["expect(1).toBeTruthy();", "truthiness-only assertion"],
+    [`${mock}expect(m).toHaveBeenCalled();`, "mock-was-called assertion"],
+    [`${mock}expect(m).toHaveBeenCalledWith(1);`, "mock-called-with assertion"],
+    ['vi.mock("../../src/shared/config.js");', "mocking an apiv3 module"],
+  ])("rejects in tests: %s (%s)", async (body, _why) => {
+    const code = `import { expect, vi } from "vitest";\nvoid vi;\n${body}\n`;
+    expect(await ruleIds(code, "test")).toContain("no-restricted-syntax");
+  });
+
+  it("accepts in tests: exact values, call counts, absent calls, external mocks", async () => {
+    const code = [
+      'import { expect, vi } from "vitest";',
+      "declare const m: () => void;",
+      "expect(1).toBe(1);",
+      "expect(m).toHaveBeenCalledTimes(1);",
+      "expect(m).not.toHaveBeenCalled();",
+      'vi.mock("openai");',
+      "",
+    ].join("\n");
+    expect(await ruleIds(code, "test")).not.toContain("no-restricted-syntax");
+  });
+
+  it("allows existence checks in src", async () => {
+    expect(
+      await ruleIds(
+        "export const f = (x: { toBeDefined(): void }) => x.toBeDefined();\n",
+      ),
+    ).not.toContain("no-restricted-syntax");
   });
 });

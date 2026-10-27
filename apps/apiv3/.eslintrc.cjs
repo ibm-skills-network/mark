@@ -21,6 +21,49 @@ const restrictedImports = {
   ],
 };
 
+const restrictedSyntax = [
+  {
+    selector:
+      "TSAsExpression > TSAsExpression[typeAnnotation.type='TSUnknownKeyword']",
+    message: "`as unknown as` is banned; narrow the type instead.",
+  },
+  {
+    selector: "Decorator",
+    message: "decorators are not used in apiv3",
+  },
+  {
+    // \x2F is "/": esquery ends a regex at the first literal slash.
+    selector:
+      "ImportExpression[source.value=/^(\\.\\.\\x2F)+(api|jobs|web)(\\x2F|$)/]",
+    message: "apiv3 never imports apps/api, apps/jobs or apps/web.",
+  },
+  {
+    selector:
+      "CatchClause > BlockStatement[body.length=1] > ExpressionStatement > CallExpression[callee.property.name=/^(warn|error|info|debug)$/]",
+    message: "a catch must rethrow or return a typed result after logging",
+  },
+];
+
+// Tests pin behaviour at real boundaries; these shapes only restate the code.
+const testSyntax = [
+  {
+    selector:
+      "CallExpression[callee.property.name=/^(toBeDefined|toBeTruthy|toBeFalsy)$/]",
+    message: "assert the exact value, not that something exists",
+  },
+  {
+    selector:
+      "CallExpression[callee.property.name=/^(toHaveBeenCalled|toHaveBeenCalledWith|toHaveBeenLastCalledWith|toHaveBeenNthCalledWith|toBeCalled|toBeCalledWith)$/]:not([callee.object.property.name='not'])",
+    message:
+      "assert the observable result (response, row, recorded request), not that a mock was called; .not.toHaveBeenCalled() and toHaveBeenCalledTimes() stay allowed",
+  },
+  {
+    selector:
+      "CallExpression[callee.object.name='vi'][callee.property.name=/^(mock|doMock)$/][arguments.0.value=/^[.]/]",
+    message: "mock only external packages; run apiv3's own modules for real",
+  },
+];
+
 module.exports = {
   root: true,
   parser: "@typescript-eslint/parser",
@@ -43,33 +86,17 @@ module.exports = {
       "error",
       { assertionStyle: "as", objectLiteralTypeAssertions: "never" },
     ],
-    "no-restricted-syntax": [
-      "error",
-      {
-        selector:
-          "TSAsExpression > TSAsExpression[typeAnnotation.type='TSUnknownKeyword']",
-        message: "`as unknown as` is banned; narrow the type instead.",
-      },
-      {
-        selector: "Decorator",
-        message: "decorators are not used in apiv3",
-      },
-      {
-        // \x2F is "/": esquery ends a regex at the first literal slash.
-        selector:
-          "ImportExpression[source.value=/^(\\.\\.\\x2F)+(api|jobs|web)(\\x2F|$)/]",
-        message: "apiv3 never imports apps/api, apps/jobs or apps/web.",
-      },
-      {
-        selector:
-          "CatchClause > BlockStatement[body.length=1] > ExpressionStatement > CallExpression[callee.property.name=/^(warn|error|info|debug)$/]",
-        message: "a catch must rethrow or return a typed result after logging",
-      },
-    ],
+    "no-restricted-syntax": ["error", ...restrictedSyntax],
     "no-empty": ["error", { allowEmptyCatch: false }],
     "no-console": "error",
   },
   overrides: [
+    {
+      files: ["test/**/*.ts"],
+      rules: {
+        "no-restricted-syntax": ["error", ...restrictedSyntax, ...testSyntax],
+      },
+    },
     {
       // A module may not reach into another module's repo.
       files: ["src/modules/*/**"],
