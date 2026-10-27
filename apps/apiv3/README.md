@@ -103,3 +103,16 @@ leave it off until the worker is meant to take over.
 ## Bench
 
 See `bench/README.md` for the latency bench and how to record results.
+
+## Comparing backends
+
+`scripts/compare-backends.mjs` sends the same synthetic `user-session` requests
+to the legacy API and to v3 and compares status and raw body. It reads
+`MARK_API_ENDPOINT` and `MARK_V3_API_ENDPOINT`, so run it inside the gateway pod:
+
+```sh
+kubectl --context <ctx> -n mark exec -i deploy/mark-api-gateway -c mark-api-gateway -- node - < apps/apiv3/scripts/compare-backends.mjs
+```
+
+It prints one `MATCH` or `DIFF` line per case, exits 0 when every case matches,
+1 otherwise, and 2 if an endpoint variable is missing.
