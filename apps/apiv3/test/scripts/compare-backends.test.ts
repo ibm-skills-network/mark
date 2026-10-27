@@ -12,11 +12,11 @@ const script = fileURLToPath(
 const servers: Server[] = [];
 const seenHeaders: string[] = [];
 
-async function serve(body: string): Promise<string> {
+async function serve(body: string, status = 200): Promise<string> {
   const server = createServer((req, res) => {
     const header = req.headers["user-session"];
     if (typeof header === "string") seenHeaders.push(header);
-    res.writeHead(200, { "content-type": "application/json" });
+    res.writeHead(status, { "content-type": "application/json" });
     res.end(body);
   });
   servers.push(server);
@@ -79,6 +79,32 @@ describe("compare-backends script", () => {
     expect(result.code).toBe(1);
     expect(result.stdout).toContain("DIFF");
     expect(result.stdout).toContain("first differing offset 6");
+    expectNoHeaderValues(result.stdout + result.stderr);
+  });
+
+  it("exits 1 when only the status differs", async () => {
+    const a = await serve('{"ok":true}', 200);
+    const b = await serve('{"ok":true}', 500);
+    const result = await run({ MARK_API_ENDPOINT: a, MARK_V3_API_ENDPOINT: b });
+    expect(result.code).toBe(1);
+    expect(result.stdout).toMatch(
+      /^DIFF user-session gateway learner 200\/500$/m,
+    );
+    expect(result.stdout).not.toContain("first differing offset");
+  });
+
+  it("exits 1 and names the network error when a backend is unreachable", async () => {
+    const a = await serve('{"ok":true}');
+    const closed = await serve("{}");
+    await new Promise<void>((resolve) => servers.pop()?.close(() => resolve()));
+    const result = await run({
+      MARK_API_ENDPOINT: a,
+      MARK_V3_API_ENDPOINT: closed,
+    });
+    expect(result.code).toBe(1);
+    expect(result.stdout).toMatch(
+      /^ERROR user-session gateway learner TypeError ECONNREFUSED$/m,
+    );
     expectNoHeaderValues(result.stdout + result.stderr);
   });
 
