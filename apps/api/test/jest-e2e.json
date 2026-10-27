@@ -4,7 +4,8 @@
   "testEnvironment": "node",
   "testRegex": ".e2e-spec.ts$",
   "moduleNameMapper": {
-    "^src/(.*)$": "<rootDir>/../src/$1"
+    "^src/(.*)$": "<rootDir>/../src/$1",
+    "^mark-chat-ops$": "<rootDir>/../../../packages/mark-chat-ops/src/index.ts"
   },
   "transform": {
     "^.+\\.(t|j)s$": "ts-jest"

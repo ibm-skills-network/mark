@@ -9,6 +9,7 @@ import {
   UserSession,
 } from "src/auth/interfaces/user.session.interface";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
+import { AUTHOR_OPERATIONS } from "mark-chat-ops";
 import { ChatRepository } from "../../../repositories/chat.repository";
 import { ChatService } from "../../../services/chat.service";
 import { MarkChatService } from "../../../services/mark-chat.service";
@@ -221,6 +222,30 @@ describe("MarkChatService role resolution", () => {
       expect(toolNames).toContain(authorTool);
     }
     expect(lastGenerateCall().system).toContain("assignment authors");
+  });
+
+  it("builds the author operations from the mark-chat-ops registry", async () => {
+    await service.respondStream(
+      "chat-1",
+      body("author"),
+      authorSession,
+      makeResponse(),
+    );
+
+    const tools = lastStreamCall().tools as Record<
+      string,
+      { description: string; execute: (input: unknown) => Promise<string> }
+    >;
+    for (const [name, operation] of Object.entries(AUTHOR_OPERATIONS)) {
+      expect(tools[name].description).toBe(operation.description);
+      await expect(tools[name].execute({ questionId: 7 })).resolves.toBe(
+        JSON.stringify({
+          clientExecution: true,
+          function: name,
+          params: { questionId: 7 },
+        }),
+      );
+    }
   });
 
   it("keeps author tooling for an author previewing as a learner", async () => {

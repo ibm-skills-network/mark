@@ -1,5 +1,11 @@
 /* eslint-disable */
 "use client";
+// Types only: the registry's zod schemas stay out of the browser bundle.
+import type {
+  AuthorOperationName,
+  AuthorOperationParams,
+  REPORT_PREVIEW_OPERATION,
+} from "mark-chat-ops";
 /**
  * Client-side utilities for interacting with the author store
  * This file provides functions to execute author store operations from client components
@@ -347,63 +353,68 @@ export function showReportPreview(params) {
 }
 
 /**
- * Run an author operation directly without using the utility functions
- * This is a more flexible approach that can be used for any operation
+ * One handler per operation in mark-chat-ops. The mapped type makes a missing
+ * operation, or a parameter the registry renamed, a compile error.
+ */
+const AUTHOR_OPERATION_HANDLERS: {
+  [Name in AuthorOperationName]: (
+    params: AuthorOperationParams<Name>,
+  ) => Promise<unknown>;
+} = {
+  createQuestion: (params) =>
+    createQuestion(params.questionType, params.questionText),
+  modifyQuestion: (params) =>
+    modifyQuestion(
+      params.questionId,
+      params.questionText,
+      params.totalPoints,
+      params.questionType,
+    ),
+  setQuestionChoices: (params) =>
+    setQuestionChoices(params.questionId, params.choices, params.variantId),
+  addRubric: (params) =>
+    addRubric(params.questionId, params.rubricQuestion, params.criteria),
+  generateQuestionVariant: (params) =>
+    generateQuestionVariant(params.questionId, params.variantType),
+  deleteQuestion: (params) => deleteQuestion(params.questionId),
+  generateQuestionsFromObjectives: (params) =>
+    generateQuestionsFromObjectives(
+      params.learningObjectives,
+      params.questionTypes,
+      params.count,
+      params.multipleChoiceSubtypes,
+    ),
+  updateLearningObjectives: (params) =>
+    updateLearningObjectives(params.learningObjectives),
+  setQuestionTitle: (params) =>
+    setQuestionTitle(params.questionId, params.title),
+};
+
+const REPORT_PREVIEW =
+  "showReportPreview" satisfies typeof REPORT_PREVIEW_OPERATION;
+
+/**
+ * Run an operation the API handed back in the chat stream.
  * @param {string} operation - The operation name
  * @param {object} params - The parameters for the operation
  * @returns {Promise} - Promise that resolves with the result
  */
-export function runAuthorOperation(operation, params) {
-  switch (operation) {
-    case "createQuestion":
-      return createQuestion(
-        params.questionType,
-        params.questionText,
-        params.totalPoints,
-        params.options,
-      );
-    case "modifyQuestion":
-      return modifyQuestion(
-        params.questionId,
-        params.questionText,
-        params.totalPoints,
-        params.questionType,
-      );
-    case "setQuestionChoices":
-      return setQuestionChoices(
-        params.questionId,
-        params.choices,
-        params.variantId,
-      );
-    case "addRubric":
-      return addRubric(
-        params.questionId,
-        params.rubricQuestion,
-        params.criteria,
-      );
-    case "generateQuestionVariant":
-      return generateQuestionVariant(params.questionId, params.variantType);
-    case "deleteQuestion":
-      return deleteQuestion(params.questionId);
-    case "generateQuestionsFromObjectives":
-      return generateQuestionsFromObjectives(
-        params.learningObjectives,
-        params.questionTypes,
-        params.count,
-        params.multipleChoiceSubtypes,
-      );
-    case "updateLearningObjectives":
-      return updateLearningObjectives(params.learningObjectives);
-    case "setQuestionTitle":
-      return setQuestionTitle(params.questionId, params.title);
-    case "showReportPreview":
-      return Promise.resolve({
-        success: true,
-        message: "Report preview handled by component",
-      });
-    default:
-      return Promise.reject(new Error(`Unknown operation: ${operation}`));
+export function runAuthorOperation(operation: string, params: any) {
+  if (operation === REPORT_PREVIEW) {
+    return Promise.resolve({
+      success: true,
+      message: "Report preview handled by component",
+    });
   }
+  if (
+    !Object.prototype.hasOwnProperty.call(AUTHOR_OPERATION_HANDLERS, operation)
+  ) {
+    return Promise.reject(new Error(`Unknown operation: ${operation}`));
+  }
+  const handler = AUTHOR_OPERATION_HANDLERS[
+    operation as AuthorOperationName
+  ] as (params: unknown) => Promise<unknown>;
+  return handler(params);
 }
 
 export default {

@@ -36,6 +36,8 @@ const config: Config = {
     "^pdfjs-dist/legacy/build/pdf\\.mjs$":
       "<rootDir>/test/__mocks__/pdfjs-dist.ts",
     "^canvas$": "<rootDir>/test/__mocks__/canvas.ts",
+    // Workspace package; test against its source so no build is needed.
+    "^mark-chat-ops$": "<rootDir>/../../packages/mark-chat-ops/src/index.ts",
   },
 };
 

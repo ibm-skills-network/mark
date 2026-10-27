@@ -72,10 +72,7 @@ interface MarkChatState {
   addSessionContextFiles: (files: AttachedFile[]) => void;
   clearSessionContextFiles: () => void;
   addMessage: (message: ChatMessage) => void;
-  sendMessage: (
-    useStreaming?: boolean,
-    options?: SendMessageOptions,
-  ) => Promise<boolean>;
+  sendMessage: (options?: SendMessageOptions) => Promise<boolean>;
   resetChat: () => void;
   searchKnowledgeBase: (query: string) => Promise<ChatMessage[]>;
   executeOperations: (operations: any[]) => Promise<void>;
@@ -246,7 +243,7 @@ export const useMarkChatStore = create<MarkChatState>()(
         }
       },
 
-      async sendMessage(useStreaming = true, options?: SendMessageOptions) {
+      async sendMessage(options?: SendMessageOptions) {
         const { userInput, messages, userRole, usage } = get();
         const effectiveUserText = options?.userText ?? userInput;
         const conversation = options?.conversation ?? messages;
@@ -314,59 +311,87 @@ export const useMarkChatStore = create<MarkChatState>()(
             }
           }
 
-          if (useStreaming) {
-            const response = await fetch("/api/markChat/stream", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                userRole,
-                userText: userMsg.content,
-                conversation: conversationMessages,
-              }),
-            });
+          const response = await fetch("/api/markChat/stream", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              userRole,
+              userText: userMsg.content,
+              conversation: conversationMessages,
+            }),
+          });
 
-            if (!response.ok) {
-              throw new Error(`Server error: ${response.status}`);
-            }
+          if (!response.ok) {
+            throw new Error(`Server error: ${response.status}`);
+          }
 
-            if (!response.body) {
-              throw new Error("No response body");
-            }
+          if (!response.body) {
+            throw new Error("No response body");
+          }
 
-            const newId = `assistant-${Date.now()}`;
-            set((s) => ({
-              messages: [
-                ...s.messages,
-                { id: newId, role: "assistant", content: "" },
-              ],
+          const newId = `assistant-${Date.now()}`;
+          set((s) => ({
+            messages: [
+              ...s.messages,
+              { id: newId, role: "assistant", content: "" },
+            ],
 
-              isTyping: true,
-            }));
+            isTyping: true,
+          }));
 
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-            let accumulatedContent = "";
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let accumulatedContent = "";
 
-            try {
-              while (true) {
-                const { value, done } = await reader.read();
+          try {
+            while (true) {
+              const { value, done } = await reader.read();
 
-                if (done) break;
+              if (done) break;
 
-                const chunk = decoder.decode(value, { stream: true });
-                accumulatedContent += chunk;
+              const chunk = decoder.decode(value, { stream: true });
+              accumulatedContent += chunk;
 
-                const markerMatch = accumulatedContent.match(
-                  /<!-- CLIENT_EXECUTION_MARKER\n([\s\S]*?)\n-->/,
+              const markerMatch = accumulatedContent.match(
+                /<!-- CLIENT_EXECUTION_MARKER\n([\s\S]*?)\n-->/,
+              );
+              let contentToDisplay = accumulatedContent;
+
+              if (markerMatch) {
+                contentToDisplay = accumulatedContent.replace(
+                  /<!-- CLIENT_EXECUTION_MARKER\n[\s\S]*?\n-->/g,
+                  "",
                 );
-                let contentToDisplay = accumulatedContent;
+              }
 
-                if (markerMatch) {
-                  contentToDisplay = accumulatedContent.replace(
-                    /<!-- CLIENT_EXECUTION_MARKER\n[\s\S]*?\n-->/g,
-                    "",
-                  );
+              set((s) => {
+                const clone = [...s.messages];
+                const idx = clone.findIndex((m) => m.id === newId);
+                if (idx !== -1) {
+                  clone[idx] = {
+                    ...clone[idx],
+                    content: contentToDisplay,
+                  };
                 }
+                return { messages: clone };
+              });
+            }
+          } catch (streamError) {
+          } finally {
+            set({ isTyping: false });
+
+            const markerMatch = accumulatedContent.match(
+              /<!-- CLIENT_EXECUTION_MARKER\n([\s\S]*?)\n-->/,
+            );
+
+            if (markerMatch) {
+              try {
+                const operations = JSON.parse(markerMatch[1]);
+
+                const cleanContent = accumulatedContent.replace(
+                  /<!-- CLIENT_EXECUTION_MARKER\n[\s\S]*?\n-->/g,
+                  "",
+                );
 
                 set((s) => {
                   const clone = [...s.messages];
@@ -374,115 +399,17 @@ export const useMarkChatStore = create<MarkChatState>()(
                   if (idx !== -1) {
                     clone[idx] = {
                       ...clone[idx],
-                      content: contentToDisplay,
+                      content: cleanContent,
+                      toolCalls: operations,
                     };
                   }
                   return { messages: clone };
                 });
+
+                await get().executeOperations(operations);
+              } catch (err) {
+                console.error("Error processing client execution marker:", err);
               }
-            } catch (streamError) {
-            } finally {
-              set({ isTyping: false });
-
-              const markerMatch = accumulatedContent.match(
-                /<!-- CLIENT_EXECUTION_MARKER\n([\s\S]*?)\n-->/,
-              );
-
-              if (markerMatch) {
-                try {
-                  const operations = JSON.parse(markerMatch[1]);
-
-                  const cleanContent = accumulatedContent.replace(
-                    /<!-- CLIENT_EXECUTION_MARKER\n[\s\S]*?\n-->/g,
-                    "",
-                  );
-
-                  set((s) => {
-                    const clone = [...s.messages];
-                    const idx = clone.findIndex((m) => m.id === newId);
-                    if (idx !== -1) {
-                      clone[idx] = {
-                        ...clone[idx],
-                        content: cleanContent,
-                        toolCalls: operations,
-                      };
-                    }
-                    return { messages: clone };
-                  });
-
-                  await get().executeOperations(operations);
-                } catch (err) {
-                  console.error(
-                    "Error processing client execution marker:",
-                    err,
-                  );
-                }
-              }
-            }
-          } else {
-            const resp = await fetch("/api/markChat", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                userRole,
-                userText: userMsg.content,
-                conversation: conversationMessages,
-              }),
-            });
-
-            if (!resp.ok) throw new Error(resp.statusText);
-
-            const data = await resp.json();
-
-            if (data.requiresClientExecution && userRole === "author") {
-              const { functionName, functionArgs } = data;
-
-              const assistantMsg: ChatMessage = {
-                id: `assistant-${Date.now()}`,
-                role: "assistant",
-                content: `I'll help you with that by using the ${functionName} tool.`,
-              };
-
-              set((s) => ({
-                messages: [...s.messages, assistantMsg],
-                isTyping: false,
-              }));
-
-              await authorStoreUtils.runAuthorOperation(
-                functionName,
-                functionArgs,
-              );
-            } else if (data.functionCalled) {
-              set((s) => ({
-                usage: {
-                  ...s.usage,
-                  functionCalls: s.usage.functionCalls + 1,
-                },
-              }));
-
-              if (data.reply) {
-                const assistantMsg: ChatMessage = {
-                  id: `assistant-${Date.now()}`,
-                  role: "assistant",
-                  content: data.reply,
-                };
-
-                set((s) => ({
-                  messages: [...s.messages, assistantMsg],
-                  isTyping: false,
-                }));
-              }
-            } else {
-              const assistantMsg: ChatMessage = {
-                id: `assistant-${Date.now()}`,
-                role: "assistant",
-                content: data.reply || "I'm not sure how to respond to that.",
-              };
-
-              set((s) => ({
-                messages: [...s.messages, assistantMsg],
-                isTyping: false,
-              }));
             }
           }
           return true;

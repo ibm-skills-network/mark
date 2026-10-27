@@ -8,7 +8,7 @@
   "scripts": {
     "build": "nest build && yarn build:rich-text-migration",
     "clean": "rimraf dist && rimraf node_modules",
-    "dev": "yarn start:dev",
+    "dev": "yarn workspace mark-chat-ops build && yarn start:dev",
     "dev:e2e": "yarn dev",
     "check": "yarn lint && yarn test && yarn prisma:generate && yarn build",
     "format": "prettier --ignore-unknown --write .",
@@ -85,6 +85,7 @@
     "jsonwebtoken": "^9.0.3",
     "langchain": "^1.5.14",
     "mammoth": "^1.13.0",
+    "mark-chat-ops": "*",
     "minisearch": "^7.2.0",
     "multer": "^2.5.0",
     "natural": "^8.0.1",

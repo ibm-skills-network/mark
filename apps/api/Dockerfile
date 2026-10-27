@@ -52,6 +52,8 @@ RUN apt-get update -y \
   && rm -rf /var/lib/apt/lists/*
 
 COPY --chown=node:node --from=installer ${DIR}/node_modules ./node_modules
+# node_modules/mark-chat-ops is a workspace symlink to packages/mark-chat-ops.
+COPY --chown=node:node --from=build ${DIR}/packages/mark-chat-ops ./packages/mark-chat-ops
 COPY --chown=node:node --from=build ${DIR}/apps/api/dist ./dist
 COPY --chown=node:node --from=build ${DIR}/apps/api/package.json ./package.json
 COPY --chown=node:node --from=installer ${DIR}/apps/api/prisma ./prisma

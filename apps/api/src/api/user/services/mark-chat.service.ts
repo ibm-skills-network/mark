@@ -32,6 +32,7 @@ import {
 import { ChatRole, Prisma } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
+import { AUTHOR_OPERATIONS } from "mark-chat-ops";
 import { z } from "zod";
 import { ChatRepository } from "../repositories/chat.repository";
 import {
@@ -1083,240 +1084,32 @@ FILE LINK WORKFLOW:
     ) as ToolSet;
   }
 
+  /**
+   * The author operations the browser runs (see mark-chat-ops). Each tool only
+   * hands its input back as a clientExecution signal, which respondStream
+   * forwards to the client in the execution marker.
+   */
+  private authorOperationTools() {
+    return Object.fromEntries(
+      Object.entries(AUTHOR_OPERATIONS).map(([name, operation]) => [
+        name,
+        {
+          description: operation.description,
+          inputSchema: operation.input,
+          execute: async (parameters: any) =>
+            JSON.stringify({
+              clientExecution: true,
+              function: name,
+              params: parameters,
+            }),
+        },
+      ]),
+    );
+  }
+
   private authorTools(): ToolSet {
     return this.toToolSet({
-      createQuestion: {
-        description:
-          "Generate exactly one AI question for the assignment from the provided prompt and question type",
-        inputSchema: z.object({
-          questionType: z
-            .enum([
-              "TEXT",
-              "SINGLE_CORRECT",
-              "MULTIPLE_CORRECT",
-              "TRUE_FALSE",
-              "URL",
-              "UPLOAD",
-            ])
-            .describe("The type of question to generate"),
-          questionText: z
-            .string()
-            .describe("Prompt/objective for generating one question"),
-        }),
-        execute: async (parameters: any) =>
-          JSON.stringify({
-            clientExecution: true,
-            function: "createQuestion",
-            params: parameters,
-          }),
-      },
-      modifyQuestion: {
-        description: "Modify an existing question",
-        inputSchema: z.object({
-          questionId: z.number().describe("The ID of the question to modify"),
-          questionText: z
-            .string()
-            .optional()
-            .describe("The updated text of the question"),
-          totalPoints: z
-            .number()
-            .optional()
-            .describe("The updated number of points"),
-          questionType: z
-            .string()
-            .optional()
-            .describe("The updated type of the question"),
-          feedback: z.string().optional().describe("Feedback for the question"),
-        }),
-        execute: async (parameters: any) =>
-          JSON.stringify({
-            clientExecution: true,
-            function: "modifyQuestion",
-            params: parameters,
-          }),
-      },
-      setQuestionChoices: {
-        description: "Set the choices for a multiple choice question",
-        inputSchema: z.object({
-          questionId: z.number().describe("The ID of the question"),
-          choices: z
-            .array(
-              z.object({
-                text: z.string().describe("The text of the choice"),
-                isCorrect: z
-                  .boolean()
-                  .describe("Whether this choice is correct"),
-                points: z
-                  .number()
-                  .optional()
-                  .describe("Points for this choice"),
-                feedback: z
-                  .string()
-                  .optional()
-                  .describe("Feedback for this choice"),
-              }),
-            )
-            .describe("The choices for the question"),
-          variantId: z
-            .number()
-            .optional()
-            .describe("The ID of the variant if applicable"),
-        }),
-        execute: async (parameters: any) =>
-          JSON.stringify({
-            clientExecution: true,
-            function: "setQuestionChoices",
-            params: parameters,
-          }),
-      },
-      addRubric: {
-        description:
-          "Add a scoring rubric to a question (REQUIRED for text response questions)",
-        inputSchema: z.object({
-          questionId: z.number().describe("The ID of the question"),
-          rubricQuestion: z
-            .string()
-            .describe("The text of the rubric question"),
-          criteria: z
-            .array(
-              z.object({
-                description: z
-                  .string()
-                  .describe("Description of the criterion"),
-                points: z.number().describe("Points for this criterion"),
-              }),
-            )
-            .describe("The criteria for the rubric"),
-        }),
-        execute: async (parameters: any) =>
-          JSON.stringify({
-            clientExecution: true,
-            function: "addRubric",
-            params: parameters,
-          }),
-      },
-      generateQuestionVariant: {
-        description: "Generate a variant of an existing question",
-        inputSchema: z.object({
-          questionId: z
-            .number()
-            .describe("The ID of the question to create a variant for"),
-          variantType: z
-            .enum(["REWORDED", "REPHRASED"])
-            .describe("The type of variant to create"),
-        }),
-        execute: async (parameters: any) =>
-          JSON.stringify({
-            clientExecution: true,
-            function: "generateQuestionVariant",
-            params: parameters,
-          }),
-      },
-      deleteQuestion: {
-        description: "Delete a question from the assignment",
-        inputSchema: z.object({
-          questionId: z.number().describe("The ID of the question to delete"),
-        }),
-        execute: async (parameters: any) =>
-          JSON.stringify({
-            clientExecution: true,
-            function: "deleteQuestion",
-            params: parameters,
-          }),
-      },
-      generateQuestionsFromObjectives: {
-        description: "Generate questions based on learning objectives",
-        inputSchema: z.object({
-          learningObjectives: z
-            .string()
-            .describe("The learning objectives to generate questions from"),
-          questionTypes: z
-            .array(z.string())
-            .optional()
-            .describe("The types of questions to generate"),
-          count: z
-            .number()
-            .optional()
-            .describe(
-              "The number of regular non-subtype questions to generate across questionTypes",
-            ),
-          multipleChoiceSubtypes: z
-            .object({
-              short: z
-                .number()
-                .int()
-                .nonnegative()
-                .optional()
-                .describe("Number of short multiple-choice questions"),
-              quantitative: z
-                .number()
-                .int()
-                .nonnegative()
-                .optional()
-                .describe("Number of quantitative multiple-choice questions"),
-              long: z
-                .number()
-                .int()
-                .nonnegative()
-                .optional()
-                .describe("Number of long multiple-choice questions"),
-              scenario: z
-                .number()
-                .int()
-                .nonnegative()
-                .optional()
-                .describe("Number of scenario multiple-choice questions"),
-            })
-            .refine(
-              (value) =>
-                Object.values(value).some(
-                  (subtypeCount) =>
-                    typeof subtypeCount === "number" && subtypeCount > 0,
-                ),
-              {
-                message:
-                  "At least one multiple-choice subtype count must be greater than 0",
-              },
-            )
-            .optional()
-            .describe(
-              "Optional Mark-owned multiple-choice subtype counts. Use these when the author asks for short, quantitative, long, or scenario multiple-choice questions.",
-            ),
-        }),
-        execute: async (parameters: any) =>
-          JSON.stringify({
-            clientExecution: true,
-            function: "generateQuestionsFromObjectives",
-            params: parameters,
-          }),
-      },
-      updateLearningObjectives: {
-        description: "Update the learning objectives for the assignment",
-        inputSchema: z.object({
-          learningObjectives: z
-            .string()
-            .describe("The updated learning objectives"),
-        }),
-        execute: async (parameters: any) =>
-          JSON.stringify({
-            clientExecution: true,
-            function: "updateLearningObjectives",
-            params: parameters,
-          }),
-      },
-      setQuestionTitle: {
-        description: "Set the title for a question",
-        inputSchema: z.object({
-          questionId: z.number().describe("The ID of the question"),
-          title: z.string().describe("The title of the question"),
-        }),
-        execute: async (parameters: any) =>
-          JSON.stringify({
-            clientExecution: true,
-            function: "setQuestionTitle",
-            params: parameters,
-          }),
-      },
+      ...this.authorOperationTools(),
       searchKnowledgeBase: {
         description:
           "Search the knowledge base for information about the platform or features",

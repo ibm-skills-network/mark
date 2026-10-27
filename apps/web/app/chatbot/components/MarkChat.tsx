@@ -2118,251 +2118,246 @@ export const MarkChat = () => {
     isUploadingFiles ||
     attachedFiles.some((f) => f.uploadStatus === "uploading");
 
-  const handleSendWithContext = useCallback(
-    async (stream = true) => {
-      if (isSendingRef.current) return;
+  const handleSendWithContext = useCallback(async () => {
+    if (isSendingRef.current) return;
 
-      const trimmedInput = userInput.trim();
-      const uploadedFiles = attachedFiles.filter(
-        (file) => file.uploadStatus === "uploaded",
+    const trimmedInput = userInput.trim();
+    const uploadedFiles = attachedFiles.filter(
+      (file) => file.uploadStatus === "uploaded",
+    );
+    const uploadedFileCount = uploadedFiles.length;
+    const issueStatusQuery =
+      uploadedFileCount === 0 ? checkForIssueStatusQuery(trimmedInput) : false;
+
+    if (hasPendingUploads) {
+      toast.error("Please wait for files to finish uploading.");
+      return;
+    }
+
+    if (!trimmedInput && uploadedFileCount === 0) return;
+
+    if (issueStatusQuery !== false) {
+      handleIssueStatusQuery(trimmedInput, issueStatusQuery);
+      return;
+    }
+
+    if (uploadedFileCount > 0 && (!currentChatId || !user?.userId)) {
+      toast.error(
+        "Chat session is not ready yet. Please wait a moment and try sending your files again.",
       );
-      const uploadedFileCount = uploadedFiles.length;
-      const issueStatusQuery =
-        uploadedFileCount === 0
-          ? checkForIssueStatusQuery(trimmedInput)
-          : false;
+      return;
+    }
 
-      if (hasPendingUploads) {
-        toast.error("Please wait for files to finish uploading.");
-        return;
-      }
-
-      if (!trimmedInput && uploadedFileCount === 0) return;
-
-      if (issueStatusQuery !== false) {
-        handleIssueStatusQuery(trimmedInput, issueStatusQuery);
-        return;
-      }
-
-      if (uploadedFileCount > 0 && (!currentChatId || !user?.userId)) {
-        toast.error(
-          "Chat session is not ready yet. Please wait a moment and try sending your files again.",
-        );
-        return;
-      }
-
-      isSendingRef.current = true;
-      const fileToolCalls =
-        uploadedFileCount > 0
-          ? {
-              type: "file_attachments",
-              files: uploadedFiles.map((file) => ({
-                id: file.id,
-                filename: file.fileName,
-                size: file.fileSize,
-                contentType: file.fileType,
-                extension: file.extension,
-                s3Link:
-                  file.s3Link ||
-                  (file.s3Bucket && file.s3Key
-                    ? `s3://${file.s3Bucket}/${file.s3Key}`
-                    : undefined),
-                s3Key: file.s3Key,
-                s3Bucket: file.s3Bucket,
-              })),
-            }
-          : undefined;
-
-      const fileContextMessage = (() => {
-        const hasNewFiles = uploadedFileCount > 0;
-        const hasSessionFiles = sessionContextFiles.length > 0;
-        if (!hasNewFiles && !hasSessionFiles) return null;
-
-        let content = "";
-
-        if (hasNewFiles) {
-          content += "New files attached for this message:\n\n";
-          uploadedFiles.forEach((file: AttachedFile, index: number) => {
-            const s3Link =
-              file.s3Link ||
-              (file.s3Bucket && file.s3Key
-                ? `s3://${file.s3Bucket}/${file.s3Key}`
-                : "");
-
-            content += `${index + 1}. ${file.fileName} (${formatFileSize(file.fileSize)})\n`;
-            content += `Type: ${file.extension.toUpperCase() || file.fileType}\n`;
-            if (s3Link) content += `S3 Link: ${s3Link}\n`;
-            content += "\n";
-          });
-        }
-
-        if (hasSessionFiles) {
-          content +=
-            "Files shared earlier in this conversation (still available):\n\n";
-          sessionContextFiles.forEach((file: AttachedFile, index: number) => {
-            const s3Link =
-              file.s3Link ||
-              (file.s3Bucket && file.s3Key
-                ? `s3://${file.s3Bucket}/${file.s3Key}`
-                : "");
-
-            content += `${index + 1}. ${file.fileName} (${formatFileSize(file.fileSize)})\n`;
-            content += `Type: ${file.extension.toUpperCase() || file.fileType}\n`;
-            if (s3Link) content += `S3 Link: ${s3Link}\n`;
-            content += "\n";
-          });
-        }
-
-        content +=
-          "When the user asks about these files, call tools with the exact S3 link:\n" +
-          "- `extractFileFromLink` for raw extracted text\n" +
-          "- `summarizeFileFromLink` for concise summaries\n";
-
-        return {
-          id: `system-files-${Date.now()}`,
-          role: "system" as ChatRole,
-          content,
-        };
-      })();
-
-      const messageContent =
-        trimmedInput || `[${uploadedFileCount} file(s) attached]`;
-
-      setHistory((prev) => [...prev, messageContent]);
-      setHistoryIndex(-1);
-
-      let didSendSucceed = false;
-      try {
-        let contextMessage = null;
-        try {
-          contextMessage = await context.getContextMessage();
-        } catch (error) {
-          console.warn("Failed to build context message:", error);
-        }
-
-        const originalMessages = messages.filter(
-          (message) =>
-            message.role !== "system" ||
-            (!message.id.includes("context") &&
-              !message.id.startsWith("system-files-")),
-        );
-        const messagesWithContext = [...originalMessages];
-
-        if (contextMessage) {
-          const lastUserMsgIndex = messagesWithContext
-            .map((message, index) => (message.role === "user" ? index : -1))
-            .filter((index) => index !== -1)
-            .pop();
-
-          if (lastUserMsgIndex !== undefined) {
-            messagesWithContext.splice(lastUserMsgIndex, 0, {
-              ...contextMessage,
-            });
-          } else {
-            const systemIndex = messagesWithContext.findIndex(
-              (message) => message.role === "system",
-            );
-            const insertPosition = systemIndex !== -1 ? systemIndex + 1 : 0;
-            messagesWithContext.splice(insertPosition, 0, {
-              ...contextMessage,
-            });
+    isSendingRef.current = true;
+    const fileToolCalls =
+      uploadedFileCount > 0
+        ? {
+            type: "file_attachments",
+            files: uploadedFiles.map((file) => ({
+              id: file.id,
+              filename: file.fileName,
+              size: file.fileSize,
+              contentType: file.fileType,
+              extension: file.extension,
+              s3Link:
+                file.s3Link ||
+                (file.s3Bucket && file.s3Key
+                  ? `s3://${file.s3Bucket}/${file.s3Key}`
+                  : undefined),
+              s3Key: file.s3Key,
+              s3Bucket: file.s3Bucket,
+            })),
           }
-        }
+        : undefined;
 
-        if (fileContextMessage) {
-          messagesWithContext.push(fileContextMessage);
-        }
+    const fileContextMessage = (() => {
+      const hasNewFiles = uploadedFileCount > 0;
+      const hasSessionFiles = sessionContextFiles.length > 0;
+      if (!hasNewFiles && !hasSessionFiles) return null;
 
-        if (userRole === "learner") {
-          checkForLearnerSpecialActions(trimmedInput);
-        } else {
-          checkForAuthorSpecialActions(trimmedInput);
-        }
+      let content = "";
 
-        useMarkChatStore.setState({ messages: messagesWithContext });
-        const browserCookies =
-          typeof window !== "undefined" ? document.cookie : "";
-        if (currentChatId && user?.userId) {
-          try {
-            await addMessageToChat(
-              currentChatId,
-              "USER",
-              messageContent,
-              fileToolCalls,
-              browserCookies,
-            );
-          } catch (error) {
-            console.error(
-              "MarkChat: addMessageToChat(USER) failed — chat log may be incomplete:",
-              error,
-            );
-            if (fileToolCalls) {
-              toast.error(
-                "Could not send this message because the attached files could not be saved to the chat. Please try again.",
-              );
-              return;
-            }
-          }
-        }
+      if (hasNewFiles) {
+        content += "New files attached for this message:\n\n";
+        uploadedFiles.forEach((file: AttachedFile, index: number) => {
+          const s3Link =
+            file.s3Link ||
+            (file.s3Bucket && file.s3Key
+              ? `s3://${file.s3Bucket}/${file.s3Key}`
+              : "");
 
-        didSendSucceed = await sendMessage(stream, {
-          userText: messageContent,
-          toolCalls: fileToolCalls,
+          content += `${index + 1}. ${file.fileName} (${formatFileSize(file.fileSize)})\n`;
+          content += `Type: ${file.extension.toUpperCase() || file.fileType}\n`;
+          if (s3Link) content += `S3 Link: ${s3Link}\n`;
+          content += "\n";
         });
+      }
+
+      if (hasSessionFiles) {
+        content +=
+          "Files shared earlier in this conversation (still available):\n\n";
+        sessionContextFiles.forEach((file: AttachedFile, index: number) => {
+          const s3Link =
+            file.s3Link ||
+            (file.s3Bucket && file.s3Key
+              ? `s3://${file.s3Bucket}/${file.s3Key}`
+              : "");
+
+          content += `${index + 1}. ${file.fileName} (${formatFileSize(file.fileSize)})\n`;
+          content += `Type: ${file.extension.toUpperCase() || file.fileType}\n`;
+          if (s3Link) content += `S3 Link: ${s3Link}\n`;
+          content += "\n";
+        });
+      }
+
+      content +=
+        "When the user asks about these files, call tools with the exact S3 link:\n" +
+        "- `extractFileFromLink` for raw extracted text\n" +
+        "- `summarizeFileFromLink` for concise summaries\n";
+
+      return {
+        id: `system-files-${Date.now()}`,
+        role: "system" as ChatRole,
+        content,
+      };
+    })();
+
+    const messageContent =
+      trimmedInput || `[${uploadedFileCount} file(s) attached]`;
+
+    setHistory((prev) => [...prev, messageContent]);
+    setHistoryIndex(-1);
+
+    let didSendSucceed = false;
+    try {
+      let contextMessage = null;
+      try {
+        contextMessage = await context.getContextMessage();
       } catch (error) {
-        toast.error("Failed to send message. Please try again.");
-      } finally {
-        isSendingRef.current = false;
-        setTimeout(() => {
-          const purified = useMarkChatStore
-            .getState()
-            .messages.filter(
-              (message) =>
-                message.role !== "system" ||
-                (!message.id.includes("context") &&
-                  !message.id.startsWith("system-files-")),
+        console.warn("Failed to build context message:", error);
+      }
+
+      const originalMessages = messages.filter(
+        (message) =>
+          message.role !== "system" ||
+          (!message.id.includes("context") &&
+            !message.id.startsWith("system-files-")),
+      );
+      const messagesWithContext = [...originalMessages];
+
+      if (contextMessage) {
+        const lastUserMsgIndex = messagesWithContext
+          .map((message, index) => (message.role === "user" ? index : -1))
+          .filter((index) => index !== -1)
+          .pop();
+
+        if (lastUserMsgIndex !== undefined) {
+          messagesWithContext.splice(lastUserMsgIndex, 0, {
+            ...contextMessage,
+          });
+        } else {
+          const systemIndex = messagesWithContext.findIndex(
+            (message) => message.role === "system",
+          );
+          const insertPosition = systemIndex !== -1 ? systemIndex + 1 : 0;
+          messagesWithContext.splice(insertPosition, 0, {
+            ...contextMessage,
+          });
+        }
+      }
+
+      if (fileContextMessage) {
+        messagesWithContext.push(fileContextMessage);
+      }
+
+      if (userRole === "learner") {
+        checkForLearnerSpecialActions(trimmedInput);
+      } else {
+        checkForAuthorSpecialActions(trimmedInput);
+      }
+
+      useMarkChatStore.setState({ messages: messagesWithContext });
+      const browserCookies =
+        typeof window !== "undefined" ? document.cookie : "";
+      if (currentChatId && user?.userId) {
+        try {
+          await addMessageToChat(
+            currentChatId,
+            "USER",
+            messageContent,
+            fileToolCalls,
+            browserCookies,
+          );
+        } catch (error) {
+          console.error(
+            "MarkChat: addMessageToChat(USER) failed — chat log may be incomplete:",
+            error,
+          );
+          if (fileToolCalls) {
+            toast.error(
+              "Could not send this message because the attached files could not be saved to the chat. Please try again.",
             );
-          useMarkChatStore.setState({ messages: purified });
-        }, 500);
+            return;
+          }
+        }
       }
 
-      setShowSuggestions(false);
-      if (isRecording) {
-        recognitionRef.current?.stop();
-        setIsRecording(false);
-      }
+      didSendSucceed = await sendMessage({
+        userText: messageContent,
+        toolCalls: fileToolCalls,
+      });
+    } catch (error) {
+      toast.error("Failed to send message. Please try again.");
+    } finally {
+      isSendingRef.current = false;
+      setTimeout(() => {
+        const purified = useMarkChatStore
+          .getState()
+          .messages.filter(
+            (message) =>
+              message.role !== "system" ||
+              (!message.id.includes("context") &&
+                !message.id.startsWith("system-files-")),
+          );
+        useMarkChatStore.setState({ messages: purified });
+      }, 500);
+    }
 
-      if (didSendSucceed && uploadedFileCount > 0) {
-        addSessionContextFiles(uploadedFiles);
-        clearAttachedFiles();
-      }
-    },
-    [
-      userInput,
-      attachedFiles,
-      hasPendingUploads,
-      context,
-      messages,
-      userRole,
-      isRecording,
-      sendMessage,
-      checkForIssueStatusQuery,
-      handleIssueStatusQuery,
-      checkForLearnerSpecialActions,
-      checkForAuthorSpecialActions,
-      currentChatId,
-      user?.userId,
-      sessionContextFiles,
-      addSessionContextFiles,
-      clearAttachedFiles,
-    ],
-  );
+    setShowSuggestions(false);
+    if (isRecording) {
+      recognitionRef.current?.stop();
+      setIsRecording(false);
+    }
+
+    if (didSendSucceed && uploadedFileCount > 0) {
+      addSessionContextFiles(uploadedFiles);
+      clearAttachedFiles();
+    }
+  }, [
+    userInput,
+    attachedFiles,
+    hasPendingUploads,
+    context,
+    messages,
+    userRole,
+    isRecording,
+    sendMessage,
+    checkForIssueStatusQuery,
+    handleIssueStatusQuery,
+    checkForLearnerSpecialActions,
+    checkForAuthorSpecialActions,
+    currentChatId,
+    user?.userId,
+    sessionContextFiles,
+    addSessionContextFiles,
+    clearAttachedFiles,
+  ]);
 
   const handleKeyDown = useCallback(
     (e) => {
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
-        handleSendWithContext(true);
+        handleSendWithContext();
       } else if (
         e.key === "ArrowUp" &&
         userInput === "" &&
@@ -3181,7 +3176,7 @@ Please help me with this.`;
                     <motion.button
                       whileHover={{ scale: 1.1 }}
                       whileTap={{ scale: 0.9 }}
-                      onClick={() => handleSendWithContext(true)}
+                      onClick={() => handleSendWithContext()}
                       className={`p-1.5 ${
                         isSendDisabled
                           ? "bg-purple-400 dark:bg-purple-900 cursor-not-allowed"

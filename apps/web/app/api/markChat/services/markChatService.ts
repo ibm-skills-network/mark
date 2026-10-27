@@ -1,7 +1,6 @@
 /* eslint-disable */
 import { ReportingService } from "./reportingService";
 import { searchKnowledgeBase } from "@/app/chatbot/knowledgebase";
-import { executeAuthorStoreOperation } from "@/app/chatbot/store/authorStoreUtil";
 import { getBaseApiPath } from "@/config/constants";
 import { IssueSeverity } from "@/config/types";
 
@@ -147,61 +146,6 @@ export class MarkChatService {
       return {
         content: `There was an error submitting your issue report. Please try again later. (Error: ${error.message})`,
       };
-    }
-  }
-
-  static async executeAuthorAction(action: string, params: any): Promise<any> {
-    switch (action) {
-      case "createQuestion":
-        return await executeAuthorStoreOperation(
-          "createQuestion",
-          params.questionType,
-          params.questionText,
-          params.totalPoints || 10,
-          params.options || [],
-        );
-
-      case "modifyQuestion":
-        return await executeAuthorStoreOperation(
-          "modifyQuestion",
-          params.questionId,
-          params.questionText,
-          params.totalPoints,
-          params.questionType,
-        );
-
-      case "deleteQuestion":
-        return await executeAuthorStoreOperation(
-          "deleteQuestion",
-          params.questionId,
-        );
-
-      case "addRubric":
-        return await executeAuthorStoreOperation(
-          "addRubric",
-          params.questionId,
-          params.rubricQuestion,
-          params.criteria,
-        );
-
-      case "generateQuestionVariant":
-        return await executeAuthorStoreOperation(
-          "generateQuestionVariant",
-          params.questionId,
-          params.variantType || "REWORDED",
-        );
-
-      case "generateQuestionsFromObjectives":
-        return await executeAuthorStoreOperation(
-          "generateQuestionsFromObjectives",
-          params.learningObjectives,
-          params.questionTypes,
-          params.multipleChoiceSubtypes ? params.count : (params.count ?? 5),
-          params.multipleChoiceSubtypes,
-        );
-
-      default:
-        throw new Error(`Unknown author action: ${action}`);
     }
   }
 
