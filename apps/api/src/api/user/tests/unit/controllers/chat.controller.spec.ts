@@ -17,7 +17,7 @@ describe("ChatController identity", () => {
     createChat: jest.Mock;
     getOrCreateTodayChat: jest.Mock;
   };
-  let markChatService: { respond: jest.Mock; respondStream: jest.Mock };
+  let markChatService: { respondStream: jest.Mock };
   let warn: jest.Mock;
 
   const learnerSession: UserSession = {
@@ -36,7 +36,6 @@ describe("ChatController identity", () => {
       getOrCreateTodayChat: jest.fn().mockResolvedValue({ id: "chat-1" }),
     };
     markChatService = {
-      respond: jest.fn().mockResolvedValue({ reply: "ok" }),
       respondStream: jest.fn().mockResolvedValue(undefined),
     };
 
@@ -105,22 +104,6 @@ describe("ChatController identity", () => {
     expect(warn).toHaveBeenCalledWith(
       expect.stringContaining("chat_identity"),
       expect.objectContaining({ user_id: learnerSession.userId }),
-    );
-  });
-
-  it("hands the respond route the session, not a body-declared role", async () => {
-    const body = {
-      userRole: "author" as const,
-      userText: "hello",
-      conversation: [],
-    };
-
-    await controller.respond("chat-1", body, requestOf(learnerSession));
-
-    expect(markChatService.respond).toHaveBeenCalledWith(
-      "chat-1",
-      body,
-      learnerSession,
     );
   });
 

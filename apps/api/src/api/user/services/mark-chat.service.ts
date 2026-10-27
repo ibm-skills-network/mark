@@ -9,14 +9,7 @@ import {
   Inject,
   Injectable,
 } from "@nestjs/common";
-import {
-  CoreMessage,
-  generateText,
-  stepCountIs,
-  streamText,
-  tool,
-  ToolSet,
-} from "ai";
+import { CoreMessage, stepCountIs, streamText, tool, ToolSet } from "ai";
 import { Response } from "express";
 import { AiFeatureComponent } from "src/api/ai-feature-flags/ai-feature-flags.constants";
 import { AiFeatureFlagsService } from "src/api/ai-feature-flags/ai-feature-flags.service";
@@ -383,119 +376,6 @@ export class MarkChatService {
     }
 
     return assignmentId;
-  }
-
-  async respond(
-    chatId: string,
-    request: MarkChatRequest,
-    userSession: UserSession,
-  ): Promise<{
-    reply: string;
-    functionResults?: {
-      tool_call_id: string;
-      function_name: string;
-      result: any;
-    }[];
-    functionCalled?: boolean;
-  }> {
-    const { userText, conversation } = request;
-
-    if (!userText || !conversation) {
-      throw new BadRequestException("Missing required fields");
-    }
-
-    const userRole = this.resolveChatRole(userSession, request.userRole, {
-      chatId,
-      mode: "respond",
-    });
-
-    // Kill-switch: short-circuit with a polite message instead of calling the
-    // provider when the AI chat component is disabled.
-    if (this.aiFlags.isDisabled(AiFeatureComponent.CHAT)) {
-      this.logger.info("ai.killswitch.chat.blocked", {
-        chatId,
-        userRole,
-        mode: "respond",
-      });
-      return { reply: CHAT_DISABLED_MESSAGE, functionCalled: false };
-    }
-
-    const { systemPrompt, systemContextMessages, assignmentInfo } =
-      this.getSystemPromptParts(userRole, conversation, userSession, {
-        chatId,
-        mode: "respond",
-      });
-
-    const conversationHistoryBudget = this.getConversationHistoryBudgetTokens({
-      systemPrompt,
-      systemContextMessages,
-      userText,
-    });
-    const formattedConversation = this.formatMessages(
-      conversation,
-      userText,
-      conversationHistoryBudget,
-    );
-    const formattedMessages = formattedConversation.messages;
-    const chatModel = this.getChatModel();
-    const maxOutputTokens = this.getResponseTokenLimit();
-    const allowedLinks = await this.chatService.getAuthorizedChatFileLinks(
-      chatId,
-      userSession,
-    );
-    const roleTools =
-      userRole === "author"
-        ? this.authorTools()
-        : this.learnerTools(userSession, assignmentInfo);
-    const tools: ToolSet = {
-      ...roleTools,
-      ...this.fileTools(allowedLinks),
-    };
-
-    const result = await generateText({
-      model: openai(chatModel),
-      providerOptions: CHAT_PROVIDER_OPTIONS,
-      system:
-        systemPrompt +
-        (systemContextMessages.length > 0
-          ? "\n\n" +
-            systemContextMessages.map((message) => message.content).join("\n\n")
-          : ""),
-      messages: formattedMessages,
-      temperature: 0.7,
-      tools,
-      toolChoice: "auto",
-      stopWhen: stepCountIs(MAX_TOOL_STEPS),
-      maxOutputTokens,
-    });
-
-    const functionResults = collectToolResultsAcrossSteps(result.steps).map(
-      (toolResult) => ({
-        tool_call_id: toolResult.toolCallId,
-        function_name: toolResult.toolName,
-        result: toolResult.output,
-      }),
-    );
-
-    const replyText = result.text || "I'm not sure how to respond to that.";
-
-    logAiInvocation(this.logger, {
-      modelKey: chatModel,
-      purpose: "chat_assistant",
-      prompt: userText,
-      response: replyText,
-      context: { chat_id: chatId, user_role: userRole, mode: "respond" },
-    });
-
-    const reply = formattedConversation.contextTrimmed
-      ? `${CONTEXT_WINDOW_WARNING}\n\n${replyText}`
-      : replyText;
-
-    return {
-      reply,
-      functionResults: functionResults.length > 0 ? functionResults : undefined,
-      functionCalled: functionResults.length > 0,
-    };
   }
 
   async respondStream(

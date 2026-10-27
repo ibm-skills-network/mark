@@ -1,8 +1,7 @@
 /**
  * @jest-environment node
  */
-import { POST } from "../route";
-import { POST as POST_STREAM } from "../stream/route";
+import { POST } from "../stream/route";
 
 const SESSION_PATH = "/api/v1/user-session";
 const TODAY_CHAT_PATH = "/chats/today";
@@ -12,12 +11,6 @@ const VALID_PAYLOAD = {
   userText: "What is the question asking for?",
   conversation: [],
 };
-
-interface ChatBody {
-  error?: string;
-  reply?: string;
-  chatId?: string;
-}
 
 function buildRequest(options: {
   /** Identity the caller claims for itself. */
@@ -40,7 +33,7 @@ function buildRequest(options: {
     headers.set("cookie", cookieHeader);
   }
 
-  return new Request("https://mark.test/api/markChat", {
+  return new Request("https://mark.test/api/markChat/stream", {
     method: "POST",
     headers,
     body: JSON.stringify(
@@ -65,7 +58,7 @@ interface UpstreamOptions {
   sessionStatus?: number;
   /** Session lookup fails at the network level. */
   sessionUnreachable?: boolean;
-  /** Response the chat backend returns for `respond`. */
+  /** Response the chat backend returns for `respond-stream`. */
   respond?: () => Response;
 }
 
@@ -107,7 +100,9 @@ function mockUpstream(options: UpstreamOptions = {}) {
     return Promise.resolve(
       options.respond
         ? options.respond()
-        : jsonResponse({ reply: "Here is a hint.", functionCalled: false }),
+        : new Response("Here is a hint.", {
+            headers: { "Content-Type": "text/plain; charset=utf-8" },
+          }),
     );
   });
 
@@ -119,7 +114,7 @@ function requestBody(init: RequestInit): Record<string, unknown> {
   return JSON.parse(String(init.body)) as Record<string, unknown>;
 }
 
-describe("POST /api/markChat", () => {
+describe("POST /api/markChat/stream", () => {
   let info: jest.SpyInstance;
   let warn: jest.SpyInstance;
   let error: jest.SpyInstance;
@@ -198,15 +193,14 @@ describe("POST /api/markChat", () => {
     const { chatCalls } = mockUpstream({ sessionUnreachable: true });
 
     const response = await POST(buildRequest({}));
-    const body = (await response.json()) as ChatBody;
 
     expect(response.status).toBe(503);
-    expect(JSON.stringify(body)).not.toContain("ECONNREFUSED");
+    expect(await response.text()).not.toContain("ECONNREFUSED");
     expect(chatCalls).toHaveLength(0);
     expect(error).toHaveBeenCalled();
   });
 
-  it("answers a caller the API recognises", async () => {
+  it("streams the backend response to a caller the API recognises", async () => {
     const { sessionCalls, chatCalls } = mockUpstream({
       userId: "verified@example.test",
       assignmentId: 42,
@@ -217,11 +211,10 @@ describe("POST /api/markChat", () => {
         cookieHeader: "other=1; authentication=a-session-token",
       }),
     );
-    const body = (await response.json()) as ChatBody;
 
     expect(response.status).toBe(200);
-    expect(body.reply).toBe("Here is a hint.");
-    expect(body.chatId).toBe("chat-1");
+    expect(response.headers.get("X-Chat-ID")).toBe("chat-1");
+    expect(await response.text()).toBe("Here is a hint.");
     expect(sessionCalls).toHaveLength(1);
     expect(new Headers(sessionCalls[0].headers).get("cookie")).toBe(
       "other=1; authentication=a-session-token",
@@ -301,7 +294,7 @@ describe("POST /api/markChat", () => {
     );
 
     const [respondUrl, respondInit] = chatCalls[1];
-    expect(respondUrl).toContain("/chats/chat-1/respond");
+    expect(respondUrl).toContain("/chats/chat-1/respond-stream");
     expect(requestBody(respondInit)).toEqual({
       userRole: "author",
       userText: "add a rubric",
@@ -316,11 +309,11 @@ describe("POST /api/markChat", () => {
     });
 
     const response = await POST(buildRequest({}));
-    const body = (await response.json()) as ChatBody;
+    const body = await response.text();
 
     expect(response.status).toBe(502);
-    expect(body.error).toBeDefined();
-    expect(JSON.stringify(body)).not.toContain("model unavailable");
+    expect(body).toBeTruthy();
+    expect(body).not.toContain("model unavailable");
   });
 
   it("refuses an incomplete payload from an identified caller", async () => {
@@ -349,7 +342,7 @@ describe("POST /api/markChat", () => {
     mockUpstream({ userId: "verified@example.test" });
 
     const response = await POST(
-      new Request("https://mark.test/api/markChat", {
+      new Request("https://mark.test/api/markChat/stream", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -358,10 +351,9 @@ describe("POST /api/markChat", () => {
         body: "{not json",
       }),
     );
-    const body = (await response.json()) as ChatBody;
 
     expect(response.status).toBe(400);
-    expect(JSON.stringify(body)).not.toMatch(/JSON|token|position/i);
+    expect(await response.text()).not.toMatch(/JSON|token|position/i);
   });
 
   it("does not tell an unidentified caller whether its payload was valid", async () => {
@@ -428,85 +420,5 @@ describe("POST /api/markChat", () => {
     ]);
     expect(logged).not.toContain("learner.name@example.test");
     expect(logged).not.toContain("secret-token-value");
-  });
-});
-
-describe("POST /api/markChat/stream", () => {
-  beforeEach(() => {
-    jest.spyOn(console, "info").mockImplementation(() => undefined);
-    jest.spyOn(console, "warn").mockImplementation(() => undefined);
-    jest.spyOn(console, "error").mockImplementation(() => undefined);
-  });
-
-  afterEach(() => {
-    jest.restoreAllMocks();
-  });
-
-  it("refuses a caller who names themselves with a session header", async () => {
-    const { chatCalls, sessionCalls } = mockUpstream();
-
-    const response = await POST_STREAM(
-      buildRequest({
-        sessionHeader: JSON.stringify({ userId: "victim@example.test" }),
-        cookieHeader: null,
-      }),
-    );
-
-    expect(response.status).toBe(401);
-    expect(chatCalls).toHaveLength(0);
-    expect(sessionCalls).toHaveLength(0);
-  });
-
-  it("refuses a request that carries no session", async () => {
-    const { fetchMock } = mockUpstream();
-
-    const response = await POST_STREAM(buildRequest({ cookieHeader: null }));
-
-    expect(response.status).toBe(401);
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it("fails closed when the session cannot be checked", async () => {
-    const { chatCalls } = mockUpstream({ sessionUnreachable: true });
-
-    const response = await POST_STREAM(buildRequest({}));
-
-    expect(response.status).toBe(503);
-    expect(chatCalls).toHaveLength(0);
-  });
-
-  it("streams the backend response to an identified caller", async () => {
-    const { chatCalls } = mockUpstream({
-      userId: "stream@example.test",
-      respond: () =>
-        new Response("chunk-one chunk-two", {
-          headers: { "Content-Type": "text/plain; charset=utf-8" },
-        }),
-    });
-
-    const response = await POST_STREAM(
-      buildRequest({ cookieHeader: "authentication=a-session-token" }),
-    );
-
-    expect(response.status).toBe(200);
-    expect(response.headers.get("X-Chat-ID")).toBe("chat-1");
-    expect(await response.text()).toBe("chunk-one chunk-two");
-
-    const [respondUrl, respondInit] = chatCalls[1];
-    expect(respondUrl).toContain("/chats/chat-1/respond-stream");
-    expect(new Headers(respondInit.headers).get("user-session")).toBeNull();
-  });
-
-  it("shares the request budget with the non-streaming route", async () => {
-    mockUpstream({ userId: "both-routes@example.test" });
-
-    const statuses: number[] = [];
-    for (let attempt = 0; attempt < 65; attempt++) {
-      const route = attempt % 2 === 0 ? POST : POST_STREAM;
-      const response = await route(buildRequest({}));
-      statuses.push(response.status);
-    }
-
-    expect(statuses).toContain(429);
   });
 });

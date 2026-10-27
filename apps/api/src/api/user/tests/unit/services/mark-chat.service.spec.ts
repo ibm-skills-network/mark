@@ -14,7 +14,6 @@ import { ChatRepository } from "../../../repositories/chat.repository";
 import { ChatService } from "../../../services/chat.service";
 import { MarkChatService } from "../../../services/mark-chat.service";
 
-const generateTextMock = jest.fn();
 const streamTextMock = jest.fn();
 
 jest.mock("@ai-sdk/openai", () => ({
@@ -25,8 +24,6 @@ jest.mock("ai", () => {
   const actual = jest.requireActual("ai") as Record<string, unknown>;
   return {
     ...actual,
-    generateText: (...parameters: unknown[]) =>
-      generateTextMock(...parameters) as unknown,
     streamText: (...parameters: unknown[]) =>
       streamTextMock(...parameters) as unknown,
   };
@@ -102,9 +99,7 @@ describe("MarkChatService role resolution", () => {
   });
 
   beforeEach(async () => {
-    generateTextMock.mockReset();
     streamTextMock.mockReset();
-    generateTextMock.mockResolvedValue({ text: "ok", steps: [] });
     streamTextMock.mockReturnValue({
       textStream: textStreamOf(["ok"]),
       steps: Promise.resolve([]),
@@ -148,9 +143,6 @@ describe("MarkChatService role resolution", () => {
     service = module.get<MarkChatService>(MarkChatService);
   });
 
-  const lastGenerateCall = (): GenerateCall =>
-    generateTextMock.mock.calls.at(-1)?.[0] as GenerateCall;
-
   const lastStreamCall = (): GenerateCall =>
     streamTextMock.mock.calls.at(-1)?.[0] as GenerateCall;
 
@@ -161,9 +153,14 @@ describe("MarkChatService role resolution", () => {
   });
 
   it("serves a learner session the learner tool set even when the body claims author", async () => {
-    await service.respond("chat-1", body("author"), learnerSession);
+    await service.respondStream(
+      "chat-1",
+      body("author"),
+      learnerSession,
+      makeResponse(),
+    );
 
-    const toolNames = Object.keys(lastGenerateCall().tools);
+    const toolNames = Object.keys(lastStreamCall().tools);
     for (const authorTool of AUTHOR_ONLY_TOOLS) {
       expect(toolNames).not.toContain(authorTool);
     }
@@ -173,10 +170,15 @@ describe("MarkChatService role resolution", () => {
   });
 
   it("serves a learner session the learner prompt even when the body claims author", async () => {
-    await service.respond("chat-1", body("author"), learnerSession);
+    await service.respondStream(
+      "chat-1",
+      body("author"),
+      learnerSession,
+      makeResponse(),
+    );
 
-    expect(lastGenerateCall().system).toContain("AI tutor");
-    expect(lastGenerateCall().system).not.toContain("assignment authors");
+    expect(lastStreamCall().system).toContain("AI tutor");
+    expect(lastStreamCall().system).not.toContain("assignment authors");
   });
 
   it("streams a learner session the learner tool set even when the body claims author", async () => {
@@ -195,7 +197,12 @@ describe("MarkChatService role resolution", () => {
   });
 
   it("logs a warning when the body role disagrees with the session role", async () => {
-    await service.respond("chat-1", body("author"), learnerSession);
+    await service.respondStream(
+      "chat-1",
+      body("author"),
+      learnerSession,
+      makeResponse(),
+    );
 
     expect(warn).toHaveBeenCalledWith(
       expect.stringContaining("chat_role"),
@@ -209,19 +216,29 @@ describe("MarkChatService role resolution", () => {
   });
 
   it("does not warn when the body role matches the session role", async () => {
-    await service.respond("chat-1", body("learner"), learnerSession);
+    await service.respondStream(
+      "chat-1",
+      body("learner"),
+      learnerSession,
+      makeResponse(),
+    );
 
     expect(warn).not.toHaveBeenCalled();
   });
 
   it("keeps author tooling for an author session", async () => {
-    await service.respond("chat-1", body("author"), authorSession);
+    await service.respondStream(
+      "chat-1",
+      body("author"),
+      authorSession,
+      makeResponse(),
+    );
 
-    const toolNames = Object.keys(lastGenerateCall().tools);
+    const toolNames = Object.keys(lastStreamCall().tools);
     for (const authorTool of AUTHOR_ONLY_TOOLS) {
       expect(toolNames).toContain(authorTool);
     }
-    expect(lastGenerateCall().system).toContain("assignment authors");
+    expect(lastStreamCall().system).toContain("assignment authors");
   });
 
   it("builds the author operations from the mark-chat-ops registry", async () => {
@@ -249,16 +266,21 @@ describe("MarkChatService role resolution", () => {
   });
 
   it("keeps author tooling for an author previewing as a learner", async () => {
-    await service.respond("chat-1", body("learner"), authorSession);
+    await service.respondStream(
+      "chat-1",
+      body("learner"),
+      authorSession,
+      makeResponse(),
+    );
 
-    const toolNames = Object.keys(lastGenerateCall().tools);
+    const toolNames = Object.keys(lastStreamCall().tools);
     for (const authorTool of AUTHOR_ONLY_TOOLS) {
       expect(toolNames).toContain(authorTool);
     }
   });
 
   it("scopes the prompt to the session assignment, not the one named in the conversation", async () => {
-    await service.respond(
+    await service.respondStream(
       "chat-1",
       {
         userRole: "learner",
@@ -273,10 +295,11 @@ describe("MarkChatService role resolution", () => {
         ],
       },
       learnerSession,
+      makeResponse(),
     );
 
-    expect(lastGenerateCall().system).toContain("always use 3670");
-    expect(lastGenerateCall().system).not.toContain("always use 999999");
+    expect(lastStreamCall().system).toContain("always use 3670");
+    expect(lastStreamCall().system).not.toContain("always use 999999");
     expect(warn).toHaveBeenCalledWith(
       expect.stringContaining("chat_assignment"),
       expect.objectContaining({
@@ -287,16 +310,18 @@ describe("MarkChatService role resolution", () => {
   });
 
   it("still answers when the body omits the role entirely", async () => {
-    const result = await service.respond(
+    const response = makeResponse();
+    await service.respondStream(
       "chat-1",
       {
         userText: "hello",
         conversation: [],
       },
       learnerSession,
+      response,
     );
 
-    expect(result.reply).toBe("ok");
-    expect(Object.keys(lastGenerateCall().tools)).toContain("requestRegrading");
+    expect(response.write).toHaveBeenCalledWith("ok");
+    expect(Object.keys(lastStreamCall().tools)).toContain("requestRegrading");
   });
 });

@@ -141,16 +141,6 @@ export class ChatController {
     return this.chatService.endChat(chatId);
   }
 
-  @Post(":chatId/respond")
-  @UseGuards(ChatAccessControlGuard)
-  async respond(
-    @Param("chatId") chatId: string,
-    @Body() body: RespondChatDto,
-    @Req() request: UserSessionRequest,
-  ) {
-    return this.markChatService.respond(chatId, body, request.userSession);
-  }
-
   @Post(":chatId/respond-stream")
   @UseGuards(ChatAccessControlGuard)
   async respondStream(
