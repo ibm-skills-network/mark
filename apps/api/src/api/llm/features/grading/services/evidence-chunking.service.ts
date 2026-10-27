@@ -415,6 +415,15 @@ export class EvidenceChunkingService {
       // Malformed escapes: keep the raw segment.
     }
     const filename = sanitizeFilenameForMarker(segment);
+    if (!filename) return undefined;
+    // A GitHub file link is a whole file whatever its extension (YAML,
+    // Dockerfile, Markdown); elsewhere only a code extension marks a file.
+    if (
+      parsed.hostname === "github.com" ||
+      parsed.hostname === "raw.githubusercontent.com"
+    ) {
+      return filename;
+    }
     return isCodeLikeFilename(filename) ? filename : undefined;
   }
 
@@ -435,6 +444,7 @@ export class EvidenceChunkingService {
         metadata: {
           url,
           filename,
+          linkedFile: true,
           ...(block.pinnedEvidence ? { pinned: true } : {}),
         },
       }),

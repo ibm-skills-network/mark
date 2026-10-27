@@ -241,3 +241,122 @@ it("shows the whole code file from a URL to the validator and the grader", async
     );
   }
 });
+
+// The lint step sits well past the 220-char prose cap.
+const TEKTON_TASKS_YML = [
+  "apiVersion: tekton.dev/v1beta1",
+  "kind: Task",
+  "metadata:",
+  "  name: cleanup",
+  "spec:",
+  "  workspaces:",
+  "    - name: source",
+  "  steps:",
+  "    - name: remove",
+  "      image: alpine:3",
+  "      workingDir: $(workspaces.source.path)",
+  "      script: |",
+  '        echo "Removing all files from $(workspaces.source.path) ..."',
+  "        rm -rf ./* ./.[!.]* ./..?*",
+  "---",
+  "apiVersion: tekton.dev/v1beta1",
+  "kind: Task",
+  "metadata:",
+  "  name: nose",
+  "spec:",
+  "  steps:",
+  "    - name: lint",
+  "      image: python:3.9-slim",
+  "      script: |",
+  "        pip install flake8",
+  "        flake8 service --count --max-complexity=10 --statistics",
+].join("\n");
+
+describe.each([
+  [
+    "a YAML file",
+    "https://github.com/learner/devops/blob/main/.tekton/tasks.yml",
+    "tasks.yml",
+  ],
+  [
+    "a raw YAML file",
+    "https://raw.githubusercontent.com/learner/devops/main/.github/workflows/workflow.yml",
+    "workflow.yml",
+  ],
+  [
+    "a Dockerfile",
+    "https://github.com/learner/devops/blob/main/Dockerfile",
+    "Dockerfile",
+  ],
+  [
+    "a README",
+    "https://github.com/learner/devops/blob/main/README.md",
+    "README.md",
+  ],
+])("GitHub %s", (_label, url, filename) => {
+  it("is chunked as one whole file", () => {
+    const chunks = new EvidenceChunkingService().extractFromUrl(
+      url,
+      TEKTON_TASKS_YML,
+    );
+
+    const pinned = chunks.filter((chunk) => chunk.metadata?.pinned);
+    expect(pinned).toHaveLength(1);
+    expect(pinned[0].text).toBe(
+      `=== FILE: ${filename} (complete) ===\n${TEKTON_TASKS_YML}`,
+    );
+  });
+
+  it("reaches the validator and the grader past the prose cap", async () => {
+    const chunks = new EvidenceChunkingService().extractFromUrl(
+      url,
+      TEKTON_TASKS_YML,
+    );
+    let rendered = "";
+    const service = new CriterionEvidenceRetrievalService(
+      {
+        processStructuredPrompt: async (prompt: any) => {
+          rendered = await prompt.format({});
+          return {
+            evidence: chunks.map((chunk) => ({
+              chunkId: chunk.chunkId,
+              relevance: "supports",
+            })),
+          };
+        },
+      } as any,
+      { getModelKeyWithFallback: async () => "gpt-6-luna" } as any,
+    );
+
+    const result = await service.retrieveEvidence(
+      {
+        criterion: {
+          id: "lint",
+          rubricQuestion: "The pipeline lints the code",
+          description: "A task runs flake8",
+          criteria: [{ points: 2, description: "flake8 step present" }],
+          maxPoints: 2,
+        },
+        question: "Create the Tekton tasks",
+        chunks,
+        assignmentId: 2693,
+      },
+      new ChunkIndex(chunks),
+    );
+
+    const lintLine = "flake8 service --count --max-complexity=10 --statistics";
+    expect(rendered).toContain(lintLine);
+    expect(result.evidence.some((item) => item.quote.includes(lintLine))).toBe(
+      true,
+    );
+  });
+});
+
+it("still splits a non-GitHub page that is not a code file into paragraphs", () => {
+  const chunks = new EvidenceChunkingService().extractFromUrl(
+    "https://example.com/deploy.yml",
+    "Para one\n\nPara two",
+  );
+
+  expect(chunks.map((chunk) => chunk.text)).toEqual(["Para one", "Para two"]);
+});
