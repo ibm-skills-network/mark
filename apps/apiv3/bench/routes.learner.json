@@ -1,6 +1,0 @@
-{
-  "assignment": "/api/v2/assignments/{assignmentId}?lang=en",
-  "languages": "/api/v2/assignments/{assignmentId}/languages",
-  "attempts": "/api/v2/assignments/{assignmentId}/attempts",
-  "attempt": "/api/v2/assignments/{assignmentId}/attempts/{attemptId}?lang=en"
-}

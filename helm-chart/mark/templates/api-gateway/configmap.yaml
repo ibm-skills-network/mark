@@ -8,8 +8,4 @@ data:
 {{- range $name, $value := .Values.apiGateway.env }}
   {{ $name }}: {{ $value | quote }}
 {{- end }}
-{{- if .Values.v3Api.enabled }}
-  MARK_V3_API_ENDPOINT: {{ printf "http://%s:%v" .Values.v3Api.name .Values.v3Api.port | quote }}
-  MARK_V3_ROUTES: {{ join "," (.Values.v3Api.routes | default list) | quote }}
-{{- end }}
 {{- end }}

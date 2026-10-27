@@ -14,7 +14,6 @@ on:
       - "apps/api/**"
       - "apps/jobs/**"
       - "apps/web/**"
-      - "apps/apiv3/**"
       - "docs/insomnia/**"
       - "package.json"
       - "yarn.lock"
@@ -51,7 +50,7 @@ jobs:
       security-events: write
     strategy:
       matrix:
-        service: [api-gateway, api, jobs, web, apiv3]
+        service: [api-gateway, api, jobs, web]
       fail-fast: false
     steps:
       - name: Checkout code
@@ -184,7 +183,7 @@ jobs:
       contents: read
     strategy:
       matrix:
-        service: [api-gateway, api, jobs, web, apiv3]
+        service: [api-gateway, api, jobs, web]
       fail-fast: false
     steps:
       - name: Checkout code
@@ -239,11 +238,6 @@ jobs:
           HUSKY: 0
         timeout-minutes: 15
 
-      # apiv3 types against the API's generated client; there is no root schema.
-      - name: Generate Prisma client for apiv3
-        if: steps.changes.outputs.needs_build == 'true' && matrix.service == 'apiv3'
-        run: yarn prisma generate --schema=apps/api/prisma/schema.prisma
-
       # Skip lint on tagged releases — tags are produced from already-merged
       # code that passed lint on its PR. Tests still run on tags as a real
       # correctness gate; lint is style-only and runs identically anywhere.
@@ -253,7 +247,7 @@ jobs:
 
       - name: Run tests for ${{ matrix.service }}
         if: steps.changes.outputs.needs_build == 'true'
-        run: yarn workspace ${{ matrix.service }} run test ${{ matrix.service != 'apiv3' && '--watchAll=false' || '' }}
+        run: yarn workspace ${{ matrix.service }} run test --watchAll=false
         timeout-minutes: 10
 
   playwright:
@@ -516,7 +510,7 @@ jobs:
           echo "ci_tag=ci-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
           # Scheduled runs, manual runs and tags build everything.
           if [[ "${{ github.event_name }}" == "schedule" ]] || [[ "${{ github.event_name }}" == "workflow_dispatch" ]] || [[ $GITHUB_REF == refs/tags/* ]]; then
-            echo "targets=api-gateway api jobs web apiv3" >> $GITHUB_OUTPUT
+            echo "targets=api-gateway api jobs web" >> $GITHUB_OUTPUT
             exit 0
           fi
           # Resolve base SHA per event type. `github.event.before` only exists
@@ -532,11 +526,8 @@ jobs:
           # picked up after this branch forked don't show as "changes here".
           CHANGED=$(git diff --name-only "$BASE_SHA"...${{ github.sha }})
           TARGETS=""
-          for SERVICE in api-gateway api jobs web apiv3; do
-            # apiv3 generates its Prisma client from the api schema.
-            EXTRA=""
-            if [[ "$SERVICE" == "apiv3" ]]; then EXTRA="|^apps/api/prisma/"; fi
-            if echo "$CHANGED" | grep -qE "(^apps/${SERVICE}/${EXTRA}|^package\.json|^yarn\.lock|^turbo\.json|^docker-bake\.hcl|^\.github/workflows/)"; then
+          for SERVICE in api-gateway api jobs web; do
+            if echo "$CHANGED" | grep -qE "(^apps/${SERVICE}/|^package\.json|^yarn\.lock|^turbo\.json|^docker-bake\.hcl|^\.github/workflows/)"; then
               TARGETS="${TARGETS:+$TARGETS }$SERVICE"
             fi
           done
@@ -601,7 +592,7 @@ jobs:
       security-events: write
     strategy:
       matrix:
-        service: [api-gateway, api, jobs, web, apiv3]
+        service: [api-gateway, api, jobs, web]
       fail-fast: false
     steps:
       - name: Skip services that were not rebuilt

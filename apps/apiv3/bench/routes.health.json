@@ -1,4 +1,0 @@
-{
-  "liveness": "/health/liveness",
-  "readiness": "/health/readiness"
-}

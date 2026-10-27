@@ -17,11 +17,7 @@ import { ApiService } from "./api.service";
 export enum DownstreamService {
   MARK_API,
   LTI_CREDENTIAL_MANAGER,
-  MARK_V3_API,
 }
-
-// Lets staging verification see which backend answered a proxied request.
-export const BACKEND_HEADER = "x-mark-backend";
 
 @ApiTags(
   "Api (All endpoints use a JWT Cookie named 'authentication' for authorization)",
@@ -75,8 +71,6 @@ export class ApiController {
     @Req() request: UserSessionRequest,
     @Res() response: Response,
   ) {
-    // Admin bearer traffic always stays on mark-api.
-    response.setHeader(BACKEND_HEADER, "legacy");
     if (request.headers.accept?.includes("text/event-stream")) {
       const { endpoint, extraHeaders } = this.apiService.getForwardingDetails(
         DownstreamService.MARK_API,
@@ -105,9 +99,8 @@ export class ApiController {
     @Req() request: UserSessionRequest,
     @Res() response: Response,
   ) {
-    const downstream = this.chooseDownstream(request, response);
     const { endpoint, extraHeaders } = this.apiService.getForwardingDetails(
-      downstream,
+      DownstreamService.MARK_API,
       request,
     );
 
@@ -127,9 +120,8 @@ export class ApiController {
     @Req() request: UserSessionRequest,
     @Res() response: Response,
   ) {
-    const downstream = this.chooseDownstream(request, response);
     const { endpoint, extraHeaders } = this.apiService.getForwardingDetails(
-      downstream,
+      DownstreamService.MARK_API,
       request,
     );
 
@@ -150,10 +142,9 @@ export class ApiController {
     @Req() request: UserSessionRequest,
     @Res() response: Response,
   ) {
-    const downstream = this.chooseDownstream(request, response);
     if (request.headers.accept?.includes("text/event-stream")) {
       const { endpoint, extraHeaders } = this.apiService.getForwardingDetails(
-        downstream,
+        DownstreamService.MARK_API,
         request,
       );
       await this.apiService.forwardRequestUsingHttp(
@@ -165,24 +156,9 @@ export class ApiController {
       return;
     }
     const apiResponse = await this.apiService.forwardRequestToDownstreamService(
-      downstream,
+      DownstreamService.MARK_API,
       request,
     );
     return response.status(apiResponse.status).send(apiResponse.data);
-  }
-
-  /**
-   * Pick the backend for a cookie-session request and stamp it on the
-   * response before anything is forwarded.
-   */
-  private chooseDownstream(
-    request: UserSessionRequest,
-    response: Response,
-  ): DownstreamService {
-    const decision = this.apiService.resolveDownstream(request);
-    response.setHeader(BACKEND_HEADER, decision.service);
-    return decision.service === "v3"
-      ? DownstreamService.MARK_V3_API
-      : DownstreamService.MARK_API;
   }
 }
