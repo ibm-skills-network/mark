@@ -12,7 +12,10 @@ import axios from "axios";
 import { Request, Response } from "express";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
-import { UserSessionRequest } from "../auth/interfaces/user.session.interface";
+import {
+  UserRole,
+  UserSessionRequest,
+} from "../auth/interfaces/user.session.interface";
 import { MessagingService } from "../messaging/messaging.service";
 import { DownstreamService } from "./api.controller";
 import { ApiService } from "./api.service";
@@ -170,6 +173,114 @@ describe("ApiService - Comprehensive Stress Tests", () => {
         );
 
         expect(result.extraHeaders.Authorization).toBeDefined();
+      });
+    });
+
+    describe("MARK_V3_API forwarding", () => {
+      const ROUTING_ENV = ["MARK_V3_ROUTES", "MARK_V3_API_ENDPOINT"] as const;
+      const ROUTED_PATH = "/api/v2/assignments/12/attempts/34/completed";
+      let savedEnv: Record<string, string | undefined>;
+      let v3Service: ApiService;
+
+      const learnerRequest = (originalUrl: string, method = "GET") =>
+        ({
+          originalUrl,
+          method,
+          headers: {},
+          user: { userId: "learner@example.com", role: UserRole.LEARNER },
+        }) as unknown as UserSessionRequest;
+
+      beforeEach(async () => {
+        savedEnv = Object.fromEntries(
+          ROUTING_ENV.map((key) => [key, process.env[key]]),
+        );
+        process.env.MARK_V3_ROUTES = "learner-submit";
+        process.env.MARK_V3_API_ENDPOINT = "http://mark-v3-api:3000/";
+        // Routing is parsed in the constructor, so build after setting env.
+        const module: TestingModule = await Test.createTestingModule({
+          providers: [
+            ApiService,
+            MessagingService,
+            ConfigService,
+            { provide: WINSTON_MODULE_PROVIDER, useValue: mockLogger },
+          ],
+        }).compile();
+        v3Service = module.get<ApiService>(ApiService);
+      });
+
+      afterEach(() => {
+        for (const key of ROUTING_ENV) {
+          if (savedEnv[key] === undefined) {
+            delete process.env[key];
+          } else {
+            process.env[key] = savedEnv[key];
+          }
+        }
+      });
+
+      it("builds the v3 endpoint with the shared session headers", () => {
+        const request = learnerRequest(ROUTED_PATH);
+
+        const result = v3Service.getForwardingDetails(
+          DownstreamService.MARK_V3_API,
+          request,
+        );
+
+        expect(result.endpoint).toBe(`http://mark-v3-api:3000${ROUTED_PATH}`);
+        expect(result.extraHeaders["user-session"]).toBe(
+          JSON.stringify(request.user),
+        );
+        expect(result.extraHeaders["Cache-Control"]).toBe("no-cache");
+      });
+
+      it("refuses a v3 forward for an unrouted request", () => {
+        const request = learnerRequest("/api/v2/assignments/12/reports");
+
+        expect(() =>
+          v3Service.getForwardingDetails(
+            DownstreamService.MARK_V3_API,
+            request,
+          ),
+        ).toThrow(new BadRequestException("Invalid forwarding target"));
+        expect(mockLogger.warn).toHaveBeenCalledWith(
+          "Refused v3 forward for an unrouted request",
+          expect.objectContaining({ method: "GET" }),
+        );
+      });
+
+      it("refuses a v3 forward for an author on a routed path", () => {
+        const request = learnerRequest(ROUTED_PATH);
+        request.user = { ...request.user, role: UserRole.AUTHOR };
+
+        expect(() =>
+          v3Service.getForwardingDetails(
+            DownstreamService.MARK_V3_API,
+            request,
+          ),
+        ).toThrow(BadRequestException);
+      });
+
+      it("logs downstream_route only when a family matched", () => {
+        v3Service.resolveDownstream(
+          learnerRequest("/api/v2/assignments/12/reports"),
+        );
+        expect(mockLogger.info).not.toHaveBeenCalledWith(
+          "downstream_route",
+          expect.anything(),
+        );
+
+        const decision = v3Service.resolveDownstream({
+          ...learnerRequest(ROUTED_PATH),
+          headers: { "x-request-id": "req-1" },
+        } as unknown as UserSessionRequest);
+
+        expect(decision).toEqual({ service: "v3", family: "learner-submit" });
+        expect(mockLogger.info).toHaveBeenCalledWith("downstream_route", {
+          family: "learner-submit",
+          backend: "v3",
+          method: "GET",
+          request_id: "req-1",
+        });
       });
     });
 

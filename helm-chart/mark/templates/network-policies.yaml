@@ -41,6 +41,12 @@ spec:
       - podSelector:
           matchLabels:
             {{- include "mark.lti-credentials-manager.labels" $ | nindent 12 }}
+      {{- if .Values.v3Api.enabled }}
+      # The v3 API, released by the mark-v3 chart.
+      - podSelector:
+          matchLabels:
+            app.kubernetes.io/name: {{ .Values.v3Api.name }}
+      {{- end }}
   policyTypes:
     - Ingress
     - Egress

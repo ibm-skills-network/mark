@@ -1,0 +1,85 @@
+{{- if .Values.v3Worker.enabled }}
+{{- with .Values.v3Worker }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mark-v3.worker.name" $ }}
+  labels:
+    {{- include "mark-v3.worker.labels" $ | nindent 4 }}
+spec:
+  replicas: {{ .replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "mark-v3.worker.selectorLabels" $ | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: {{ include "mark-v3.worker.name" $ }}
+        checksum/secrets: {{ include (print $.Template.BasePath "/worker/secret.yaml") $ | sha256sum }}
+        checksum/config: {{ include (print $.Template.BasePath "/worker/configmap.yaml") $ | sha256sum }}
+        {{- with .podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "mark-v3.worker.selectorLabels" $ | nindent 8 }}
+    spec:
+      imagePullSecrets:
+        {{- include "mark-v3.imagePullSecrets" $ | nindent 8 }}
+      serviceAccountName: default
+      securityContext:
+        {{- toYaml .podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ include "mark-v3.worker.name" $ }}
+          securityContext:
+            {{- toYaml .securityContext | nindent 12 }}
+          image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
+          imagePullPolicy: {{ .image.pullPolicy }}
+          # The image's ENTRYPOINT is dumb-init, so args replace the whole command.
+          args: ["node", "dist/worker.js"]
+          ports:
+            - name: http
+              containerPort: {{ .containerPort }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health/liveness
+              port: http
+            initialDelaySeconds: {{ .livenessProbe.initialDelaySeconds }}
+            timeoutSeconds: {{ .livenessProbe.timeoutSeconds }}
+            periodSeconds: {{ .livenessProbe.periodSeconds }}
+          readinessProbe:
+            httpGet:
+              path: /health/readiness
+              port: http
+            initialDelaySeconds: {{ .readinessProbe.initialDelaySeconds }}
+            timeoutSeconds: {{ .readinessProbe.timeoutSeconds }}
+            periodSeconds: {{ .readinessProbe.periodSeconds }}
+          resources:
+            {{- toYaml .resources | nindent 12 }}
+          # The root filesystem is read-only; /tmp is the only writable path.
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          envFrom:
+            - configMapRef:
+                name: {{ include "mark-v3.worker.name" $ }}-config
+            - secretRef:
+                name: {{ include "mark-v3.worker.name" $ }}-secrets
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+      {{- with .nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
+{{- end }}

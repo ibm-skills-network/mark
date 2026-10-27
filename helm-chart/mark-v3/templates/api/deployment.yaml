@@ -1,0 +1,89 @@
+{{- if .Values.v3Api.enabled }}
+{{- with .Values.v3Api }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "mark-v3.api.name" $ }}
+  labels:
+    {{- include "mark-v3.api.labels" $ | nindent 4 }}
+spec:
+  replicas: {{ .replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "mark-v3.api.selectorLabels" $ | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: {{ include "mark-v3.api.name" $ }}
+        checksum/secrets: {{ include (print $.Template.BasePath "/api/secret.yaml") $ | sha256sum }}
+        checksum/config: {{ include (print $.Template.BasePath "/api/configmap.yaml") $ | sha256sum }}
+        {{- with .podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "mark-v3.api.selectorLabels" $ | nindent 8 }}
+    spec:
+      imagePullSecrets:
+        {{- include "mark-v3.imagePullSecrets" $ | nindent 8 }}
+      serviceAccountName: default
+      # preStop lets the endpoint removal propagate before SIGTERM closes the server.
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        {{- toYaml .podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ include "mark-v3.api.name" $ }}
+          securityContext:
+            {{- toYaml .securityContext | nindent 12 }}
+          image: "{{ .image.repository }}:{{ .image.tag | default $.Chart.AppVersion }}"
+          imagePullPolicy: {{ .image.pullPolicy }}
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sleep", "5"]
+          ports:
+            - name: http
+              containerPort: {{ .containerPort }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /health/liveness
+              port: http
+            initialDelaySeconds: {{ .livenessProbe.initialDelaySeconds }}
+            timeoutSeconds: {{ .livenessProbe.timeoutSeconds }}
+            periodSeconds: {{ .livenessProbe.periodSeconds }}
+          readinessProbe:
+            httpGet:
+              path: /health/readiness
+              port: http
+            initialDelaySeconds: {{ .readinessProbe.initialDelaySeconds }}
+            timeoutSeconds: {{ .readinessProbe.timeoutSeconds }}
+            periodSeconds: {{ .readinessProbe.periodSeconds }}
+          resources:
+            {{- toYaml .resources | nindent 12 }}
+          # The root filesystem is read-only; /tmp is the only writable path.
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          envFrom:
+            - configMapRef:
+                name: {{ include "mark-v3.api.name" $ }}-config
+            - secretRef:
+                name: {{ include "mark-v3.api.name" $ }}-secrets
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
+      {{- with .nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
+{{- end }}
