@@ -621,11 +621,15 @@ describe("DOCX links", () => {
 // ─── Sanitization ───────────────────────────────────────────────────────────
 
 describe("collectPdfAnnotationLinks", () => {
-  it("adds https:// only to scheme-less targets that start with a host", () => {
+  it("adds https:// only to scheme-less www. and code-host targets", () => {
     const annotations = [
       "github.com/example-org/capstone-api",
       "www.github.com/example-org/site",
       "  github.com/example-org/padded ",
+      "gitlab.com/example-org/repo",
+      "readme.md/section",
+      "my.folder/file.txt",
+      "src.old/README.md",
       "javascript:alert(1)",
       "file:///etc/passwd",
       "docs/readme.md",
@@ -648,6 +652,7 @@ describe("collectPdfAnnotationLinks", () => {
       { url: "https://github.com/example-org/capstone-api" },
       { url: "https://www.github.com/example-org/site" },
       { url: "https://github.com/example-org/padded" },
+      { url: "https://gitlab.com/example-org/repo" },
     ]);
   });
 

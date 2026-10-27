@@ -178,8 +178,9 @@ export function textInsidePdfRect(
  */
 export const MAX_ANNOTATIONS_SCANNED_PER_PAGE = 500;
 
-/** A target written without a scheme that starts with a host, e.g. "github.com/org/repo". */
-const SCHEMELESS_HOST_TARGET = /^([\da-z]([\da-z-]*[\da-z])?\.)+[a-z]{2,}\//i;
+/** A scheme-less target on a www. or code host, e.g. "github.com/org/repo". */
+const SCHEMELESS_HOST_TARGET =
+  /^(www\.([\da-z]([\da-z-]*[\da-z])?\.)+[a-z]{2,}|(gist\.)?github\.com|gitlab\.com|bitbucket\.org)\//i;
 
 function withDefaultScheme(raw: unknown): unknown {
   if (typeof raw !== "string") return raw;
