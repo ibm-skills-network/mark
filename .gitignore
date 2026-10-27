@@ -129,7 +129,3 @@ artifacts/*
 !apps/api/maintenance/rich-text-normalization/test-schema.sql
 /STRANGLER_FIG
 STRANGELER_FIG.md
-
-# apiv3 lint-rule test fixtures (written and removed by test/lint-rules.test.ts)
-apps/apiv3/src/__lint__/
-apps/apiv3/src/modules/__lint__/
