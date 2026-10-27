@@ -31,6 +31,38 @@ describe("grading issue payload", () => {
     }
   });
 
+  it("gives assignment-aware alternatives for blocked third-party job links", () => {
+    const issue = buildGradingIssue(10037, {
+      code: "url_blocked",
+      source: {
+        kind: "url",
+        url: "https://www.theladders.com/job/project-manager-miamiuniversity-oxford-me_86061933",
+        httpStatus: 403,
+      },
+    });
+    expect(issue.message).toContain("blocked automated access");
+    expect(issue.message).toContain("may still open in your browser");
+    expect(issue.message).toContain("If the assignment allows it");
+    expect(issue.message).toContain("contact course support");
+    expect(issue.message).not.toMatch(/GitHub|too long/);
+    expect(issue.retryable).toBe(false);
+  });
+
+  it("offers a retry before alternatives for a temporary job-site outage", () => {
+    const issue = buildGradingIssue(10036, {
+      code: "url_temporarily_unavailable",
+      source: {
+        kind: "url",
+        url: "https://us.trabajo.org/job-4023-6268e7e832767bd9cc344e30364e994c",
+      },
+    });
+    expect(issue.message).toContain("try again in a few minutes");
+    expect(issue.message).toContain("meets the assignment requirements");
+    expect(issue.message).toContain("If the assignment allows it");
+    expect(issue.message).not.toMatch(/GitHub|too long/);
+    expect(issue.retryable).toBe(true);
+  });
+
   it("rotates the catch-all wording deterministically by question", () => {
     const source = { kind: "file" as const, fileName: "a.bin" };
     const variants = new Set(

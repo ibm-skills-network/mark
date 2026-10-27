@@ -179,7 +179,7 @@ export function defaultIssueMessage(
   const fileLower = source?.fileName ? `"${source.fileName}"` : "your file";
   switch (code) {
     case "url_unreachable": {
-      return `We couldn't open ${url}. If it's private, make it public so it can be graded, and double-check the address, then submit again.`;
+      return `We couldn't open ${url}. The page may be private or the address may be incorrect. Check whether it opens without signing in. If you own the page, check its sharing settings. Otherwise, try another publicly accessible source that meets the assignment requirements. If no suitable link works, contact course support.`;
     }
     case "url_placeholder": {
       return `The link ${url} still contains placeholder text (like "your-username"). Replace it with your own GitHub username and repository name, then submit again.`;
@@ -194,16 +194,16 @@ export function defaultIssueMessage(
     }
     case "url_blocked": {
       const host = hostOf(source?.url) ?? "This site";
-      return `${host} doesn't allow automated access, so we couldn't read ${url}. Put your work on GitHub or another public host and submit that link instead.`;
+      return `We couldn't read ${url} because ${host} blocked automated access. The link may still open in your browser. Try another publicly accessible link that meets the assignment requirements. If the assignment allows it, provide screenshots or paste the relevant text instead; otherwise, contact course support.`;
     }
     case "url_empty": {
-      return `We opened ${url} but found nothing we could read. It may be empty, or the page may only show its content in a browser. Link directly to the file or repository that contains your work.`;
+      return `We opened ${url} but couldn't extract readable content. The page may require sign-in or load its content only in a browser. Try another publicly accessible link that meets the assignment requirements. If the assignment allows it, provide screenshots or paste the relevant text instead; otherwise, contact course support.`;
     }
     case "url_unsupported": {
       return `${url} is a kind of page we can't grade (such as a project board, an issue list or an editing page). Link directly to the file or repository that contains your work.`;
     }
     case "url_temporarily_unavailable": {
-      return `We couldn't reach ${url} just now. This is usually temporary, so please try again in a few minutes.`;
+      return `We couldn't reach ${url} just now. Please try again in a few minutes. If it still fails, try another publicly accessible link that meets the assignment requirements. If the assignment allows it, provide screenshots or paste the relevant text instead; otherwise, contact course support.`;
     }
     case "file_wrong_format": {
       const expected = source?.expectedType ? `.${source.expectedType}` : "";

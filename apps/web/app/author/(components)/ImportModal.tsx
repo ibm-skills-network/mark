@@ -12,6 +12,7 @@ import type { QuestionAuthorStore, QuestionType } from "@/config/types";
 import { generateTempQuestionId } from "@/lib/utils";
 import { ResponseType } from "@/config/types";
 import * as XLSX from "xlsx";
+import { normalizeExcelQuizRows } from "../utils/excelQuizRows";
 interface ImportModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -651,10 +652,13 @@ const ImportModal: React.FC<ImportModalProps> = ({
         );
       }
 
-      const rows: any[][] = XLSX.utils.sheet_to_json(worksheet, {
-        header: 1,
-        defval: "",
-      });
+      const rows = normalizeExcelQuizRows(
+        XLSX.utils.sheet_to_json<unknown[]>(worksheet, {
+          header: 1,
+          defval: "",
+          blankrows: true,
+        }),
+      );
 
       if (!rows.length) {
         throw new Error("Excel sheet is empty.");
@@ -981,7 +985,9 @@ const ImportModal: React.FC<ImportModalProps> = ({
                   </li>
                   <li>
                     <strong>Excel (.xlsx):</strong> Quiz format with question
-                    text and 4 answer choices (first column is correct answer)
+                    text and answer columns labeled Correct answer, Answer 2,
+                    Answer 3, and Answer 4. Correct answer contains the full
+                    answer text; columns may be reordered.
                   </li>
                   <li>
                     <strong>Open edX OLX (.xml):</strong> Open Learning XML
@@ -1033,6 +1039,34 @@ const ImportModal: React.FC<ImportModalProps> = ({
                   )}
                 </div>
               </div>
+
+              {(selectedFile?.name.endsWith(".xlsx") ||
+                selectedFile?.name.endsWith(".xls")) && (
+                <section aria-label="Imported answer key" className="space-y-3">
+                  <h3 className="text-lg font-medium">Imported answer key</h3>
+                  <p className="text-sm">
+                    Review these answers before importing. Correct answers come
+                    from the column labeled Correct answer, regardless of its
+                    position. Importing does not verify their factual accuracy.
+                  </p>
+                  <ol className="max-h-64 overflow-y-auto space-y-3">
+                    {parsedData.questions?.map((question, index) => (
+                      <li key={question.id} className="border rounded-lg p-3">
+                        <p>
+                          {index + 1}. {question.question}
+                        </p>
+                        <p className="font-medium">
+                          Correct answer:{" "}
+                          {
+                            question.choices?.find((choice) => choice.isCorrect)
+                              ?.choice
+                          }
+                        </p>
+                      </li>
+                    ))}
+                  </ol>
+                </section>
+              )}
 
               <div className="space-y-4">
                 <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">
