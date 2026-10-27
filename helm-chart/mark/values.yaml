@@ -56,6 +56,10 @@ api:
     repository: icr.io/skills-network/mark-api
     pullPolicy: IfNotPresent
   containerPort: 3000  
+  # Other releases' pods (app.kubernetes.io/name) that may call mark-api besides this release's gateway.
+  jobCallers:
+    - mark-jobs
+    - mark-jobs-heavy
   service:
     type: ClusterIP
     port: 80

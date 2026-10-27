@@ -75,7 +75,7 @@ spec:
   - Egress          
 ---
 
-# For mark-api: allow ingress traffic from api-gateway only and allow egress traffic to lti-gateway, postgres, redis, and external services.
+# For mark-api: allow ingress traffic from the gateway and job workers only and allow egress traffic to lti-gateway, postgres, redis, and external services.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -85,13 +85,17 @@ spec:
     matchLabels:
       {{- include "mark.api.labels" $ | nindent 6 }}
   ingress:
+    # Only the gateway and Mark's job workers (mark-jobs also labels its CronJobs) may call mark-api.
     - from:
       - podSelector:
-          matchLabels:
-            {{- include "mark.api-gateway.labels" $ | nindent 12 }}
-    - ports:
-      - protocol: TCP
-        port: {{ .Values.api.containerPort }}
+          matchExpressions:
+            - key: app.kubernetes.io/name
+              operator: In
+              values:
+                - {{ include "mark.api-gateway.name" $ | quote }}
+                {{- range .Values.api.jobCallers }}
+                - {{ . | quote }}
+                {{- end }}
   egress:
     - to:
       - podSelector:
