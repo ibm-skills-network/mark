@@ -907,9 +907,11 @@ describe("fetchUrlContentForGrading", () => {
         );
 
         expect(result).toEqual({ body: source, isFunctional: true });
-        expect(chunks.find((chunk) => chunk.metadata?.pinned)?.text).toBe(
-          `=== FILE: answer.js (complete) ===\n${source}`,
-        );
+        expect(
+          chunks.find(
+            (chunk) => chunk.metadata?.pinned && !chunk.metadata?.submittedUrl,
+          )?.text,
+        ).toBe(`=== FILE: answer.js (complete) ===\n${source}`);
       },
     );
 

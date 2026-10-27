@@ -364,6 +364,31 @@ export class EvidenceChunkingService {
   }
 
   extractFromUrl(url: string, body: string): ExtractedChunk[] {
+    const chunks = this.extractUrlContent(url, body);
+    if (chunks.length === 0 || !/^https?:\/\//i.test(url)) return chunks;
+    // Rubrics often ask whether the learner submitted the right link, and the
+    // fetched content alone never shows it.
+    return [this.submittedUrlChunk(url), ...chunks];
+  }
+
+  private submittedUrlChunk(url: string): ExtractedChunk {
+    const line = url
+      // eslint-disable-next-line no-control-regex
+      .replaceAll(/[\u0000-\u001F\u007F]/g, " ")
+      .replaceAll(/={3,}/g, "=")
+      .replaceAll(/\s+/g, " ")
+      .trim()
+      .slice(0, 2048);
+    return this.createChunk({
+      text: `Submitted URL: ${line}`,
+      sourceType: "url",
+      sourceId: url,
+      anchor: { type: "url", url },
+      metadata: { url, pinned: true, submittedUrl: true },
+    });
+  }
+
+  private extractUrlContent(url: string, body: string): ExtractedChunk[] {
     const filename = this.codeFilenameFromUrl(url);
     if (filename) return this.extractCodeFromUrl(url, filename, body);
 
