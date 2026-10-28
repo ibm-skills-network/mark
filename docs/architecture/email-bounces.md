@@ -2,15 +2,45 @@
 
 Mark's jobs worker polls IBM Event Notifications every 15 minutes. Invalid
 mailboxes (`error_message` exactly `UNKNOWN_USER`) become `HARD_BOUNCE`
-suppressions. `MESSAGE_REFUSED`, `UNKNOWN_ERROR`, and unrecognized diagnostics
-are recorded without automatic suppression. Three distinct recipients with
-`MESSAGE_REFUSED` or `UNKNOWN_ERROR` at a domain within seven days produce an
-admin dashboard warning. Domain warnings never block a whole domain.
+suppressions. Other bounces, including policy/unknown failures, automatically
+pause an address after two distinct events within seven days. Routine auditing
+of the admin page is not required. Three distinct recipients at a domain within
+seven days produce a diagnostic warning; a whole domain is never blocked.
+
+## Automatic temporary recovery
+
+1. Two recent bounces start a 24-hour hold.
+2. Once it expires, one naturally triggered email is reserved atomically across
+   all workers. No separate test email or replay of skipped messages is sent.
+3. SMTP acceptance starts a 24-hour observation period, during which additional
+   mail to that address is skipped. A complete subsequent bounce sweep must
+   cover the period before normal sending resumes.
+4. A bounced trial starts a three-day hold, then seven days on subsequent
+   failures. Seven days is the maximum; automatic trials continue. Extra reports
+   from mail already in flight before the trial do not increase the stage.
+5. A recovered address retains its escalation history for 30 quiet days. A new
+   failure during that time returns it to the next hold stage. After 30 days,
+   two new failures are required and the pause starts at 24 hours again.
+
+IBM's documented metrics are aggregate counts, not a verified per-message SMTP
+receipt that this integration can correlate. Neither SMTP acceptance nor absence
+of a bounce is called confirmed delivery. `recoveredAt` means normal sending
+resumed after observation. A late trial bounce can still reapply a hold.
+
+Trials require a successful poll in the last 45 minutes and no recorded poll
+error. Partial/failed sweeps never reopen an address. A process crash or missing
+SMTP result keeps the trial reserved for 24 hours; a complete sweep then permits
+another natural trial. A known local SMTP failure waits another day without
+increasing the recipient's failure stage. Trials older than IBM's 30-day replay
+window require a fresh trial rather than assuming delivery. Hard-bounce,
+complaint, and manual suppressions always take precedence. Admin overrides are
+available for exceptional cases and retain the same late-report protection.
 
 ## Configuration and rollout
 
-Apply migration `20261028120000_email_bounce_ingestion` before deploying the API
-and jobs worker; regenerate Prisma clients during the normal build. Configure:
+Apply migrations `20261028120000_email_bounce_ingestion` and
+`20261028230000_email_delivery_recovery` before deploying the API and jobs worker;
+regenerate Prisma clients during the normal build. Configure:
 
 | Variable | Where | Value |
 | --- | --- | --- |
@@ -20,6 +50,7 @@ and jobs worker; regenerate Prisma clients during the normal build. Configure:
 | `EMAIL_BOUNCE_API_KEY` | Jobs secret | IAM API key with access to read the instance's bounce metrics |
 | `ENABLE_JOB_SCHEDULERS` | Jobs | Existing scheduler switch, `true` |
 | `EMAIL_BOUNCE_POLL_ENABLED` | Jobs | Opt-in switch, `true`; disabled when absent |
+| `EMAIL_DELIVERY_ALERT_WEBHOOK_URL` | Jobs secret | Optional HTTPS webhook accepting JSON `{ "text": "..." }`, e.g. an operations Slack incoming webhook |
 
 The API and jobs must use the same instance/configuration pair. Never point
 staging at production's SMTP configuration. SMTP credentials are not implicitly
@@ -37,7 +68,22 @@ codes, it is retained but not interpreted as proof of an invalid mailbox.
 On first enable, the job imports the last 30 days, including suppressions for
 historical invalid mailboxes. Check that this is the intended configuration
 before switching polling on. Check the dashboard after the first interval.
-Disabling the opt-in switch stops ingestion but preserves existing suppressions.
+Disabling the opt-in switch stops ingestion and recovery, preserving existing
+permanent suppressions and temporary holds. Resume healthy polling or use an
+admin override to release a hold; turning polling off is not a bypass.
+
+## Exception alerts
+
+Ten distinct recipients across at least three domains with non-mailbox bounces
+within one hour trigger `email.bounce.sender_warning` at error level. Route this
+event through the existing log alerting pipeline, or configure the webhook above
+for proactive notification. The webhook sends counts, not recipient addresses.
+Alerts are claimed atomically and limited to one per hour across replicas.
+Failed webhook deliveries retry on the next poll without undoing a successful
+bounce sweep. Alert failure logs contain neither webhook URLs nor credentials.
+This is an infrastructure exception to investigate, not a routine bounce audit.
+Thresholds are deliberately initial operational defaults, not a diagnosis of
+sender reputation or proof that a receiving organisation blocked Mark.
 
 ## Reliability and limitations
 
@@ -59,7 +105,7 @@ Disabling the opt-in switch stops ingestion but preserves existing suppressions.
 - Inserting the event and applying suppression share one transaction. A failed
   suppression rolls back the event so a subsequent sweep retries it. Existing
   complaint/manual reasons are preserved.
-- Releasing an address retains an admin/timestamp record. Replayed events and
+- Releasing a permanent suppression or temporary hold retains an admin/timestamp record. Replayed events and
   late reports at or before release cannot resuppress it. A newer invalid-mailbox
   report can. Ingestion and release share a transaction-level advisory lock.
 - Event history is retained; subjects and relay IPs are hashed, not stored.
@@ -70,9 +116,12 @@ Disabling the opt-in switch stops ingestion but preserves existing suppressions.
   reporting window require manual investigation; this cannot recover expired
   provider history. Offset pagination cannot provide a provider snapshot, so
   subsequent overlapping sweeps also reconcile rows arriving during pagination.
-- Already-submitted mail may bounce after suppression. The existing send-time
-  lookup also intentionally fails open on database failure, including for admin
-  sign-in emails. This change does not promise zero further bounces.
+- Already-submitted mail may bounce after suppression. The legacy permanent-list
+  lookup retains its fail-open behavior, but when recovery is configured its
+  transactional send gate fails closed on database errors to preserve the
+  one-trial limit. This also applies to admin sign-in mail. Log events distinguish
+  `email.skipped.suppressed`, `email.skipped.temporary_hold`, and
+  `email.skipped.recovery_unavailable`. Zero further bounces cannot be promised.
 
 Grade-sync email behavior is unchanged: the normal retry sequence sends one
 initial-failure notice and one terminal-failure notice, not a notice per retry.
@@ -83,7 +132,7 @@ API tests cover the IBM contract and existing send-time suppression. Jobs tests
 cover pagination, lease contention/loss, partial failures, and rate-limit cooldown.
 The admin panel test covers warning visibility and release requests.
 
-The PostgreSQL integration suite creates an isolated schema, applies the two
+The PostgreSQL integration suite creates an isolated schema, applies the three
 email migrations, and drops the schema on completion. Point it only at a test
 database using `EMAIL_BOUNCE_TEST_DATABASE_URL`, then run from `apps/api`:
 
@@ -93,6 +142,7 @@ yarn jest --runInBand --runTestsByPath src/auth/services/email-bounce.integratio
 
 It checks concurrent replay, transactional rollback, release versus late arrival,
 release/ingestion races, preservation of complaint reasons, source isolation,
-and distinct-recipient domain warnings. During the seven days after deployment,
+distinct-recipient domain warnings, concurrent trial reservation, escalating
+holds, observation, abandoned trials, and quiet-period reset. During the seven days after deployment,
 monitor last-success age, ingestion errors, and sends after suppression rather
 than asserting that an address can never have two provider bounce records.

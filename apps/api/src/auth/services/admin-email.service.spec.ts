@@ -33,7 +33,12 @@ const ENV_KEYS = [
 describe("AdminEmailService", () => {
   const savedEnv: Partial<Record<(typeof ENV_KEYS)[number], string>> = {};
   let transport: { sendMail: jest.Mock; verify: jest.Mock };
-  let suppressions: { isSuppressed: jest.Mock; suppress: jest.Mock };
+  let suppressions: {
+    isSuppressed: jest.Mock;
+    suppress: jest.Mock;
+    acquireRecoveryPermit: jest.Mock;
+    finishRecoveryProbe: jest.Mock;
+  };
 
   const makeService = () =>
     new AdminEmailService(suppressions as unknown as EmailSuppressionService);
@@ -73,6 +78,8 @@ describe("AdminEmailService", () => {
     createTransport.mockReset().mockReturnValue(transport);
     suppressions = {
       isSuppressed: jest.fn().mockResolvedValue(false),
+      acquireRecoveryPermit: jest.fn().mockResolvedValue({ allowed: true }),
+      finishRecoveryProbe: jest.fn().mockResolvedValue(undefined),
       suppress: jest.fn().mockResolvedValue({}),
     };
   });
@@ -290,6 +297,60 @@ describe("AdminEmailService", () => {
   });
 
   describe("recipients", () => {
+    it("skips held recipients without touching SMTP", async () => {
+      suppressions.acquireRecoveryPermit.mockResolvedValue({
+        allowed: false,
+        reason: "temporary_hold",
+      });
+      expect(
+        await makeService().sendGenericEmail(
+          "held@example.com",
+          "Subject",
+          "Body",
+        ),
+      ).toBe(false);
+      expect(transport.sendMail).not.toHaveBeenCalled();
+    });
+
+    it("records SMTP acceptance of a reserved trial without declaring delivery", async () => {
+      suppressions.acquireRecoveryPermit.mockResolvedValue({
+        allowed: true,
+        probeToken: "trial-token",
+      });
+      expect(
+        await makeService().sendGenericEmail(
+          "held@example.com",
+          "Subject",
+          "Body",
+        ),
+      ).toBe(true);
+      expect(suppressions.finishRecoveryProbe).toHaveBeenCalledWith(
+        "held@example.com",
+        "trial-token",
+        true,
+      );
+    });
+
+    it("releases a failed SMTP trial into cooldown", async () => {
+      suppressions.acquireRecoveryPermit.mockResolvedValue({
+        allowed: true,
+        probeToken: "trial-token",
+      });
+      transport.sendMail.mockRejectedValue(new Error("Connection failed"));
+      expect(
+        await makeService().sendGenericEmail(
+          "held@example.com",
+          "Subject",
+          "Body",
+        ),
+      ).toBe(false);
+      expect(suppressions.finishRecoveryProbe).toHaveBeenCalledWith(
+        "held@example.com",
+        "trial-token",
+        false,
+      );
+    });
+
     it.each([
       "anonymous",
       "a@example.com, b@example.com",

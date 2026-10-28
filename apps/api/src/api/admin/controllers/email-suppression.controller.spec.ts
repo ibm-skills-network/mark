@@ -11,6 +11,7 @@ describe("EmailSuppressionController", () => {
     list: jest.fn(),
     suppress: jest.fn(),
     remove: jest.fn(),
+    releaseTemporaryHold: jest.fn(),
   };
   const controller = new EmailSuppressionController(
     suppressions as unknown as EmailSuppressionService,
@@ -59,6 +60,17 @@ describe("EmailSuppressionController", () => {
       limit: 25,
     });
     expect(suppressions.list).toHaveBeenCalledWith(1, 25, undefined);
+  });
+
+  it("attributes temporary-hold overrides to the authenticated admin", async () => {
+    suppressions.releaseTemporaryHold.mockResolvedValue(true);
+    await expect(
+      controller.releaseTemporaryHold({ email: "held@example.com" }, request),
+    ).resolves.toEqual({ released: true });
+    expect(suppressions.releaseTemporaryHold).toHaveBeenCalledWith(
+      "held@example.com",
+      "admin@example.com",
+    );
   });
 
   it("returns 404 when removing an unknown suppression", async () => {

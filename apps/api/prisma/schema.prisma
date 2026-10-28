@@ -1157,6 +1157,24 @@ model EmailBounceEvent {
   ingestedAt   DateTime @default(now())
 
   @@index([source, occurredAt])
+  @@index([source, email, occurredAt])
+}
+
+/// Temporary delivery circuit breaker. recoveredAt means normal sending has
+/// resumed after observation, not that IBM confirmed delivery.
+model EmailDeliveryHold {
+  email           String    @id
+  source          String
+  stage           Int
+  reason          String
+  holdUntil       DateTime
+  lastFailureAt   DateTime
+  probeToken      String?
+  probeStartedAt  DateTime?
+  probeAcceptedAt DateTime?
+  recoveredAt     DateTime?
+
+  @@index([source, recoveredAt])
 }
 
 model EmailBouncePollState {
@@ -1165,6 +1183,7 @@ model EmailBouncePollState {
   leaseUntil      DateTime?
   lastSuccessAt   DateTime?
   lastError       String?
+  lastSenderAlertAt DateTime?
 }
 
 /// Quiz session tokens a browser saved so it can resume an earlier launch

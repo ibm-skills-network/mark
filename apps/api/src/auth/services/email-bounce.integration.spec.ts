@@ -43,6 +43,7 @@ const databaseUrl = process.env.EMAIL_BOUNCE_TEST_DATABASE_URL;
       for (const migration of [
         "20261005120000_add_email_suppression",
         "20261028120000_email_bounce_ingestion",
+        "20261028230000_email_delivery_recovery",
       ]) {
         const sql = readFileSync(
           resolve(
@@ -63,6 +64,8 @@ const databaseUrl = process.env.EMAIL_BOUNCE_TEST_DATABASE_URL;
       await prisma.emailBounceEvent.deleteMany();
       await prisma.emailSuppression.deleteMany();
       await prisma.emailSuppressionRelease.deleteMany();
+      await prisma.emailDeliveryHold.deleteMany();
+      await prisma.emailBouncePollState.deleteMany();
     });
     afterAll(async () => {
       await prisma.$executeRawUnsafe(`DROP SCHEMA "${schema}" CASCADE`);
@@ -99,7 +102,7 @@ const databaseUrl = process.env.EMAIL_BOUNCE_TEST_DATABASE_URL;
       expect(await service.isSuppressed(bounce.email)).toBe(true);
     });
 
-    it("does not suppress repeated policy or unknown errors", async () => {
+    it("temporarily holds repeated policy or unknown errors without permanent suppression", async () => {
       for (const reason of [
         "MESSAGE_REFUSED",
         "UNKNOWN_ERROR",
@@ -111,6 +114,11 @@ const databaseUrl = process.env.EMAIL_BOUNCE_TEST_DATABASE_URL;
         );
       }
       expect(await prisma.emailSuppression.count()).toBe(0);
+      expect(
+        await prisma.emailDeliveryHold.findUnique({
+          where: { email: "valid@example.com" },
+        }),
+      ).toMatchObject({ stage: 1 });
     });
 
     it("keeps admin releases across replay and late old bounces, but handles a new invalid-mailbox bounce", async () => {
@@ -206,6 +214,300 @@ const databaseUrl = process.env.EMAIL_BOUNCE_TEST_DATABASE_URL;
           lastBounceAt: expect.any(Date),
         },
       ]);
+    });
+
+    const holdFor = (email = "recover@example.com") =>
+      prisma.emailDeliveryHold.findUniqueOrThrow({ where: { email } });
+    const createHold = async (email = "recover@example.com") => {
+      await service.recordBounce(
+        event(email, "MESSAGE_REFUSED", new Date(Date.now() - 2 * DAY_MS)),
+      );
+      await service.recordBounce(
+        event(email, "UNKNOWN_ERROR", new Date(Date.now() - 2 * DAY_MS + 1000)),
+      );
+      return holdFor(email);
+    };
+    const beginTrial = async (email = "recover@example.com") => {
+      await prisma.emailDeliveryHold.update({
+        where: { email },
+        data: { holdUntil: new Date(Date.now() - 1000) },
+      });
+      await prisma.emailBouncePollState.upsert({
+        where: { source },
+        create: { source, lastSuccessAt: new Date() },
+        update: { lastSuccessAt: new Date(), lastError: null },
+      });
+      const permit = await service.acquireRecoveryPermit(email);
+      expect(permit.allowed).toBe(true);
+      if (!permit.allowed || !("probeToken" in permit) || !permit.probeToken)
+        throw new Error("Expected a trial reservation");
+      return permit.probeToken;
+    };
+
+    it("requires two unique recent failures and does not extend holds for replay", async () => {
+      const first = event("recover@example.com", "MESSAGE_REFUSED");
+      await service.recordBounce(first);
+      await service.recordBounce(first);
+      await service.recordBounce(
+        event(first.email, "UNKNOWN_ERROR", new Date(Date.now() - 8 * DAY_MS)),
+      );
+      expect(await prisma.emailDeliveryHold.count()).toBe(0);
+      await service.recordBounce(
+        event(first.email, "UNKNOWN_ERROR", new Date(Date.now() - 120_000)),
+      );
+      const hold = await holdFor();
+      expect(hold.stage).toBe(1);
+      expect(hold.holdUntil.getTime() - Date.now()).toBeGreaterThan(
+        DAY_MS - 1000,
+      );
+      await service.recordBounce(first);
+      expect((await holdFor()).holdUntil).toEqual(hold.holdUntil);
+      expect(await service.acquireRecoveryPermit(first.email)).toMatchObject({
+        allowed: false,
+        reason: "temporary_hold",
+      });
+    });
+
+    it("admits exactly one trial across concurrent senders", async () => {
+      await createHold();
+      await prisma.emailDeliveryHold.update({
+        where: { email: "recover@example.com" },
+        data: { holdUntil: new Date(Date.now() - 1000) },
+      });
+      await prisma.emailBouncePollState.create({
+        data: { source, lastSuccessAt: new Date() },
+      });
+      const permits = await Promise.all(
+        Array.from({ length: 8 }, () =>
+          service.acquireRecoveryPermit(" RECOVER@EXAMPLE.COM "),
+        ),
+      );
+      expect(permits.filter((permit) => permit.allowed)).toHaveLength(1);
+      expect(permits.filter((permit) => !permit.allowed)).toHaveLength(7);
+    });
+
+    it("applies the new policy to previously ingested history without duplicating events", async () => {
+      const history = [
+        event("recover@example.com", "MESSAGE_REFUSED"),
+        event("recover@example.com", "UNKNOWN_ERROR"),
+      ];
+      await prisma.emailBounceEvent.createMany({ data: history });
+      await service.recordBounce(history[0]);
+      const hold = await holdFor();
+      await service.recordBounce(history[1]);
+      expect(await prisma.emailBounceEvent.count()).toBe(2);
+      expect((await holdFor()).holdUntil).toEqual(hold.holdUntil);
+    });
+
+    it("does not admit a trial when polling is stale or failing", async () => {
+      await createHold();
+      await prisma.emailDeliveryHold.update({
+        where: { email: "recover@example.com" },
+        data: { holdUntil: new Date(Date.now() - 1000) },
+      });
+      expect(
+        await service.acquireRecoveryPermit("recover@example.com"),
+      ).toMatchObject({ allowed: false, reason: "recovery_unavailable" });
+      await prisma.emailBouncePollState.create({
+        data: { source, lastSuccessAt: new Date(), lastError: "IBM HTTP 429" },
+      });
+      expect(
+        await service.acquireRecoveryPermit("recover@example.com"),
+      ).toMatchObject({ allowed: false, reason: "recovery_unavailable" });
+    });
+
+    it("escalates failed trials to three then seven days, not for already-in-flight reports", async () => {
+      const original = await createHold();
+      await service.recordBounce(event(original.email, "MESSAGE_REFUSED"));
+      expect((await holdFor()).holdUntil).toEqual(original.holdUntil);
+      for (const stage of [2, 3, 3]) {
+        const token = await beginTrial();
+        const bounce = event(original.email, "MESSAGE_REFUSED", new Date());
+        await service.recordBounce(bounce);
+        const hold = await holdFor();
+        expect(hold.stage).toBe(stage);
+        expect(hold.holdUntil.getTime() - Date.now()).toBeGreaterThan(
+          (stage === 2 ? 3 : 7) * DAY_MS - 1000,
+        );
+        // A delayed SMTP completion from the failed trial cannot undo its hold.
+        await service.finishRecoveryProbe(original.email, token, true);
+        expect((await holdFor()).probeAcceptedAt).toBeNull();
+        await service.recordBounce(bounce);
+        expect((await holdFor()).holdUntil).toEqual(hold.holdUntil);
+      }
+    });
+
+    it("resumes automatically only after observation and a completed sweep, retaining escalation history", async () => {
+      const hold = await createHold();
+      const token = await beginTrial();
+      await service.finishRecoveryProbe(hold.email, token, true);
+      await service.recoverAfterSweep(source, new Date());
+      expect((await holdFor()).recoveredAt).toBeNull();
+      await prisma.emailDeliveryHold.update({
+        where: { email: hold.email },
+        data: {
+          probeStartedAt: new Date(Date.now() - 25 * 60 * 60_000),
+          probeAcceptedAt: new Date(Date.now() - 25 * 60 * 60_000),
+        },
+      });
+      expect(await service.acquireRecoveryPermit(hold.email)).toMatchObject({
+        allowed: false,
+      });
+      await service.recoverAfterSweep(source, new Date(Date.now() - 60_000));
+      expect(await service.acquireRecoveryPermit(hold.email)).toEqual({
+        allowed: true,
+      });
+      expect((await holdFor()).stage).toBe(1);
+      await service.recordBounce(
+        event(hold.email, "UNKNOWN_ERROR", new Date()),
+      );
+      expect((await holdFor()).stage).toBe(2);
+    });
+
+    it("recovers abandoned reservations without pretending a message was accepted", async () => {
+      const hold = await createHold();
+      await beginTrial();
+      await prisma.emailDeliveryHold.update({
+        where: { email: hold.email },
+        data: { probeStartedAt: new Date(Date.now() - 25 * 60 * 60_000) },
+      });
+      await service.recoverAfterSweep(source, new Date(Date.now() - 60_000));
+      expect(await holdFor()).toMatchObject({
+        probeStartedAt: null,
+        probeAcceptedAt: null,
+        recoveredAt: null,
+        stage: 1,
+      });
+      expect(await service.acquireRecoveryPermit(hold.email)).toMatchObject({
+        allowed: true,
+        probeToken: expect.any(String),
+      });
+    });
+
+    it("requires a fresh trial when the previous observation is outside provider history", async () => {
+      const hold = await createHold();
+      await beginTrial();
+      await prisma.emailDeliveryHold.update({
+        where: { email: hold.email },
+        data: {
+          probeStartedAt: new Date(Date.now() - 35 * DAY_MS),
+          probeAcceptedAt: new Date(Date.now() - 35 * DAY_MS),
+        },
+      });
+      await service.recoverAfterSweep(source, new Date());
+      expect(await holdFor()).toMatchObject({
+        recoveredAt: null,
+        probeStartedAt: null,
+        probeAcceptedAt: null,
+      });
+      expect(await service.acquireRecoveryPermit(hold.email)).toMatchObject({
+        allowed: true,
+        probeToken: expect.any(String),
+      });
+    });
+
+    it("does not escalate for a local SMTP failure that has no provider bounce", async () => {
+      const hold = await createHold();
+      const token = await beginTrial();
+      await service.finishRecoveryProbe(hold.email, token, false);
+      expect(await holdFor()).toMatchObject({
+        stage: 1,
+        probeStartedAt: null,
+        probeAcceptedAt: null,
+        recoveredAt: null,
+      });
+      expect(await service.acquireRecoveryPermit(hold.email)).toMatchObject({
+        allowed: false,
+      });
+    });
+
+    it("protects admin overrides from old reports while requiring two new failures", async () => {
+      const hold = await createHold();
+      expect(
+        await service.releaseTemporaryHold(hold.email, "admin@example.com"),
+      ).toBe(true);
+      await service.recordBounce(
+        event(hold.email, "UNKNOWN_ERROR", new Date(Date.now() - 60_000)),
+      );
+      expect(await prisma.emailDeliveryHold.count()).toBe(0);
+      const release = await prisma.emailSuppressionRelease.findUniqueOrThrow({
+        where: { email: hold.email },
+      });
+      // Move only the test release cutoff back so subsequent events have a distinct timestamp.
+      await prisma.emailSuppressionRelease.update({
+        where: { email: hold.email },
+        data: { releasedAt: new Date(release.releasedAt.getTime() - 1000) },
+      });
+      await service.recordBounce(
+        event(hold.email, "UNKNOWN_ERROR", new Date()),
+      );
+      expect(await prisma.emailDeliveryHold.count()).toBe(0);
+      await service.recordBounce(
+        event(hold.email, "MESSAGE_REFUSED", new Date()),
+      );
+      expect((await holdFor()).stage).toBe(1);
+    });
+
+    it("permanent invalid-mailbox suppression takes precedence over recovery", async () => {
+      const hold = await createHold();
+      await beginTrial();
+      await service.recordBounce(event(hold.email, "UNKNOWN_USER", new Date()));
+      expect(await prisma.emailDeliveryHold.count()).toBe(0);
+      expect(await service.acquireRecoveryPermit(hold.email)).toMatchObject({
+        allowed: false,
+        reason: "suppressed",
+      });
+    });
+
+    it("handles trial bounces reported after a long poller outage", async () => {
+      const hold = await createHold();
+      await beginTrial();
+      await prisma.emailDeliveryHold.update({
+        where: { email: hold.email },
+        data: {
+          lastFailureAt: new Date(Date.now() - 10 * DAY_MS),
+          probeStartedAt: new Date(Date.now() - 9 * DAY_MS),
+          probeAcceptedAt: new Date(Date.now() - 9 * DAY_MS),
+        },
+      });
+      await service.recordBounce(
+        event(hold.email, "MESSAGE_REFUSED", new Date(Date.now() - 8 * DAY_MS)),
+      );
+      await service.recoverAfterSweep(source, new Date());
+      expect(await holdFor()).toMatchObject({ stage: 2, recoveredAt: null });
+    });
+
+    it("ages escalation history out after thirty quiet days without calling it delivered", async () => {
+      const hold = await createHold();
+      await prisma.emailDeliveryHold.update({
+        where: { email: hold.email },
+        data: {
+          stage: 3,
+          recoveredAt: new Date(Date.now() - 31 * DAY_MS),
+          lastFailureAt: new Date(Date.now() - 35 * DAY_MS),
+        },
+      });
+      // Remove the setup's recent events; the retained hold represents an old incident.
+      await prisma.emailBounceEvent.deleteMany();
+      await service.recordBounce(event(hold.email, "MESSAGE_REFUSED"));
+      expect(await service.acquireRecoveryPermit(hold.email)).toEqual({
+        allowed: true,
+      });
+      await service.recordBounce(event(hold.email, "UNKNOWN_ERROR"));
+      expect(await holdFor()).toMatchObject({ stage: 1, recoveredAt: null });
+    });
+
+    it("raises a sender-level warning only for widespread recent failures", async () => {
+      for (let index = 0; index < 10; index++) {
+        await service.recordBounce(
+          event(`${index}@domain${index % 3}.example`, "MESSAGE_REFUSED"),
+        );
+      }
+      expect((await service.bounceHealth()).senderWarning).toEqual({
+        active: true,
+        domains: 3,
+        recipients: 10,
+      });
     });
   },
 );

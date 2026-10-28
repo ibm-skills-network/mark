@@ -1,4 +1,5 @@
 import { PrismaService } from "../../api/src/database/prisma.service";
+import axios from "axios";
 import { EmailSuppressionService } from "../../api/src/auth/services/email-suppression.service";
 import { IbmBounceClient } from "../../api/src/auth/services/ibm-bounce-client";
 import { EmailBouncePoller } from "./email-bounce-poller.service";
@@ -18,7 +19,11 @@ describe("EmailBouncePoller", () => {
   const environment = { ...process.env };
   const state = { upsert: jest.fn(), updateMany: jest.fn() };
   const client = { page: jest.fn() };
-  const suppressions = { recordBounce: jest.fn(), bounceHealth: jest.fn() };
+  const suppressions = {
+    recordBounce: jest.fn(),
+    bounceHealth: jest.fn(),
+    recoverAfterSweep: jest.fn(),
+  };
   const service = new EmailBouncePoller(
     { emailBouncePollState: state } as unknown as PrismaService,
     client as unknown as IbmBounceClient,
@@ -41,12 +46,19 @@ describe("EmailBouncePoller", () => {
     process.env.EMAIL_BOUNCE_POLL_ENABLED = "true";
     process.env.EMAIL_BOUNCE_INSTANCE_ID = "instance";
     process.env.EMAIL_BOUNCE_SMTP_CONFIG_ID = "config";
+    delete process.env.EMAIL_DELIVERY_ALERT_WEBHOOK_URL;
     state.upsert.mockResolvedValue({});
     state.updateMany.mockResolvedValue({ count: 1 });
-    suppressions.bounceHealth.mockResolvedValue({ domains: [] });
+    suppressions.bounceHealth.mockResolvedValue({
+      domains: [],
+      senderWarning: { active: false, domains: 0, recipients: 0 },
+    });
     suppressions.recordBounce.mockResolvedValue(undefined);
   });
-  afterEach(() => jest.useRealTimers());
+  afterEach(() => {
+    jest.useRealTimers();
+    jest.restoreAllMocks();
+  });
   afterAll(() => {
     process.env = environment;
   });
@@ -90,6 +102,10 @@ describe("EmailBouncePoller", () => {
       1,
     );
     expect(suppressions.recordBounce).toHaveBeenCalledTimes(2);
+    expect(suppressions.recoverAfterSweep).toHaveBeenCalledWith(
+      "instance/config",
+      end,
+    );
     expect(state.updateMany).toHaveBeenLastCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
@@ -111,6 +127,7 @@ describe("EmailBouncePoller", () => {
       });
     await service.poll();
     expect(suppressions.recordBounce).toHaveBeenCalledWith(first);
+    expect(suppressions.recoverAfterSweep).not.toHaveBeenCalled();
     expect(state.updateMany).toHaveBeenLastCalledWith(
       expect.objectContaining({
         data: {
@@ -140,5 +157,60 @@ describe("EmailBouncePoller", () => {
       .mockResolvedValue({ count: 0 });
     await service.poll();
     expect(client.page).not.toHaveBeenCalled();
+  });
+
+  it("proactively reports widespread sender failures without exposing recipient addresses", async () => {
+    process.env.EMAIL_DELIVERY_ALERT_WEBHOOK_URL =
+      "https://alerts.example.com/mark";
+    const post = jest.spyOn(axios, "post").mockResolvedValue({ data: {} });
+    suppressions.bounceHealth.mockResolvedValue({
+      domains: [],
+      senderWarning: { active: true, domains: 3, recipients: 10 },
+    });
+    client.page.mockResolvedValue({ events: [], total: 0 });
+    await service.poll();
+    expect(post).toHaveBeenCalledWith(
+      "https://alerts.example.com/mark",
+      { text: expect.stringContaining("10 recipients across 3 domains") },
+      expect.objectContaining({ timeout: 10_000, maxRedirects: 0 }),
+    );
+  });
+
+  it("deduplicates operations alerts across worker replicas", async () => {
+    process.env.EMAIL_DELIVERY_ALERT_WEBHOOK_URL =
+      "https://alerts.example.com/mark";
+    const post = jest.spyOn(axios, "post").mockResolvedValue({ data: {} });
+    state.updateMany.mockImplementation(({ data }) =>
+      Promise.resolve({ count: data.lastSenderAlertAt ? 0 : 1 }),
+    );
+    suppressions.bounceHealth.mockResolvedValue({
+      domains: [],
+      senderWarning: { active: true, domains: 3, recipients: 10 },
+    });
+    client.page.mockResolvedValue({ events: [], total: 0 });
+    await service.poll();
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("retries a failed alert on the next poll without invalidating bounce recovery", async () => {
+    process.env.EMAIL_DELIVERY_ALERT_WEBHOOK_URL =
+      "https://alerts.example.com/mark";
+    jest
+      .spyOn(axios, "post")
+      .mockRejectedValue(new Error("Webhook unavailable"));
+    suppressions.bounceHealth.mockResolvedValue({
+      domains: [],
+      senderWarning: { active: true, domains: 3, recipients: 10 },
+    });
+    client.page.mockResolvedValue({ events: [], total: 0 });
+    await service.poll();
+    expect(suppressions.recoverAfterSweep).toHaveBeenCalledTimes(1);
+    expect(
+      state.updateMany.mock.calls.some(([call]) => call.data.lastSuccessAt),
+    ).toBe(true);
+    expect(state.updateMany).toHaveBeenLastCalledWith({
+      where: { source: "instance/config", lastSenderAlertAt: expect.any(Date) },
+      data: { lastSenderAlertAt: null },
+    });
   });
 });

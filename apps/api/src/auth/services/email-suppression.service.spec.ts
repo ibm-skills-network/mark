@@ -7,6 +7,7 @@ describe("EmailSuppressionService", () => {
     $transaction: jest.fn(),
     $executeRaw: jest.fn(),
     emailSuppressionRelease: { upsert: jest.fn() },
+    emailDeliveryHold: { deleteMany: jest.fn() },
     emailSuppression: {
       findUnique: jest.fn(),
       upsert: jest.fn(),
@@ -106,5 +107,21 @@ describe("EmailSuppressionService", () => {
 
     prisma.emailSuppression.findUnique.mockResolvedValueOnce(null);
     await expect(service.remove(4, "admin@example.com")).resolves.toBe(false);
+  });
+
+  it("fails closed if an atomic recovery reservation cannot be made", async () => {
+    const original = { ...process.env };
+    try {
+      process.env.EMAIL_BOUNCE_INSTANCE_ID = "instance";
+      process.env.EMAIL_BOUNCE_SMTP_CONFIG_ID = "config";
+      prisma.$transaction.mockRejectedValueOnce(
+        new Error("Database unavailable"),
+      );
+      await expect(
+        service.acquireRecoveryPermit("held@example.com"),
+      ).resolves.toEqual({ allowed: false, reason: "recovery_unavailable" });
+    } finally {
+      process.env = original;
+    }
   });
 });

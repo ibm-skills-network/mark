@@ -22,6 +22,7 @@ import { EmailSuppressionService } from "src/auth/services/email-suppression.ser
 import {
   CreateEmailSuppressionDto,
   ListEmailSuppressionsQueryDto,
+  ReleaseEmailHoldDto,
 } from "../dto/email-suppression.dto";
 
 @ApiTags("Admin Email Suppressions")
@@ -48,6 +49,32 @@ export class EmailSuppressionController {
   @ApiOperation({ summary: "Bounce poll status and domain warnings (ADMIN)" })
   bounceHealth() {
     return this.suppressions.bounceHealth();
+  }
+
+  @Get("temporary-holds")
+  @ApiOperation({ summary: "List automatic temporary email holds (ADMIN)" })
+  temporaryHolds(@Query() query: ListEmailSuppressionsQueryDto) {
+    return this.suppressions.listTemporaryHolds(
+      query.page ?? 1,
+      query.limit ?? 25,
+      query.search,
+    );
+  }
+
+  @Post("temporary-holds/release")
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @ApiOperation({ summary: "Override a temporary email hold (ADMIN)" })
+  async releaseTemporaryHold(
+    @Body() body: ReleaseEmailHoldDto,
+    @Req() request: UserSessionRequest,
+  ) {
+    const released = await this.suppressions.releaseTemporaryHold(
+      body.email,
+      request.userSession?.userId ?? "unknown",
+    );
+    if (!released) throw new NotFoundException("Temporary hold not found");
+    return { released: true };
   }
 
   @Get()

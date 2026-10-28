@@ -167,8 +167,17 @@ export class AdminEmailService {
       return true;
     }
 
+    const permit = await this.suppressions.acquireRecoveryPermit(to);
+    if ("reason" in permit) {
+      this.logger.warn(
+        `email.skipped.${permit.reason} to=${to} subject="${email.subject}"`,
+      );
+      return false;
+    }
+    let accepted = false;
     try {
       await this.transporter.sendMail(message);
+      accepted = true;
       this.logger.log(`email.sent to=${to} subject="${email.subject}"`);
       return true;
     } catch (error) {
@@ -178,6 +187,13 @@ export class AdminEmailService {
       );
       await this.suppressIfPermanent(to, error);
       return false;
+    } finally {
+      if (permit.probeToken)
+        await this.suppressions.finishRecoveryProbe(
+          to,
+          permit.probeToken,
+          accepted,
+        );
     }
   }
 

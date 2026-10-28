@@ -13,6 +13,19 @@ interface BounceHealth {
   lastError: string | null;
   stale: boolean;
   domains: { domain: string; recipients: number; lastBounceAt: string }[];
+  senderWarning: { active: boolean; domains: number; recipients: number };
+}
+
+interface TemporaryHolds {
+  items: {
+    email: string;
+    stage: number;
+    reason: string;
+    holdUntil: string;
+    probeStartedAt: string | null;
+    probeAcceptedAt: string | null;
+  }[];
+  total: number;
 }
 
 interface Suppressions {
@@ -23,6 +36,7 @@ interface Suppressions {
 export function EmailDeliveryPanel({ sessionToken }: { sessionToken: string }) {
   const [page, setPage] = useState(1);
   const [expanded, setExpanded] = useState(false);
+  const [holdPage, setHoldPage] = useState(1);
   const queryClient = useQueryClient();
   const base = `${getBaseApiPath("v1")}/admin-dashboard/email-suppressions`;
   const options = { headers: { "x-admin-token": sessionToken }, quiet: true };
@@ -46,6 +60,25 @@ export function EmailDeliveryPanel({ sessionToken }: { sessionToken: string }) {
       });
     },
   });
+  const holds = useQuery({
+    queryKey: ["email-temporary-holds", sessionToken, holdPage],
+    queryFn: () =>
+      apiClient.get<TemporaryHolds>(
+        `${base}/temporary-holds?page=${holdPage}&limit=25`,
+        options,
+      ),
+    enabled: expanded,
+    refetchInterval: 60_000,
+  });
+  const releaseHold = useMutation({
+    mutationFn: (email: string) =>
+      apiClient.post(`${base}/temporary-holds/release`, { email }, options),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({
+        queryKey: ["email-temporary-holds", sessionToken],
+      });
+    },
+  });
 
   return (
     <Card>
@@ -53,6 +86,10 @@ export function EmailDeliveryPanel({ sessionToken }: { sessionToken: string }) {
         <CardTitle>Email delivery</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          Temporary delivery failures are paused and retried automatically.
+          Routine review is not required.
+        </p>
         {health.isPending && <p>Loading email delivery status…</p>}
         {health.isError && (
           <p role="alert">Could not load email delivery status.</p>
@@ -75,11 +112,23 @@ export function EmailDeliveryPanel({ sessionToken }: { sessionToken: string }) {
                 {health.data.lastError || "No recent successful check."}
               </p>
             )}
+            {health.data.senderWarning?.active && (
+              <p
+                role="alert"
+                className="text-sm text-amber-700 dark:text-amber-300"
+              >
+                Possible sender or relay problem:{" "}
+                {health.data.senderWarning.recipients} recipients across{" "}
+                {health.data.senderWarning.domains} domains failed in the last
+                hour. Check the sending infrastructure.
+              </p>
+            )}
             {health.data.domains.length > 0 && (
               <div role="status" className="space-y-2">
                 <p>
-                  Repeated delivery refusals in the last 7 days. Review the mail
-                  policy with the receiving organisation.
+                  Repeated delivery failures in the last 7 days. Automatic
+                  recovery is active; these domains are shown for
+                  troubleshooting.
                 </p>
                 <ul className="list-disc pl-5">
                   {health.data.domains.map((domain) => (
@@ -99,12 +148,86 @@ export function EmailDeliveryPanel({ sessionToken }: { sessionToken: string }) {
           onClick={() => setExpanded(!expanded)}
           aria-expanded={expanded}
         >
-          {expanded
-            ? "Hide suppressed addresses"
-            : "Manage suppressed addresses"}
+          {expanded ? "Hide delivery controls" : "Manage suppressed addresses"}
         </Button>
         {expanded && (
           <div className="space-y-3">
+            <h3 className="font-medium">Temporary holds</h3>
+            <p className="text-sm">
+              After a pause, the next naturally triggered email tests recovery.
+              Normal sending resumes after a 24-hour observation period and a
+              complete bounce check. This does not confirm delivery.
+            </p>
+            {holds.isPending && <p>Loading temporary holds…</p>}
+            {(holds.isError || releaseHold.isError) && (
+              <p role="alert">
+                Could not update temporary holds. Please try again.
+              </p>
+            )}
+            {holds.data && (
+              <>
+                <p>{holds.data.total} temporary holds</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr>
+                        <th className="p-2">Address</th>
+                        <th className="p-2">Automatic recovery</th>
+                        <th className="p-2">Override</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {holds.data.items.map((hold) => (
+                        <tr key={hold.email} className="border-t">
+                          <td className="p-2">
+                            {hold.email}
+                            <p className="text-muted-foreground break-all">
+                              {hold.reason}
+                            </p>
+                          </td>
+                          <td className="p-2">
+                            {hold.probeStartedAt
+                              ? "Trial reserved; awaiting outcome and bounce observation"
+                              : `Next trial eligible after ${new Date(hold.holdUntil).toLocaleString()}`}
+                          </td>
+                          <td className="p-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={releaseHold.isPending}
+                              onClick={() => releaseHold.mutate(hold.email)}
+                              aria-label={`Lift temporary hold for ${hold.email}`}
+                            >
+                              Lift hold
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={holdPage === 1}
+                    onClick={() => setHoldPage(holdPage - 1)}
+                  >
+                    Previous holds
+                  </Button>
+                  <span>Page {holdPage}</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={holdPage * 25 >= holds.data.total}
+                    onClick={() => setHoldPage(holdPage + 1)}
+                  >
+                    Next holds
+                  </Button>
+                </div>
+              </>
+            )}
+            <h3 className="font-medium">Permanent suppressions</h3>
             <p className="text-sm">
               Release an address after confirming it can receive email. Older
               bounce reports will not suppress it again.

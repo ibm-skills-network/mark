@@ -75,6 +75,12 @@ export class EmailBouncePoller {
         if (offset >= page.total) break;
         await delay(1000); // Avoid bursts against IBM's API edge.
       }
+      const recoveryLease = await this.prisma.emailBouncePollState.updateMany({
+        where: { source, leaseToken, leaseUntil: { gt: new Date() } },
+        data: { leaseUntil: new Date(Date.now() + LEASE_MS) },
+      });
+      if (!recoveryLease.count) throw new Error("Bounce poll lease lost");
+      await this.suppressions.recoverAfterSweep(source, end);
       const after = await this.suppressions.bounceHealth();
       for (const domain of after.domains) {
         if (
@@ -96,6 +102,8 @@ export class EmailBouncePoller {
         },
       });
       this.logger.log(`email.bounce.poll_completed rows=${offset}`);
+      if (after.senderWarning.active)
+        await this.alertSenderFailure(source, after.senderWarning);
     } catch (error) {
       // Never log Axios errors wholesale: their config contains IAM credentials.
       const status = axios.isAxiosError(error)
@@ -127,6 +135,55 @@ export class EmailBouncePoller {
           },
         })
         .catch(() => this.logger.error("email.bounce.status_update_failed"));
+    }
+  }
+
+  private async alertSenderFailure(
+    source: string,
+    counts: { domains: number; recipients: number },
+  ): Promise<void> {
+    const now = new Date();
+    try {
+      const claimed = await this.prisma.emailBouncePollState.updateMany({
+        where: {
+          source,
+          OR: [
+            { lastSenderAlertAt: null },
+            {
+              lastSenderAlertAt: { lte: new Date(now.getTime() - 60 * 60_000) },
+            },
+          ],
+        },
+        data: { lastSenderAlertAt: now },
+      });
+      if (!claimed.count) return;
+      this.logger.error(
+        `email.bounce.sender_warning domains=${counts.domains} recipients=${counts.recipients} window=1h`,
+      );
+      const webhook = process.env.EMAIL_DELIVERY_ALERT_WEBHOOK_URL;
+      if (!webhook) return; // Structured error can also feed the existing log alerting pipeline.
+      const url = new URL(webhook);
+      if (url.protocol !== "https:" || url.username || url.password)
+        throw new Error("Invalid delivery alert webhook");
+      await axios.post(
+        webhook,
+        {
+          text: `Mark email delivery alert: ${counts.recipients} recipients across ${counts.domains} domains failed in the last hour. Temporary holds and recovery are automatic. Check the sender/relay configuration.`,
+        },
+        { timeout: 10_000, maxRedirects: 0 },
+      );
+    } catch {
+      // Do not expose webhook credentials or mark a successful bounce sweep as
+      // failed when the independent alert channel is unavailable.
+      this.logger.error("email.bounce.sender_alert_failed");
+      await this.prisma.emailBouncePollState
+        .updateMany({
+          where: { source, lastSenderAlertAt: now },
+          data: { lastSenderAlertAt: null },
+        })
+        .catch(() =>
+          this.logger.error("email.bounce.alert_status_update_failed"),
+        );
     }
   }
 }
