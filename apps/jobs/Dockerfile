@@ -44,10 +44,14 @@ ARG DIR
 ENV NODE_ENV=production
 WORKDIR ${DIR}
 
+# LibreOffice (headless) renders decks, documents and chart sheets to PDF so
+# the v3 grader can see them as a learner does.
 # hadolint ignore=DL3008
 RUN apt-get update -y \
   && apt-get install -y --no-install-recommends \
      dumb-init openssl ca-certificates \
+     libreoffice-writer-nogui libreoffice-calc-nogui libreoffice-impress-nogui \
+     fonts-dejavu-core fonts-liberation2 \
   && apt-get clean \
   && rm -rf /var/lib/apt/lists/*
 
