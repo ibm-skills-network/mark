@@ -22,6 +22,7 @@ import { winstonOptions } from "./logger/config";
 import { LoggerMiddleware } from "./logger/logger.middleware";
 import { MessagingModule } from "./messaging/messaging.module";
 import { routes } from "./routes";
+import { GradingV3AdminModule } from "./v3/grading/grading.module";
 import { V3Module } from "./v3/v3.module";
 
 @Module({
@@ -33,6 +34,7 @@ import { V3Module } from "./v3/v3.module";
     ApiModule,
     ScheduledTasksModule,
     V3Module,
+    GradingV3AdminModule,
     RouterModule.register(routes),
     MessagingModule,
     AuthModule,

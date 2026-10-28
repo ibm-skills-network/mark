@@ -12,6 +12,7 @@ const fixtures = {
   v3: join(root, "src/v3/__lint__/sample.ts"),
   legacy: join(root, "src/__lint__/sample.ts"),
   v3test: join(root, "test/v3/__lint__/sample.spec.ts"),
+  bridge: join(root, "src/grading-bridge/__lint__/sample.ts"),
 };
 
 const eslint = new ESLint({ cwd: root });
@@ -25,7 +26,12 @@ async function ruleIds(where: keyof typeof fixtures, code: string) {
 }
 
 afterEach(() => {
-  for (const dir of ["src/v3/__lint__", "src/__lint__", "test/v3/__lint__"]) {
+  for (const dir of [
+    "src/v3/__lint__",
+    "src/__lint__",
+    "test/v3/__lint__",
+    "src/grading-bridge/__lint__",
+  ]) {
     rmSync(join(root, dir), { recursive: true, force: true });
   }
 });
@@ -101,6 +107,25 @@ describe("v3 source boundaries", () => {
     );
     expect(ids).not.toContain("no-restricted-imports");
   });
+
+  it.each([
+    'import { SsrfSafeHttp } from "src/api/attempt/common/utils/ssrf-safe-http";\nexport { SsrfSafeHttp };',
+    'import { x } from "src/api/attempt/common/utils/learner-url.util";\nexport { x };',
+    'import { x } from "src/api/attempt/common/utils/github-content-fetch.util";\nexport { x };',
+    'import { AdminAuthModule } from "src/auth/admin-auth.module";\nexport { AdminAuthModule };',
+    'import { AdminVerificationService } from "src/auth/services/admin-verification.service";\nexport { AdminVerificationService };',
+  ])("accepts the nested allowlist entry %s", async (code) => {
+    expect(await ruleIds("v3", code)).not.toContain("no-restricted-imports");
+  });
+
+  it.each([
+    'import { x } from "src/api/attempt/common/utils/other.util";\nexport { x };',
+    'import { x } from "src/api/attempt/attempt.module";\nexport { x };',
+    'import { AdminGuard } from "src/auth/guards/admin.guard";\nexport { AdminGuard };',
+    'import { x } from "src/auth/services/admin-email.service";\nexport { x };',
+  ])("still rejects a neighbour of an allowlist entry: %s", async (code) => {
+    expect(await ruleIds("v3", code)).toContain("no-restricted-imports");
+  });
 });
 
 describe("legacy code does not import v3", () => {
@@ -108,6 +133,24 @@ describe("legacy code does not import v3", () => {
     expect(
       await ruleIds(
         "legacy",
+        'import { V3Module } from "src/v3/v3.module";\nexport { V3Module };',
+      ),
+    ).toContain("no-restricted-imports");
+  });
+
+  it("lets only the grading bridge import v3 grading", async () => {
+    const code =
+      'import { gradeQuestion } from "src/v3/grading/grade-question";\nexport { gradeQuestion };';
+    expect(await ruleIds("bridge", code)).not.toContain(
+      "no-restricted-imports",
+    );
+    expect(await ruleIds("legacy", code)).toContain("no-restricted-imports");
+  });
+
+  it("keeps the grading bridge off the rest of v3", async () => {
+    expect(
+      await ruleIds(
+        "bridge",
         'import { V3Module } from "src/v3/v3.module";\nexport { V3Module };',
       ),
     ).toContain("no-restricted-imports");

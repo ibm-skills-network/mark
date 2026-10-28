@@ -15,7 +15,6 @@ import { LlmModule } from "./llm/llm.module";
 import { ReportsModule } from "./report/report.module";
 import { SavedSessionsModule } from "./saved-sessions/saved-sessions.module";
 import { ChatModule } from "./user/modules/chat.module";
-import { GradingV3AdminModule } from "../v3/grading/grading.module";
 
 @Module({
   controllers: [ApiController, JobExecutorController],
@@ -33,7 +32,6 @@ import { GradingV3AdminModule } from "../v3/grading/grading.module";
     ChatModule,
     FilesModule,
     SavedSessionsModule,
-    GradingV3AdminModule,
   ],
 })
 export class ApiModule {}

@@ -30,7 +30,7 @@ import { TrueFalseGradingStrategy } from "./common/strategies/true-false-grading
 import { UrlGradingStrategy } from "./common/strategies/url-grading.strategy";
 import { LocalizationService } from "./common/utils/localization.service";
 import { GradingBridgeService } from "../../grading-bridge/hook";
-import { GradingV3Module } from "../../v3/grading/grading.module";
+import { GradingBridgeModule } from "../../grading-bridge/grading-bridge.module";
 import { LtiSyncModule } from "./lti-sync.module";
 import { AttemptFeedbackService } from "./services/attempt-feedback.service";
 import { AttemptAccessCacheModule } from "./services/attempt-access-cache.module";
@@ -59,7 +59,7 @@ import { TranslationService } from "./services/translation/translation.service";
     JobQueueModule,
     AdminAuthModule,
     AttemptAccessCacheModule,
-    GradingV3Module,
+    GradingBridgeModule,
   ],
   controllers: [AttemptControllerV2],
   providers: [

@@ -3,6 +3,13 @@ const V3_SHARED_ALLOWLIST = [
   "database/prisma.service",
   "database/database.module",
   "common/v3-scope",
+  // Security checks with one implementation: SSRF-safe fetching, learner URL
+  // rules, GitHub content fetching and admin session verification.
+  "api/attempt/common/utils/ssrf-safe-http",
+  "api/attempt/common/utils/learner-url.util",
+  "api/attempt/common/utils/github-content-fetch.util",
+  "auth/admin-auth.module",
+  "auth/services/admin-verification.service",
 ];
 
 const V3_BANNED_PACKAGES = [
@@ -16,21 +23,24 @@ const BANNED_LEGACY_MESSAGE =
   "v3 code must not import legacy modules; only the shared infrastructure allowlist is permitted.";
 
 // gitignore-style group: ban everything under `prefix`, then re-include v3
-// itself and the allowlist. A file can only be re-included when its parent
-// directories are re-included too, hence the per-directory lines.
+// itself and the allowlist. A file can only be re-included when every parent
+// directory is re-included too, so each ancestor of an allowlist entry is
+// re-included (shallowest first) with its own contents banned again.
 function bannedLegacyGroup(prefix) {
-  const dirs = [...new Set(V3_SHARED_ALLOWLIST.map((p) => p.split("/")[0]))];
+  const ancestors = [
+    ...new Set(
+      V3_SHARED_ALLOWLIST.flatMap((path) => {
+        const parts = path.split("/").slice(0, -1);
+        return parts.map((_, index) => parts.slice(0, index + 1).join("/"));
+      }),
+    ),
+  ].sort((a, b) => a.split("/").length - b.split("/").length);
   return [
     `${prefix}**`,
     `!${prefix}v3`,
     `!${prefix}v3/**`,
-    ...dirs.flatMap((dir) => [
-      `!${prefix}${dir}`,
-      `${prefix}${dir}/**`,
-      ...V3_SHARED_ALLOWLIST.filter((p) => p.startsWith(`${dir}/`)).map(
-        (p) => `!${prefix}${p}`,
-      ),
-    ]),
+    ...ancestors.flatMap((dir) => [`!${prefix}${dir}`, `${prefix}${dir}/**`]),
+    ...V3_SHARED_ALLOWLIST.map((path) => `!${prefix}${path}`),
   ];
 }
 
@@ -159,6 +169,7 @@ module.exports = {
       files: ["src/**/*.ts"],
       excludedFiles: [
         "src/v3/**",
+        "src/grading-bridge/**",
         "src/app.module.ts",
         "src/main.ts",
         "src/bootstrap/**",
@@ -171,6 +182,35 @@ module.exports = {
               {
                 group: ["src/v3", "src/v3/**", "**/v3", "**/v3/**"],
                 message: "Legacy code must not import v3 modules.",
+              },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      // The one seam between legacy grading and v3: it may use v3 grading,
+      // and nothing else in v3.
+      files: ["src/grading-bridge/**/*.ts"],
+      rules: {
+        "no-restricted-imports": [
+          "error",
+          {
+            patterns: [
+              {
+                group: [
+                  "src/v3/**",
+                  "!src/v3/grading",
+                  "!src/v3/grading/**",
+                  "../v3/**",
+                  "!../v3/grading",
+                  "!../v3/grading/**",
+                  "../../v3/**",
+                  "!../../v3/grading",
+                  "!../../v3/grading/**",
+                ],
+                message:
+                  "The grading bridge may import v3 grading only, not the rest of v3.",
               },
             ],
           },
