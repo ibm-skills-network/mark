@@ -7,6 +7,7 @@ import {
 import {
   addUsage,
   type CheckFailure,
+  type GradingDebug,
   gradingInputSchema,
   type GradingEffort,
   type GradingFailure,
@@ -28,6 +29,7 @@ import {
 } from "./limits";
 import {
   DEFAULT_MATERIALIZE_LIMITS,
+  estimatePartTokens,
   estimatePartsTokens,
   materialize,
   type MaterializeDeps,
@@ -62,6 +64,12 @@ export interface GradeDeps {
   /** Per-question ceiling on estimated spend; over it, no model call. */
   costCeilingUsd?: number;
   now?: () => number;
+  /**
+   * Spike/admin only: request the model's reasoning summary and return a
+   * debug block (parts sent, raw output, per-quote checks). Never logged;
+   * learner grading never sets it.
+   */
+  debug?: boolean;
 }
 
 const OUTPUT_SCHEMA_NAME = "rubric_grade";
@@ -111,6 +119,26 @@ export async function gradeWithV3(
   const effort: GradingEffort = input.effort;
   let usage: GradingUsage = ZERO_USAGE;
   let model: string | undefined;
+  const reasoningSummary: string[] = [];
+  const rawOutputs: string[] = [];
+  const debugBlock = (
+    quoteChecks: GradingDebug["quoteChecks"],
+  ): { debug?: GradingDebug } =>
+    deps.debug
+      ? {
+          debug: {
+            reasoningSummary: [...reasoningSummary],
+            parts: input.parts.map((part) => ({
+              name: part.name,
+              kind: part.kind,
+              ...(part.mimeType ? { mimeType: part.mimeType } : {}),
+              estimatedTokens: estimatePartTokens(part),
+            })),
+            rawOutputs: [...rawOutputs],
+            quoteChecks,
+          },
+        }
+      : {};
 
   const fail = (
     code: GradingFailureCode,
@@ -126,6 +154,7 @@ export async function gradeWithV3(
       model,
       effort,
       promptVersion: PROMPT_VERSION,
+      ...debugBlock([]),
       ...extra,
     };
     deps.logger.warn("grading.v3.failed", {
@@ -198,10 +227,15 @@ export async function gradeWithV3(
         schemaName: OUTPUT_SCHEMA_NAME,
         jsonSchema: OUTPUT_JSON_SCHEMA,
         maxOutputTokens: MAX_OUTPUT_TOKENS,
+        ...(deps.debug ? { reasoningSummary: true } : {}),
       });
       usage = addUsage(usage, response.usage);
       model = response.model;
       outputText = response.outputText;
+      if (deps.debug) {
+        rawOutputs.push(outputText);
+        reasoningSummary.push(...(response.reasoningSummary ?? []));
+      }
     } catch (error) {
       deps.logger.error("grading.v3.model_call_failed", {
         ...context,
@@ -266,6 +300,7 @@ export async function gradeWithV3(
           effort,
           promptVersion: PROMPT_VERSION,
           checkFailures,
+          ...debugBlock(checked.quoteChecks),
         },
       };
     }

@@ -125,6 +125,37 @@ export const checkFailureSchema = z.object({
 });
 export type CheckFailure = z.infer<typeof checkFailureSchema>;
 
+/**
+ * Spike/admin debug block, returned only when a caller asks for it. Holds
+ * model output about learner content, so it is never logged or persisted.
+ */
+export const gradingDebugSchema = z.object({
+  /** The model's reasoning summary, every attempt in order. */
+  reasoningSummary: z.array(z.string()),
+  /** The parts as sent, without their content. */
+  parts: z.array(
+    z.object({
+      name: z.string(),
+      kind: z.enum(PART_KINDS),
+      mimeType: z.string().optional(),
+      estimatedTokens: z.number(),
+    }),
+  ),
+  /** Raw model JSON per attempt, before any check. */
+  rawOutputs: z.array(z.string()),
+  /** Each quote's outcome and the rule that decided it. */
+  quoteChecks: z.array(
+    z.object({
+      criterionId: z.string(),
+      part: z.string(),
+      accepted: z.boolean(),
+      rule: z.string().optional(),
+      code: z.string().optional(),
+    }),
+  ),
+});
+export type GradingDebug = z.infer<typeof gradingDebugSchema>;
+
 export const gradingResultSchema = z.object({
   verdicts: z.array(criterionVerdictSchema),
   totalPoints: z.number(),
@@ -134,6 +165,7 @@ export const gradingResultSchema = z.object({
   effort: gradingEffortSchema,
   promptVersion: z.string(),
   checkFailures: z.array(checkFailureSchema),
+  debug: gradingDebugSchema.optional(),
 });
 export type GradingResult = z.infer<typeof gradingResultSchema>;
 
@@ -158,6 +190,7 @@ export interface GradingFailure {
   promptVersion: string;
   estimatedTokens?: number;
   tokenBudget?: number;
+  debug?: GradingDebug;
 }
 
 export type GradingOutcome =

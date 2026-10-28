@@ -18,6 +18,8 @@ import { PrismaService } from "src/database/prisma.service";
 import type { GradingFailure, GradingOutcome } from "../v3/grading/contracts";
 import { GradingModeService, type ResolvedMode } from "../v3/grading/mode";
 import { V3GradingService } from "../v3/grading/v3-grading.service";
+import { toLegacyResponse } from "./from-v3-result";
+import { toGradingQuestion } from "./to-v3-input";
 import { GradingBridgeService, V3GradingFailedError } from "./hook";
 
 type GradeResult = {
@@ -478,5 +480,38 @@ describe("GradingBridgeService", () => {
       Bucket: "b",
       Key: "12/u/77/a.txt",
     });
+  });
+});
+
+describe("toLegacyResponse", () => {
+  it("never carries a debug block into what gets saved", () => {
+    const responseDto = toLegacyResponse(
+      {
+        verdicts: [],
+        totalPoints: 0,
+        overallFeedback: "ok",
+        usage: {
+          inputTokens: 0,
+          cachedInputTokens: 0,
+          outputTokens: 0,
+          reasoningTokens: 0,
+        },
+        model: "m",
+        effort: "low",
+        promptVersion: "grade.v2",
+        checkFailures: [],
+        debug: {
+          reasoningSummary: ["private reasoning"],
+          parts: [],
+          rawOutputs: ["raw model json"],
+          quoteChecks: [],
+        },
+      },
+      toGradingQuestion(question, "low"),
+      mode("live"),
+    );
+    const saved = JSON.stringify(responseDto);
+    expect(saved).not.toContain("private reasoning");
+    expect(saved).not.toContain("raw model json");
   });
 });

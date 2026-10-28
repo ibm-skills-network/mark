@@ -12,11 +12,15 @@
  *     "responseText": "...", "urls": ["https://..."] }
  * File paths are relative to the case file. --dry-run materializes and
  * estimates without calling the model. Needs OPENAI_API_KEY otherwise.
+ * --debug asks the model for its reasoning summary and writes each run's
+ * debug block (parts sent, raw output, quote checks) into the results file;
+ * with --dry-run it writes the parts list only.
  */
 import { readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import {
+  type GradingDebug,
   type GradingEffort,
   gradingEffortSchema,
   type GradingLogger,
@@ -27,7 +31,11 @@ import { fetchUrlAsParts } from "../fetch-url";
 import { gradeWithV3 } from "../grade-question";
 import { htmlToMarkdown, looksLikeHtml } from "../html-text";
 import { estimateCallCostUsd, estimateCostUsd } from "../limits";
-import { materialize, type SubmissionFile } from "../materialize";
+import {
+  estimatePartTokens,
+  materialize,
+  type SubmissionFile,
+} from "../materialize";
 import { OpenAiGradingModelClient } from "../model-client";
 
 const caseSchema = z.object({
@@ -58,6 +66,7 @@ interface Options {
   out: string;
   model?: string;
   verbose: boolean;
+  debug: boolean;
 }
 
 function parseArguments(argv: string[]): Options {
@@ -68,7 +77,7 @@ function parseArguments(argv: string[]): Options {
   const casesDirectory = value("--cases");
   if (!casesDirectory) {
     throw new Error(
-      "usage: spike-runner --cases <dir> [--effort low,medium] [--runs 1] [--dry-run] [--max-cost 1] [--out file] [--model id] [--verbose]",
+      "usage: spike-runner --cases <dir> [--effort low,medium] [--runs 1] [--dry-run] [--max-cost 1] [--out file] [--model id] [--verbose] [--debug]",
     );
   }
   const efforts = (value("--effort") ?? "low")
@@ -90,6 +99,7 @@ function parseArguments(argv: string[]): Options {
     out: value("--out") ?? `spike-results-${Date.now()}.json`,
     model: value("--model"),
     verbose: argv.includes("--verbose"),
+    debug: argv.includes("--debug"),
   };
 }
 
@@ -160,6 +170,7 @@ interface RunRow {
   latencyMs: number;
   outcome?: GradingOutcome;
   materializeError?: string;
+  debug?: GradingDebug | Pick<GradingDebug, "parts">;
 }
 
 function printTable(rows: RunRow[]): void {
@@ -273,6 +284,18 @@ async function main(): Promise<void> {
           points: "-",
           estimatedTokens,
           costUsd: estimateCallCostUsd(estimatedTokens),
+          ...(options.debug
+            ? {
+                debug: {
+                  parts: materialized.parts.map((part) => ({
+                    name: part.name,
+                    kind: part.kind,
+                    ...(part.mimeType ? { mimeType: part.mimeType } : {}),
+                    estimatedTokens: estimatePartTokens(part),
+                  })),
+                },
+              }
+            : {}),
         });
         continue;
       }
@@ -297,8 +320,13 @@ async function main(): Promise<void> {
             client,
             logger,
             context: { questionId: spikeCase.input.questionId, mode: "spike" },
+            debug: options.debug,
           },
         );
+        const debug =
+          outcome.status === "graded"
+            ? outcome.result.debug
+            : outcome.failure.debug;
         const usage =
           outcome.status === "graded"
             ? outcome.result.usage
@@ -322,6 +350,7 @@ async function main(): Promise<void> {
           costUsd,
           latencyMs: Date.now() - started,
           outcome,
+          ...(debug ? { debug } : {}),
         });
       }
       if (aborted) break;

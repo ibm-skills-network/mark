@@ -24,6 +24,8 @@ export interface GradingModelRequest {
   jsonSchema: Record<string, unknown>;
   /** Cap on reasoning plus answer tokens. */
   maxOutputTokens: number;
+  /** Ask for a detailed reasoning summary (debug runs only). */
+  reasoningSummary?: boolean;
 }
 
 export interface GradingModelResponse {
@@ -31,6 +33,8 @@ export interface GradingModelResponse {
   outputText: string;
   usage: GradingUsage;
   model: string;
+  /** Reasoning summary texts, when the request asked for them. */
+  reasoningSummary?: string[];
 }
 
 /** The one call v3 grading makes to a model. Tests use a fake. */
@@ -104,7 +108,9 @@ export function toResponsesRequest(
   return {
     model,
     input: request.messages.map((message) => toInputItem(message)),
-    reasoning: { effort: request.effort },
+    reasoning: request.reasoningSummary
+      ? { effort: request.effort, summary: "detailed" }
+      : { effort: request.effort },
     max_output_tokens: request.maxOutputTokens,
     store: false,
     text: {
@@ -186,8 +192,15 @@ export class OpenAiGradingModelClient implements GradingModelClient {
       throw new GradingModelOutputError("model returned no text");
     }
     const usage = response.usage;
+    const reasoningSummary = request.reasoningSummary
+      ? response.output
+          .flatMap((item) => (item.type === "reasoning" ? item.summary : []))
+          .filter((summary) => summary.type === "summary_text")
+          .map((summary) => summary.text)
+      : undefined;
     return {
       outputText,
+      ...(reasoningSummary ? { reasoningSummary } : {}),
       model: response.model ?? this.model,
       usage: {
         inputTokens: usage?.input_tokens ?? 0,

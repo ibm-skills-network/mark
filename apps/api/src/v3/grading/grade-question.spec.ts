@@ -1,3 +1,4 @@
+import type OpenAI from "openai";
 import type { GradingInput, ModelGradeOutput } from "./contracts";
 import { gradeSubmission, gradeWithV3 } from "./grade-question";
 import { MAX_OUTPUT_TOKENS } from "./limits";
@@ -5,6 +6,7 @@ import {
   type GradingModelClient,
   type GradingModelRequest,
   GradingModelUnavailableError,
+  OpenAiGradingModelClient,
   toResponsesRequest,
 } from "./model-client";
 import {
@@ -24,6 +26,7 @@ class FakeClient implements GradingModelClient {
   readonly requests: GradingModelRequest[] = [];
   constructor(
     private readonly replies: Array<ModelGradeOutput | string | Error>,
+    private readonly reasoningSummary?: string[],
   ) {}
   complete(request: GradingModelRequest) {
     this.requests.push(request);
@@ -34,6 +37,9 @@ class FakeClient implements GradingModelClient {
       outputText: typeof reply === "string" ? reply : JSON.stringify(reply),
       usage,
       model: "fake-model",
+      ...(request.reasoningSummary && this.reasoningSummary
+        ? { reasoningSummary: this.reasoningSummary }
+        : {}),
     });
   }
 }
@@ -360,5 +366,138 @@ describe("prompt and request", () => {
         ],
       },
     ]);
+  });
+});
+
+describe("debug mode", () => {
+  const summary = ["Looked for the answer in part answer.", "Found 42."];
+
+  it("is off by default: no summary requested and no debug block", async () => {
+    const client = new FakeClient([good], summary);
+    const outcome = await gradeWithV3(input, { client, logger: logger() });
+    expect(client.requests[0].reasoningSummary).toBeFalsy();
+    expect(outcome.status).toBe("graded");
+    if (outcome.status === "graded") {
+      expect(Object.keys(outcome.result)).not.toContain("debug");
+    }
+  });
+
+  it("requests the reasoning summary and returns parts, raw output and quote checks", async () => {
+    const withMadeUpQuote: ModelGradeOutput = {
+      ...good,
+      verdicts: [
+        good.verdicts[0],
+        {
+          ...good.verdicts[1],
+          quotes: [{ part: "answer", text: "six sevens are forty-two" }],
+        },
+      ],
+    };
+    const client = new FakeClient([withMadeUpQuote], summary);
+    const log = logger();
+    const outcome = await gradeWithV3(input, {
+      client,
+      logger: log,
+      debug: true,
+    });
+    expect(client.requests[0].reasoningSummary).toBe(true);
+    if (outcome.status !== "graded") throw new Error("expected graded");
+    expect(outcome.result.debug).toEqual({
+      reasoningSummary: summary,
+      parts: [
+        {
+          name: "answer",
+          kind: "text",
+          estimatedTokens: expect.any(Number) as number,
+        },
+      ],
+      rawOutputs: [JSON.stringify(withMadeUpQuote)],
+      quoteChecks: [
+        { criterionId: "c1", part: "answer", accepted: true, rule: "verbatim" },
+        {
+          criterionId: "c2",
+          part: "answer",
+          accepted: false,
+          code: "quote_not_found",
+        },
+      ],
+    });
+    // Debug content never reaches the logs.
+    const logged = JSON.stringify([
+      log.debug.mock.calls,
+      log.info.mock.calls,
+      log.warn.mock.calls,
+      log.error.mock.calls,
+    ]);
+    expect(logged).not.toContain("Found 42.");
+    expect(logged).not.toContain("six sevens");
+  });
+
+  it("returns the debug block on a check failure too", async () => {
+    const client = new FakeClient(["not json", "still not json"], summary);
+    const outcome = await gradeWithV3(input, {
+      client,
+      logger: logger(),
+      debug: true,
+    });
+    if (outcome.status !== "failed") throw new Error("expected failed");
+    expect(outcome.failure.debug?.rawOutputs).toEqual([
+      "not json",
+      "still not json",
+    ]);
+    expect(outcome.failure.debug?.reasoningSummary).toEqual([
+      ...summary,
+      ...summary,
+    ]);
+  });
+
+  it("adds summary: detailed to the Responses request only when asked", () => {
+    const base: GradingModelRequest = {
+      messages: [],
+      effort: "low",
+      schemaName: "s",
+      jsonSchema: {},
+      maxOutputTokens: 100,
+    };
+    expect(toResponsesRequest(base, "m").reasoning).toEqual({ effort: "low" });
+    expect(
+      toResponsesRequest({ ...base, reasoningSummary: true }, "m").reasoning,
+    ).toEqual({ effort: "low", summary: "detailed" });
+  });
+
+  it("reads summary_text from the response's reasoning items", async () => {
+    const create = jest.fn().mockResolvedValue({
+      status: "completed",
+      model: "m",
+      output_text: "{}",
+      output: [
+        {
+          type: "reasoning",
+          id: "r1",
+          summary: [
+            { type: "summary_text", text: "first" },
+            { type: "summary_text", text: "second" },
+          ],
+        },
+        { type: "message", content: [{ type: "output_text", text: "{}" }] },
+      ],
+      usage: { input_tokens: 1, output_tokens: 1 },
+    });
+    const fakeOpenAi = { responses: { create } } as unknown as OpenAI;
+    const client = new OpenAiGradingModelClient({ client: fakeOpenAi });
+    const request: GradingModelRequest = {
+      messages: [],
+      effort: "low",
+      schemaName: "s",
+      jsonSchema: {},
+      maxOutputTokens: 100,
+    };
+    const plain = await client.complete(request);
+    expect(plain.reasoningSummary).toBeUndefined();
+    const withSummary = await client.complete({
+      ...request,
+      reasoningSummary: true,
+    });
+    expect(withSummary.reasoningSummary).toEqual(["first", "second"]);
   });
 });
