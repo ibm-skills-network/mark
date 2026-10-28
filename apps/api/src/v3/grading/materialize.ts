@@ -2,6 +2,7 @@ import * as mammoth from "mammoth";
 import { Open as OpenZip } from "unzipper";
 import * as XLSX from "xlsx";
 import type { Part } from "./contracts";
+import { describeWorkbookCharts } from "./formats/xlsx-charts";
 import {
   abridgeTable,
   abridgeText,
@@ -364,70 +365,6 @@ function sheetToText(
   return { csv: lines.join("\n"), formulas };
 }
 
-const CHART_TYPE_PATTERN =
-  /<c:(bar|bar3D|line|line3D|pie|pie3D|doughnut|area|area3D|scatter|radar|bubble|stock|surface|surface3D|ofPie)Chart>/g;
-
-function xmlText(fragment: string): string {
-  return [...fragment.matchAll(/<a:t>([^<]*)<\/a:t>/g)]
-    .map((match) => match[1])
-    .join("")
-    .trim();
-}
-
-function firstReference(fragment: string, tag: string): string | undefined {
-  const block = new RegExp(`<c:${tag}>([\\s\\S]*?)</c:${tag}>`).exec(fragment);
-  if (!block) return undefined;
-  return /<c:f>([^<]*)<\/c:f>/.exec(block[1])?.[1];
-}
-
-/** Chart type, title and series ranges from xl/charts/*.xml. */
-export function describeChartXml(xml: string): string {
-  const types = [
-    ...new Set([...xml.matchAll(CHART_TYPE_PATTERN)].map((match) => match[1])),
-  ];
-  const titleBlock = /<c:title>([\S\s]*?)<\/c:title>/.exec(xml);
-  const title = titleBlock ? xmlText(titleBlock[1]) : "";
-  const series = [...xml.matchAll(/<c:ser>([\S\s]*?)<\/c:ser>/g)].map(
-    (match, index) => {
-      const body = match[1];
-      const name =
-        firstReference(body, "tx") ?? xmlText(body.split("<c:cat>")[0]);
-      const categories =
-        firstReference(body, "cat") ?? firstReference(body, "xVal");
-      const values =
-        firstReference(body, "val") ?? firstReference(body, "yVal");
-      return `  series ${index + 1}: name=${name || "(none)"} categories=${categories ?? "(none)"} values=${values ?? "(none)"}`;
-    },
-  );
-  return [
-    `type: ${types.length > 0 ? types.join(", ") : "unknown"}`,
-    `title: ${title || "(none)"}`,
-    ...series,
-  ].join("\n");
-}
-
-const MAX_CHARTS = 50;
-const MAX_CHART_XML_BYTES = 2 * 1024 * 1024;
-
-async function describeCharts(buffer: Buffer): Promise<string | undefined> {
-  const directory = await OpenZip.buffer(buffer);
-  const charts = directory.files
-    .filter((entry) => /^xl\/charts\/chart\d+\.xml$/.test(entry.path))
-    .slice(0, MAX_CHARTS);
-  if (charts.length === 0) return undefined;
-  const described: string[] = [];
-  for (const entry of charts) {
-    if (entry.uncompressedSize > MAX_CHART_XML_BYTES) {
-      described.push(`${entry.path}: too large to read`);
-      continue;
-    }
-    const bytes = await entry.buffer();
-    const xml = bytes.toString("utf8");
-    described.push(`${entry.path}\n${describeChartXml(xml)}`);
-  }
-  return described.join("\n\n");
-}
-
 async function spreadsheetToParts(
   name: string,
   buffer: Buffer,
@@ -481,7 +418,7 @@ async function spreadsheetToParts(
   if (extension !== "xls") {
     let charts: string | undefined;
     try {
-      charts = await describeCharts(buffer);
+      charts = await describeWorkbookCharts(buffer);
     } catch (error) {
       // Visible to the model rather than dropped: the sheets still grade.
       charts = `charts could not be read: ${error instanceof Error ? error.message : "unknown error"}`;

@@ -4,7 +4,6 @@ import type { Part } from "./contracts";
 import {
   bytesToParts,
   DEFAULT_MATERIALIZE_LIMITS,
-  describeChartXml,
   materialize,
   type MaterializeLimits,
   notebookToText,
@@ -163,16 +162,29 @@ describe("materialize: formats", () => {
     expect(text).toContain("[image output (image/png) not included]");
   });
 
-  it("describes chart type, title and series ranges", () => {
-    const xml =
-      "<c:chart><c:title><c:tx><c:rich><a:p><a:r><a:t>Sales</a:t></a:r></a:p></c:rich></c:tx></c:title>" +
-      "<c:plotArea><c:barChart><c:ser><c:tx><c:strRef><c:f>Totals!$B$1</c:f></c:strRef></c:tx>" +
-      "<c:cat><c:strRef><c:f>Totals!$A$2:$A$3</c:f></c:strRef></c:cat>" +
-      "<c:val><c:numRef><c:f>Totals!$B$2:$B$3</c:f></c:numRef></c:val></c:ser></c:barChart></c:plotArea></c:chart>";
-    const described = describeChartXml(xml);
-    expect(described).toContain("type: bar");
-    expect(described).toContain("title: Sales");
-    expect(described).toContain("values=Totals!$B$2:$B$3");
+  it("adds a charts part naming each chart's kind and sheet", async () => {
+    const zip = await JSZip.loadAsync(workbookBuffer());
+    zip.file(
+      "xl/worksheets/_rels/sheet2.xml.rels",
+      '<Relationships><Relationship Id="rId9" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/drawing1.xml"/></Relationships>',
+    );
+    zip.file(
+      "xl/drawings/_rels/drawing1.xml.rels",
+      '<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart1.xml"/></Relationships>',
+    );
+    zip.file(
+      "xl/charts/chart1.xml",
+      '<c:chartSpace><c:chart><c:plotArea><c:barChart><c:barDir val="col"/><c:ser><c:tx><c:v>qty</c:v></c:tx><c:val><c:numRef><c:f>Totals!$B$2:$B$3</c:f></c:numRef></c:val></c:ser></c:barChart></c:plotArea><c:legend/></c:chart></c:chartSpace>',
+    );
+    const buffer = await zip.generateAsync({ type: "nodebuffer" });
+    const { parts } = await ok(
+      materialize({ files: [file("budget.xlsx", buffer)] }),
+    );
+    const charts = textOf(parts, "budget.xlsx (charts)");
+    expect(charts).toContain('chart 1 (on sheet "Totals")');
+    expect(charts).toContain("type: column chart");
+    expect(charts).toContain("legend: yes");
+    expect(charts).toContain("values=Totals!$B$2:$B$3");
   });
 });
 
