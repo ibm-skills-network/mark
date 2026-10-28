@@ -1138,6 +1138,35 @@ model EmailSuppression {
   updatedAt DateTime               @updatedAt
 }
 
+/// Retained when an admin lifts a suppression; late reports before this time
+/// must not undo that decision.
+model EmailSuppressionRelease {
+  email      String   @id
+  releasedAt DateTime
+  releasedBy String
+}
+
+/// IBM metrics have no event ID. id is a fingerprint of the source row.
+model EmailBounceEvent {
+  id           String   @id
+  source       String
+  email        String
+  domain       String
+  reason       String
+  occurredAt   DateTime
+  ingestedAt   DateTime @default(now())
+
+  @@index([source, occurredAt])
+}
+
+model EmailBouncePollState {
+  source          String    @id
+  leaseToken      String?
+  leaseUntil      DateTime?
+  lastSuccessAt   DateTime?
+  lastError       String?
+}
+
 /// Quiz session tokens a browser saved so it can resume an earlier launch
 model SavedSession {
   storeId      String /// GUID held in the browser's saved-session cookie

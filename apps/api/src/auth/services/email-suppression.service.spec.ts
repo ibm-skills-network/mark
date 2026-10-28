@@ -4,6 +4,9 @@ import { EmailSuppressionService } from "./email-suppression.service";
 
 describe("EmailSuppressionService", () => {
   const prisma = {
+    $transaction: jest.fn(),
+    $executeRaw: jest.fn(),
+    emailSuppressionRelease: { upsert: jest.fn() },
     emailSuppression: {
       findUnique: jest.fn(),
       upsert: jest.fn(),
@@ -16,7 +19,10 @@ describe("EmailSuppressionService", () => {
     prisma as unknown as PrismaService,
   );
 
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    prisma.$transaction.mockImplementation((callback) => callback(prisma));
+  });
 
   it("matches addresses case-insensitively", async () => {
     prisma.emailSuppression.findUnique.mockResolvedValue({ id: 1 });
@@ -83,10 +89,22 @@ describe("EmailSuppressionService", () => {
   });
 
   it("reports whether a suppression was removed", async () => {
+    prisma.emailSuppression.findUnique.mockResolvedValueOnce({
+      email: "gone@example.com",
+    });
     prisma.emailSuppression.deleteMany.mockResolvedValueOnce({ count: 1 });
     await expect(service.remove(3, "admin@example.com")).resolves.toBe(true);
+    expect(prisma.emailSuppressionRelease.upsert).toHaveBeenCalledWith({
+      where: { email: "gone@example.com" },
+      create: {
+        email: "gone@example.com",
+        releasedAt: expect.any(Date),
+        releasedBy: "admin@example.com",
+      },
+      update: { releasedAt: expect.any(Date), releasedBy: "admin@example.com" },
+    });
 
-    prisma.emailSuppression.deleteMany.mockResolvedValueOnce({ count: 0 });
+    prisma.emailSuppression.findUnique.mockResolvedValueOnce(null);
     await expect(service.remove(4, "admin@example.com")).resolves.toBe(false);
   });
 });

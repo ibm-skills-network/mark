@@ -26,8 +26,8 @@ import {
 
 @ApiTags("Admin Email Suppressions")
 // Addresses Mark will not email. Permanent bounces seen at send time are
-// added automatically; bounce and complaint notices that arrive later are
-// entered here. AdminGuard covers the whole controller and lives under
+// added automatically, including invalid mailboxes from IBM bounce polling.
+// AdminGuard covers the whole controller and lives under
 // "admin-dashboard/..." for the same gateway routing as AttemptAdminController.
 @UseGuards(AdminGuard)
 @ApiBearerAuth()
@@ -43,6 +43,12 @@ export class EmailSuppressionController {
   private readonly logger = new Logger(EmailSuppressionController.name);
 
   constructor(private readonly suppressions: EmailSuppressionService) {}
+
+  @Get("bounce-health")
+  @ApiOperation({ summary: "Bounce poll status and domain warnings (ADMIN)" })
+  bounceHealth() {
+    return this.suppressions.bounceHealth();
+  }
 
   @Get()
   @ApiOperation({ summary: "List suppressed email addresses (ADMIN)" })

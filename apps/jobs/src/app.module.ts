@@ -3,6 +3,9 @@ import { ConfigModule } from "@nestjs/config";
 import { WinstonModule } from "nest-winston";
 import { winstonOptions } from "./logger.config";
 import { JobWorkerService } from "./job-worker.service";
+import { EmailBouncePoller } from "./email-bounce-poller.service";
+import { IbmBounceClient } from "../../api/src/auth/services/ibm-bounce-client";
+import { AdminAuthModule } from "../../api/src/auth/admin-auth.module";
 
 // Provider source modules (all @Global where applicable, but explicit imports keep intent clear)
 import { AiFeatureFlagsModule } from "../../api/src/api/ai-feature-flags/ai-feature-flags.module";
@@ -50,9 +53,12 @@ import { JobExecutorService } from "../../api/src/job-queue/job-executor.service
     FileProcessingBudgetModule,
     // Runs the saved-session prune cron; mark-api has schedulers off.
     SavedSessionsModule,
+    AdminAuthModule,
   ],
   providers: [
     JobWorkerService,
+    EmailBouncePoller,
+    IbmBounceClient,
     JobExecutorService,
     {
       provide: TRANSLATION_MAINTENANCE_JOB_RUNNER,

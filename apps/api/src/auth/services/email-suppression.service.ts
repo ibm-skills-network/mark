@@ -1,6 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { EmailSuppression, EmailSuppressionReason } from "@prisma/client";
 import { PrismaService } from "../../database/prisma.service";
+import { BounceEvent, bounceSource, DAY_MS } from "./email-bounce-source";
 
 const MAX_DETAIL_LENGTH = 500;
 
@@ -94,12 +95,92 @@ export class EmailSuppressionService {
 
   /** Returns false when no suppression has that id. */
   async remove(id: number, removedBy: string): Promise<boolean> {
-    const { count } = await this.prisma.emailSuppression.deleteMany({
-      where: { id },
+    const count = await this.prisma.$transaction(async (transaction) => {
+      // Shared with ingestion, so a release cannot race a late bounce report.
+      await transaction.$executeRaw`SELECT pg_advisory_xact_lock(68301828)`;
+      const row = await transaction.emailSuppression.findUnique({
+        where: { id },
+      });
+      if (!row) return 0;
+      const releasedAt = new Date();
+      await transaction.emailSuppressionRelease.upsert({
+        where: { email: row.email },
+        create: { email: row.email, releasedAt, releasedBy: removedBy },
+        update: { releasedAt, releasedBy: removedBy },
+      });
+      const deleted = await transaction.emailSuppression.deleteMany({
+        where: { id },
+      });
+      return deleted.count;
     });
     if (count > 0) {
       this.logger.warn(`email.suppression.removed id=${id} by=${removedBy}`);
     }
     return count > 0;
+  }
+
+  async recordBounce(event: BounceEvent): Promise<void> {
+    await this.prisma.$transaction(async (transaction) => {
+      await transaction.$executeRaw`SELECT pg_advisory_xact_lock(68301828)`;
+      const inserted = await transaction.emailBounceEvent.createMany({
+        data: [event],
+        skipDuplicates: true,
+      });
+      if (!inserted.count || event.reason !== "UNKNOWN_USER") return;
+      const release = await transaction.emailSuppressionRelease.findUnique({
+        where: { email: event.email },
+      });
+      if (release && event.occurredAt <= release.releasedAt) return;
+      await transaction.emailSuppression.upsert({
+        where: { email: event.email },
+        create: {
+          email: event.email,
+          reason: EmailSuppressionReason.HARD_BOUNCE,
+          detail: `IBM UNKNOWN_USER at ${event.occurredAt.toISOString()}; event=${event.id}`,
+          createdBy: "system:ibm-bounce",
+        },
+        update: {},
+      });
+    });
+  }
+
+  async bounceHealth() {
+    const source = bounceSource();
+    if (!source)
+      return {
+        configured: false,
+        lastSuccessAt: null,
+        lastError: null,
+        stale: true,
+        domains: [],
+      };
+    const now = new Date();
+    const since = new Date(now.getTime() - 7 * DAY_MS);
+    // Prisma stores DateTime as UTC timestamp without time zone. Cast ISO
+    // strings explicitly so raw-query parameters cannot pick up the DB's zone.
+    const [state, domains] = await Promise.all([
+      this.prisma.emailBouncePollState.findUnique({ where: { source } }),
+      this.prisma.$queryRaw<
+        { domain: string; recipients: number; lastBounceAt: Date }[]
+      >`
+        SELECT "domain", COUNT(DISTINCT "email")::int AS "recipients", MAX("occurredAt") AS "lastBounceAt"
+        FROM "EmailBounceEvent"
+        WHERE "source" = ${source}
+          AND "occurredAt" >= ${since.toISOString()}::timestamp
+          AND "occurredAt" <= ${now.toISOString()}::timestamp
+          AND "reason" IN ('MESSAGE_REFUSED', 'UNKNOWN_ERROR')
+        GROUP BY "domain" HAVING COUNT(DISTINCT "email") >= 3
+        ORDER BY "recipients" DESC, "domain" ASC
+      `,
+    ]);
+    return {
+      configured: true,
+      lastSuccessAt: state?.lastSuccessAt ?? null,
+      lastError: state?.lastError ?? null,
+      stale:
+        !state?.lastSuccessAt ||
+        now.getTime() - state.lastSuccessAt.getTime() > 45 * 60_000,
+      domains,
+    };
   }
 }
