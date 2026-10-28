@@ -1,23 +1,19 @@
-import {
-  BadRequestException,
-  Body,
-  ConflictException,
-  Controller,
-  Get,
-  Inject,
-  Put,
-  Req,
-  UseGuards,
-} from "@nestjs/common";
-import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
-import { Throttle, ThrottlerGuard } from "@nestjs/throttler";
+import { Body, Get, Put } from "@nestjs/common";
+import { Throttle } from "@nestjs/throttler";
 import { Prisma, QuestionType } from "@prisma/client";
-import { WINSTON_MODULE_PROVIDER } from "nest-winston";
-import { Logger } from "winston";
 import { z } from "zod";
-import { AdminGuard } from "../../../auth/guards/admin.guard";
-import type { UserSessionRequest } from "../../../auth/interfaces/user.session.interface";
 import { PrismaService } from "../../../database/prisma.service";
+import { UseAdmin } from "../../core/admin.guard";
+import { V3Error } from "../../core/errors";
+import type { Principal } from "../../core/principal";
+import { UseV3Throttle } from "../../core/throttle.guard";
+import { V3Principal } from "../../core/principal.guard";
+import {
+  V3Controller,
+  V3Route,
+} from "../../core/v3-controller.decorator";
+import { V3Logger } from "../../core/v3-logger";
+import { ZodPipe } from "../../core/zod.pipe";
 import { gradingEffortSchema } from "../contracts";
 import {
   GradingModeService,
@@ -38,6 +34,16 @@ export const putGradingModeSchema = z.strictObject({
 });
 export type PutGradingModeBody = z.infer<typeof putGradingModeSchema>;
 
+const modeRowSchema = z.object({
+  id: z.number(),
+  questionType: z.enum(v3QuestionTypes),
+  assignmentId: z.number().nullable(),
+  mode: gradingModeSchema,
+  effort: gradingEffortSchema.nullable(),
+  updatedBy: z.string(),
+  updatedAt: z.string(),
+});
+
 const rowSelect = {
   id: true,
   questionType: true,
@@ -48,74 +54,68 @@ const rowSelect = {
   updatedAt: true,
 } as const;
 
+type Row = Prisma.GradingModeConfigGetPayload<{ select: typeof rowSelect }>;
+
+function toResponse(row: Row): z.input<typeof modeRowSchema> {
+  return { ...row, updatedAt: row.updatedAt.toISOString() } as z.input<
+    typeof modeRowSchema
+  >;
+}
+
 /**
- * Runtime switches for v3 grading. AdminGuard rejects every non-admin
- * session; writes are throttled and logged with before and after.
+ * Runtime switches for v3 grading at /api/v3/admin/grading-modes. Admin
+ * sessions only; writes are throttled and logged with before and after.
  */
-@ApiTags("Admin v3 grading modes")
-@ApiBearerAuth()
-@UseGuards(AdminGuard, ThrottlerGuard)
-@Controller({ path: "admin/grading-modes", version: "3" })
+@V3Controller("admin/grading-modes")
+// Decorators apply bottom-up: the admin guard runs first, then the limit.
+@UseV3Throttle()
+@UseAdmin()
 export class GradingModesController {
-  private readonly logger: Logger;
+  private readonly log: V3Logger;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly modes: GradingModeService,
-    @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
+    logger: V3Logger,
   ) {
-    this.logger = parentLogger.child({ context: GradingModesController.name });
+    this.log = logger.child("grading.modes");
   }
 
   @Get()
   @Throttle({ default: { limit: 60, ttl: 60_000 } })
-  async list(@Req() request: UserSessionRequest) {
+  @V3Route({
+    response: z.object({
+      rows: z.array(modeRowSchema),
+      shadowAllowed: z.boolean(),
+    }),
+  })
+  async list() {
     const rows = await this.prisma.gradingModeConfig.findMany({
       select: rowSelect,
       orderBy: [{ questionType: "asc" }, { assignmentId: "asc" }],
     });
-    this.logger.info("grading.modes.list", {
-      admin: request.userSession?.userId,
-      count: rows.length,
-    });
+    this.log.info("grading.modes.listed", { count: rows.length });
     return {
-      rows,
+      rows: rows.map((row) => toResponse(row)),
       shadowAllowed: process.env.GRADING_SHADOW_ALLOWED === "true",
     };
   }
 
   @Put()
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
-  async put(@Req() request: UserSessionRequest, @Body() body: unknown) {
-    const admin = request.userSession?.userId;
-    const parsed = putGradingModeSchema.safeParse(body);
-    if (!parsed.success) {
-      this.logger.warn("grading.modes.put_rejected", {
-        admin,
-        reason: "invalid_body",
-        issues: parsed.error.issues.map((issue) => issue.path.join(".")),
-      });
-      throw new BadRequestException("Invalid request");
-    }
-    const { questionType, assignmentId, mode, effort } = parsed.data;
-    if (!admin) {
-      // AdminGuard sets this; a missing value means the guard was bypassed.
-      throw new BadRequestException("Invalid request");
-    }
+  @V3Route({ response: modeRowSchema })
+  async put(
+    @V3Principal() admin: Principal,
+    @Body(new ZodPipe(putGradingModeSchema)) body: PutGradingModeBody,
+  ) {
+    const { questionType, assignmentId, mode, effort } = body;
 
     if (assignmentId !== null) {
       const assignment = await this.prisma.assignment.findUnique({
         where: { id: assignmentId },
         select: { id: true },
       });
-      if (!assignment) {
-        this.logger.warn("grading.modes.put_rejected", {
-          admin,
-          reason: "unknown_assignment",
-          assignmentId,
-        });
-        throw new BadRequestException("Invalid request");
-      }
+      if (!assignment) throw V3Error.badRequest("unknown_assignment");
     }
 
     try {
@@ -127,7 +127,7 @@ export class GradingModesController {
         const saved = existing
           ? await tx.gradingModeConfig.update({
               where: { id: existing.id },
-              data: { mode, effort, updatedBy: admin },
+              data: { mode, effort, updatedBy: admin.userId },
               select: rowSelect,
             })
           : await tx.gradingModeConfig.create({
@@ -136,42 +136,31 @@ export class GradingModesController {
                 assignmentId,
                 mode,
                 effort,
-                updatedBy: admin,
+                updatedBy: admin.userId,
               },
               select: rowSelect,
             });
         return { before: existing, after: saved };
       });
       this.modes.invalidate();
-      this.logger.info("grading.modes.updated", {
-        admin,
-        questionType,
-        assignmentId,
+      this.log.info("grading.modes.updated", {
+        question_type: questionType,
+        target_assignment_id: assignmentId,
         before: before
           ? { id: before.id, mode: before.mode, effort: before.effort }
           : null,
         after: { id: after.id, mode: after.mode, effort: after.effort },
       });
-      return after;
+      return toResponse(after);
     } catch (error) {
+      // Two first writes for the same switch raced on the unique index; the
+      // other one won, so the caller retries against the saved row.
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === "P2002"
       ) {
-        this.logger.warn("grading.modes.put_conflict", {
-          admin,
-          questionType,
-          assignmentId,
-        });
-        throw new ConflictException("Concurrent update; try again");
+        throw V3Error.conflict("concurrent_update");
       }
-      this.logger.error("grading.modes.put_failed", {
-        admin,
-        questionType,
-        assignmentId,
-        error: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : undefined,
-      });
       throw error;
     }
   }
