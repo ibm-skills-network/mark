@@ -69,23 +69,190 @@ export function structuralFailures(
   return failures;
 }
 
-function quoteFailure(
-  quote: Quote,
-  partsByName: Map<string, Part>,
-  normalizedText: Map<string, string>,
-): CheckFailure["code"] | undefined {
-  const part = partsByName.get(quote.part);
-  if (!part) return "quote_unknown_part";
-  const needle = normalizeWhitespace(quote.text);
-  if (needle.length === 0) return "quote_empty";
-  if (part.kind !== "text") return undefined;
-  const haystack = normalizedText.get(part.name) ?? "";
-  return haystack.includes(needle) ? undefined : "quote_not_found";
+const SINGLE_QUOTES = /[\u00B4\u2018-\u201B\u2032]/g;
+const DOUBLE_QUOTES = /[\u00AB\u00BB\u201C-\u201F\u2033]/g;
+const DASHES = /[\u2010-\u2015\u2212\uFE58\uFE63\uFF0D]/g;
+const JSON_ESCAPE = /\\(["'/\\nrt])/g;
+const JSON_ESCAPES: Record<string, string> = {
+  n: "\n",
+  r: "\n",
+  t: "\t",
+  '"': '"',
+  "'": "'",
+  "\\": "\\",
+  "/": "/",
+};
+
+/**
+ * What a quote and a part are compared as: JSON-style escapes undone
+ * (\n, \t, \"), curly quotes and dashes made plain, Markdown backticks
+ * and asterisks removed, lowercased, whitespace collapsed.
+ */
+export function normalizeForQuote(text: string): string {
+  return normalizeWhitespace(
+    text
+      .normalize("NFC")
+      .replaceAll(
+        JSON_ESCAPE,
+        (_, character: string) => JSON_ESCAPES[character] ?? character,
+      )
+      .replaceAll(SINGLE_QUOTES, "'")
+      .replaceAll(DOUBLE_QUOTES, '"')
+      .replaceAll(DASHES, "-")
+      .replaceAll("\u2026", "...")
+      .replaceAll(/[*`]/g, "")
+      .toLowerCase(),
+  );
 }
+
+function wordTokens(normalized: string): string[] {
+  return normalized.match(/[\p{L}\p{N}_]+/gu) ?? [];
+}
+
+/** Share of the quote's words that must appear, in order, for a fuzzy match. */
+export const FUZZY_QUOTE_MIN_WORD_SHARE = 0.9;
+/** The matching stretch of the part may be at most this many times the quote's word count. */
+export const FUZZY_QUOTE_MAX_WINDOW_RATIO = 1.5;
+/** Quotes longer than this many words must match without the fuzzy rule. */
+const FUZZY_QUOTE_MAX_WORDS = 300;
+
+/** Longest common subsequence length of two token lists. */
+function commonSubsequenceLength(a: string[], b: string[]): number {
+  let previous = Array.from({ length: b.length + 1 }, () => 0);
+  for (const token of a) {
+    const current = Array.from({ length: b.length + 1 }, () => 0);
+    for (let index = 1; index <= b.length; index += 1) {
+      current[index] =
+        token === b[index - 1]
+          ? previous[index - 1] + 1
+          : Math.max(previous[index], current[index - 1]);
+    }
+    previous = current;
+  }
+  return previous[b.length];
+}
+
+/**
+ * Fuzzy rule: at least 90% of the quote's words appear in order inside a
+ * stretch of the part no longer than 1.5x the quote's word count. Catches
+ * a dropped or added word or changed punctuation; a quote that invents
+ * content, or stitches words from far apart, still fails.
+ */
+function fuzzyMatch(quoteTokens: string[], partTokens: string[]): boolean {
+  const length = quoteTokens.length;
+  if (length < 2 || length > FUZZY_QUOTE_MAX_WORDS) return false;
+  const needed = Math.ceil(length * FUZZY_QUOTE_MIN_WORD_SHARE);
+  const window = Math.max(
+    length,
+    Math.floor(length * FUZZY_QUOTE_MAX_WINDOW_RATIO),
+  );
+  // A match starts on one of the quote's first words that may be missed.
+  const starters = new Set(quoteTokens.slice(0, length - needed + 1));
+  // Word counts (order ignored) bound the in-order count from above, so the
+  // subsequence work runs only on windows that could pass.
+  const quoteCounts = new Map<string, number>();
+  for (const token of quoteTokens) {
+    quoteCounts.set(token, (quoteCounts.get(token) ?? 0) + 1);
+  }
+  const windowCounts = new Map<string, number>();
+  let overlap = 0;
+  const add = (token: string) => {
+    const count = windowCounts.get(token) ?? 0;
+    if (count < (quoteCounts.get(token) ?? 0)) overlap += 1;
+    windowCounts.set(token, count + 1);
+  };
+  const remove = (token: string) => {
+    const count = (windowCounts.get(token) ?? 0) - 1;
+    windowCounts.set(token, count);
+    if (count < (quoteCounts.get(token) ?? 0)) overlap -= 1;
+  };
+  for (const token of partTokens.slice(0, window)) add(token);
+  for (let start = 0; start < partTokens.length; start += 1) {
+    if (start > 0) {
+      remove(partTokens[start - 1]);
+      if (start + window - 1 < partTokens.length) {
+        add(partTokens[start + window - 1]);
+      }
+    }
+    if (overlap < needed || !starters.has(partTokens[start])) continue;
+    const stretch = partTokens.slice(start, start + window);
+    if (commonSubsequenceLength(quoteTokens, stretch) >= needed) return true;
+  }
+  return false;
+}
+
+export type QuoteRule =
+  | "verbatim"
+  | "normalized"
+  | "part_name"
+  | "fuzzy"
+  | "file_part";
+
+export type QuoteCheck =
+  | { accepted: true; rule: QuoteRule }
+  | {
+      accepted: false;
+      code: "quote_unknown_part" | "quote_empty" | "quote_not_found";
+    };
+
+interface PartIndex {
+  verbatim: string;
+  normalized: string;
+  normalizedName: string;
+  tokens: string[];
+}
+
+function indexPart(part: Part): PartIndex {
+  const normalized = normalizeForQuote(part.text ?? "");
+  return {
+    verbatim: normalizeWhitespace(part.text ?? ""),
+    normalized,
+    normalizedName: normalizeForQuote(part.name),
+    tokens: wordTokens(normalized),
+  };
+}
+
+const MIN_PART_NAME_QUOTE_CHARS = 3;
+
+/** Check one quote against the part it names. */
+export function checkQuote(
+  quote: Quote,
+  part: Part | undefined,
+  index?: PartIndex,
+): QuoteCheck {
+  if (!part) return { accepted: false, code: "quote_unknown_part" };
+  const verbatim = normalizeWhitespace(quote.text);
+  if (verbatim.length === 0) return { accepted: false, code: "quote_empty" };
+  if (part.kind !== "text") return { accepted: true, rule: "file_part" };
+  const partIndex = index ?? indexPart(part);
+  if (partIndex.verbatim.includes(verbatim))
+    return { accepted: true, rule: "verbatim" };
+  const normalized = normalizeForQuote(quote.text);
+  if (normalized.length > 0 && partIndex.normalized.includes(normalized)) {
+    return { accepted: true, rule: "normalized" };
+  }
+  if (
+    normalized.length >= MIN_PART_NAME_QUOTE_CHARS &&
+    partIndex.normalizedName.includes(normalized)
+  ) {
+    return { accepted: true, rule: "part_name" };
+  }
+  if (fuzzyMatch(wordTokens(normalized), partIndex.tokens)) {
+    return { accepted: true, rule: "fuzzy" };
+  }
+  return { accepted: false, code: "quote_not_found" };
+}
+
+/** One quote's outcome, without its text. */
+export type QuoteCheckRecord = {
+  criterionId: string;
+  part: string;
+} & QuoteCheck;
 
 export interface EvidenceCheckResult {
   verdicts: CriterionVerdict[];
   failures: CheckFailure[];
+  quoteChecks: QuoteCheckRecord[];
 }
 
 /**
@@ -99,11 +266,16 @@ export function applyEvidenceChecks(
   parts: Part[],
 ): EvidenceCheckResult {
   const partsByName = new Map(parts.map((part) => [part.name, part]));
-  const normalizedText = new Map(
-    parts
-      .filter((part) => part.kind === "text")
-      .map((part) => [part.name, normalizeWhitespace(part.text ?? "")]),
-  );
+  const indexes = new Map<string, PartIndex>();
+  const indexFor = (part: Part): PartIndex => {
+    let index = indexes.get(part.name);
+    if (!index) {
+      index = indexPart(part);
+      indexes.set(part.name, index);
+    }
+    return index;
+  };
+  const quoteChecks: QuoteCheckRecord[] = [];
   const verdictById = new Map(
     output.verdicts.map((verdict) => [verdict.criterionId, verdict]),
   );
@@ -115,8 +287,20 @@ export function applyEvidenceChecks(
     if (!verdict) continue;
     const validQuotes: Quote[] = [];
     for (const quote of verdict.quotes) {
-      const code = quoteFailure(quote, partsByName, normalizedText);
-      if (code) {
+      const part = partsByName.get(quote.part);
+      const check = checkQuote(
+        quote,
+        part,
+        part?.kind === "text" ? indexFor(part) : undefined,
+      );
+      quoteChecks.push({
+        criterionId: criterion.id,
+        part: quote.part,
+        ...check,
+      });
+      // `in` narrows without strictNullChecks; `accepted` alone does not.
+      if ("code" in check) {
+        const { code } = check;
         failures.push({
           code,
           criterionId: criterion.id,
@@ -144,7 +328,7 @@ export function applyEvidenceChecks(
       feedback: verdict.feedback,
     });
   }
-  return { verdicts, failures };
+  return { verdicts, failures, quoteChecks };
 }
 
 export function describeFailuresForRetry(failures: CheckFailure[]): string {

@@ -1,8 +1,11 @@
 import {
   applyEvidenceChecks,
+  checkQuote,
+  normalizeForQuote,
   normalizeWhitespace,
   structuralFailures,
 } from "./checks";
+import { htmlToMarkdown } from "./html-text";
 import type { ModelGradeOutput, Part, RubricCriterion } from "./contracts";
 
 const criteria: RubricCriterion[] = [
@@ -224,5 +227,181 @@ describe("applyEvidenceChecks", () => {
 describe("normalizeWhitespace", () => {
   it("collapses runs and trims", () => {
     expect(normalizeWhitespace("  a \n\t b  ")).toBe("a b");
+  });
+});
+
+describe("normalizeForQuote", () => {
+  it("unifies quotes and dashes, strips Markdown marks, unescapes and lowercases", () => {
+    expect(
+      normalizeForQuote(
+        '\u201CIt\u2019s\u201D \u2014 **Bold**  `code`\\n\\"x\\"\\tEnd',
+      ),
+    ).toBe(`"it's" - bold code "x" end`);
+  });
+});
+
+describe("checkQuote", () => {
+  const essay: Part = {
+    name: "essay.docx",
+    kind: "text",
+    text: "Model choice.\nI chose **gradient boosting** because it handles missing values well and trains quickly on tabular data with many categorical features.",
+  };
+  const link: Part = {
+    name: "https://github.com/jane/churn-model",
+    kind: "text",
+    text: "README\nA churn model.",
+  };
+
+  it("accepts a verbatim quote", () => {
+    expect(
+      checkQuote({ part: "essay.docx", text: "Model choice." }, essay),
+    ).toEqual({
+      accepted: true,
+      rule: "verbatim",
+    });
+  });
+
+  it("accepts a quote that differs in case, quotes, Markdown marks and escapes", () => {
+    expect(
+      checkQuote(
+        {
+          part: "essay.docx",
+          text: "model choice.\\nI chose gradient boosting",
+        },
+        essay,
+      ),
+    ).toEqual({ accepted: true, rule: "normalized" });
+  });
+
+  it("accepts a quote of the part's name, such as the submitted URL or repo", () => {
+    expect(
+      checkQuote(
+        { part: link.name, text: "https://github.com/jane/churn-model" },
+        link,
+      ),
+    ).toEqual({ accepted: true, rule: "part_name" });
+    expect(
+      checkQuote({ part: link.name, text: "jane/churn-model" }, link),
+    ).toEqual({
+      accepted: true,
+      rule: "part_name",
+    });
+  });
+
+  it("accepts a lightly paraphrased quote: 90% of its words, in order, in a short window", () => {
+    // 20 words; one ("very") is not in the part.
+    expect(
+      checkQuote(
+        {
+          part: "essay.docx",
+          text: "I chose gradient boosting because it handles missing values very well and trains quickly on tabular data with many categorical features",
+        },
+        essay,
+      ),
+    ).toEqual({ accepted: true, rule: "fuzzy" });
+  });
+
+  it("rejects fabricated quotes", () => {
+    for (const text of [
+      "I chose a random forest because it handles missing values well",
+      "gradient boosting trains slowly",
+      "The model reached 95% accuracy on the test set.",
+      // Every word is in the part, but spread far apart.
+      "choice handles features",
+    ]) {
+      expect(checkQuote({ part: "essay.docx", text }, essay)).toEqual({
+        accepted: false,
+        code: "quote_not_found",
+      });
+    }
+  });
+
+  it("stays fast on a long part full of the quote's words", () => {
+    const words = ["the", "model", "and", "data", "of", "a", "to", "is"];
+    const long: Part = {
+      name: "long.txt",
+      kind: "text",
+      text: Array.from(
+        { length: 200_000 },
+        (_, index) => words[(index * 7) % 5],
+      ).join(" "),
+    };
+    const quote = Array.from(
+      { length: 300 },
+      (_, index) => words[index % 8],
+    ).join(" ");
+    const started = Date.now();
+    expect(checkQuote({ part: "long.txt", text: quote }, long).accepted).toBe(
+      false,
+    );
+    expect(Date.now() - started).toBeLessThan(2000);
+  });
+
+  it("rejects words of the part's name that are not the name", () => {
+    expect(
+      checkQuote({ part: link.name, text: "jane wrote tests" }, link),
+    ).toEqual({
+      accepted: false,
+      code: "quote_not_found",
+    });
+  });
+
+  it("reports which rule accepted each quote", () => {
+    const result = applyEvidenceChecks(
+      output([
+        verdict("c1", 2, [
+          { part: "answer", text: "The result is 42." },
+          { part: "answer", text: "made up" },
+        ]),
+        verdict("c2", 1, [{ part: "report.pdf", text: "Figure 3" }]),
+      ]),
+      criteria,
+      parts,
+    );
+    expect(result.quoteChecks).toEqual([
+      { criterionId: "c1", part: "answer", accepted: true, rule: "verbatim" },
+      {
+        criterionId: "c1",
+        part: "answer",
+        accepted: false,
+        code: "quote_not_found",
+      },
+      {
+        criterionId: "c2",
+        part: "report.pdf",
+        accepted: true,
+        rule: "file_part",
+      },
+    ]);
+  });
+});
+
+describe("quotes from rich-text answers", () => {
+  it("produces text the quote check accepts quotes from", () => {
+    const text = htmlToMarkdown(
+      "<p>I chose <strong>gradient boosting</strong> because it handles <code>NaN</code> values.</p>",
+    );
+    const { failures } = applyEvidenceChecks(
+      {
+        verdicts: [
+          {
+            criterionId: "c1",
+            points: 1,
+            reason: "r",
+            quotes: [
+              {
+                part: "answer",
+                text: "I chose gradient boosting because it handles NaN values",
+              },
+            ],
+            feedback: "f",
+          },
+        ],
+        overallFeedback: "",
+      },
+      [{ id: "c1", description: "d", maxPoints: 1 }],
+      [{ name: "answer", kind: "text", text }],
+    );
+    expect(failures).toEqual([]);
   });
 });
