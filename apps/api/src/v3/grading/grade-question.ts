@@ -214,7 +214,7 @@ export async function gradeWithV3(
       estimateCostUsd(usage) + estimateCallCostUsd(callTokens);
     if (projectedCostUsd > costCeiling) {
       return fail(
-        "grading.v3.over_budget",
+        "grading.v3.cost_ceiling",
         `estimated cost $${projectedCostUsd.toFixed(4)} is over the $${costCeiling} per-question ceiling`,
         { estimatedTokens, tokenBudget },
       );
@@ -366,18 +366,23 @@ export async function gradeSubmission(
     limits,
   );
   if (materialized.ok === false) {
+    const unreadable = materialized.source;
     deps.logger.warn("grading.v3.materialize_failed", {
       ...deps.context,
       code: materialized.code,
-      partName: materialized.partName,
+      sourceKind: unreadable?.kind,
+      sourceCode: unreadable?.code,
       estimatedTokens: materialized.estimatedTokens,
     });
     return {
       status: "failed",
       failure: {
-        code: "grading.v3.over_budget",
+        code: unreadable
+          ? "grading.v3.source_unreadable"
+          : "grading.v3.over_budget",
         message: materialized.message,
-        retryable: false,
+        retryable: unreadable?.retryable ?? false,
+        ...(unreadable ? { source: unreadable } : {}),
         checkFailures: [],
         usage: ZERO_USAGE,
         model: undefined,

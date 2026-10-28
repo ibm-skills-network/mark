@@ -9,10 +9,13 @@ import { isMediaResponseType } from "src/api/attempt/common/utils/grading-questi
 import { GradingFactoryService } from "src/api/attempt/services/grading-factory.service";
 import { S3Service } from "src/api/files/services/s3.service";
 import { OversizedSubmissionError } from "src/api/llm/features/grading/errors/oversized-submission.error";
-import { RetryableProcessingError } from "src/api/llm/features/grading/errors/source-processing.error";
+import {
+  RetryableProcessingError,
+  SourceProcessingError,
+} from "src/api/llm/features/grading/errors/source-processing.error";
 import { UserRole } from "src/auth/interfaces/user.session.interface";
 import { Logger } from "winston";
-import type { GradingFailure } from "../v3/grading/contracts";
+import type { GradingFailure, UnreadableSource } from "../v3/grading/contracts";
 import type { GradingLogContext } from "../v3/grading/grade-question";
 import { MaterializeLimitError } from "../v3/grading/materialize";
 import { GradingModeService, type ResolvedMode } from "../v3/grading/mode";
@@ -29,6 +32,38 @@ export class V3GradingFailedError extends Error {
 }
 
 const OFF: ResolvedMode = { mode: "off", effort: "medium", source: "default" };
+
+/**
+ * An unreadable link or upload, as the errors legacy grading throws for the
+ * same problem: a learner-facing issue to fix, or a retry when the source
+ * may come back (timeout, 429, 5xx).
+ */
+function unreadableSourceError(
+  source: UnreadableSource,
+  questionId: number,
+): Error {
+  if (source.retryable) {
+    return new RetryableProcessingError(
+      "source_unavailable",
+      source.kind === "url" ? "url" : "file:0",
+    );
+  }
+  return source.kind === "url"
+    ? new SourceProcessingError("url_fetch_failed", "url", {
+        code: source.code,
+        source: {
+          kind: "url",
+          url: source.name,
+          httpStatus: source.httpStatus,
+        },
+        questionId,
+      })
+    : new SourceProcessingError("extraction_failed", "file:0", {
+        code: source.code,
+        source: { kind: "file", fileName: source.name },
+        questionId,
+      });
+}
 
 export interface LegacyGradeResult {
   learnerResponse: unknown;
@@ -139,6 +174,9 @@ export class GradingBridgeService {
   };
 
   private toError(failure: GradingFailure, context: GradingLogContext): Error {
+    if (failure.code === "grading.v3.source_unreadable" && failure.source) {
+      return unreadableSourceError(failure.source, context.questionId);
+    }
     if (failure.code === "grading.v3.over_budget") {
       return new OversizedSubmissionError({
         blockCount: failure.estimatedTokens ?? 0,

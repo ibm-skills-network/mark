@@ -5,6 +5,7 @@ import {
   type FetchUrlDeps,
   guardedFetch,
 } from "./fetch-url";
+import { UnreadableSourceError } from "./materialize";
 
 function response(
   status: number,
@@ -181,32 +182,103 @@ describe("fetchUrlAsParts", () => {
     expect(part.text).not.toContain("steal()");
   });
 
-  it("returns a part saying why when the link is refused", async () => {
+  async function unreadable(promise: Promise<unknown>) {
+    try {
+      await promise;
+    } catch (error) {
+      if (error instanceof UnreadableSourceError) return error.source;
+      throw error;
+    }
+    throw new Error("expected the link to be unreadable");
+  }
+
+  const host = { "a.example.com": ["93.184.216.34"] };
+
+  it("refuses a blocked link without grading it, and logs only the host", async () => {
     const warn = jest.fn();
-    const parts = await fetchUrlAsParts(
-      "http://127.0.0.1:8080/secret",
-      deps({}, {}),
-      {
+    const source = await unreadable(
+      fetchUrlAsParts("http://127.0.0.1:8080/secret", deps({}, {}), {
         debug: jest.fn(),
         info: jest.fn(),
         warn,
         error: jest.fn(),
-      },
+      }),
     );
-    expect(parts).toHaveLength(1);
-    expect(parts[0].text).toMatch(/could not read .*not allowed/);
+    expect(source).toEqual(
+      expect.objectContaining({
+        kind: "url",
+        code: "url_blocked",
+        retryable: false,
+      }),
+    );
     expect(warn).toHaveBeenCalledWith(
       "grading.v3.url_fetch_failed",
-      expect.objectContaining({ host: "127.0.0.1" }),
+      expect.objectContaining({ host: "127.0.0.1", code: "url_blocked" }),
     );
   });
 
-  it("returns a part saying why on an HTTP error", async () => {
-    const fake = deps(
-      { "a.example.com": ["93.184.216.34"] },
-      { "https://a.example.com/gone": response(404) },
+  it.each([
+    [404, "url_unreachable", false],
+    [403, "url_unreachable", false],
+    [410, "url_unreachable", false],
+    [429, "url_temporarily_unavailable", true],
+    [503, "url_temporarily_unavailable", true],
+  ])("maps HTTP %i to %s (retryable %s)", async (status, code, retryable) => {
+    const fake = deps(host, { "https://a.example.com/x": response(status) });
+    expect(
+      await unreadable(fetchUrlAsParts("https://a.example.com/x", fake)),
+    ).toEqual({
+      kind: "url",
+      code,
+      retryable,
+      name: "https://a.example.com/x",
+      httpStatus: status,
+    });
+  });
+
+  it("retries a link that timed out", async () => {
+    const fake = deps(host, {});
+    fake.request = jest.fn(() =>
+      Promise.reject(
+        Object.assign(new Error("timeout"), { code: "ECONNABORTED" }),
+      ),
     );
-    const [part] = await fetchUrlAsParts("https://a.example.com/gone", fake);
-    expect(part.text).toContain("HTTP 404");
+    expect(
+      await unreadable(fetchUrlAsParts("https://a.example.com/x", fake)),
+    ).toEqual(
+      expect.objectContaining({
+        code: "url_temporarily_unavailable",
+        retryable: true,
+      }),
+    );
+  });
+
+  it("does not retry a host that does not exist", async () => {
+    expect(
+      await unreadable(
+        fetchUrlAsParts("https://nowhere.example.com/x", deps({}, {})),
+      ),
+    ).toEqual(
+      expect.objectContaining({ code: "url_unreachable", retryable: false }),
+    );
+  });
+
+  it("refuses an empty page and a binary download", async () => {
+    const fake = deps(host, {
+      "https://a.example.com/empty": response(200, "  ", {
+        "content-type": "text/plain",
+      }),
+      "https://a.example.com/blob": response(200, "\u0000\u0001\u0002", {
+        "content-type": "application/octet-stream",
+      }),
+    });
+    expect(
+      await unreadable(fetchUrlAsParts("https://a.example.com/empty", fake)),
+    ).toEqual(expect.objectContaining({ code: "url_empty", retryable: false }));
+    expect(
+      await unreadable(fetchUrlAsParts("https://a.example.com/blob", fake)),
+    ).toEqual(
+      expect.objectContaining({ code: "url_unsupported", retryable: false }),
+    );
   });
 });

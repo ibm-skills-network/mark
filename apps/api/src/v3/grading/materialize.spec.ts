@@ -4,6 +4,7 @@ import type { Part } from "./contracts";
 import {
   bytesToParts,
   DEFAULT_MATERIALIZE_LIMITS,
+  UnreadableSourceError,
   materialize,
   type MaterializeLimits,
   type SubmissionFile,
@@ -85,56 +86,78 @@ describe("materialize: formats", () => {
     expect(textOf(parts, "budget.xlsx › Scratch")).toContain("(hidden sheet)");
   });
 
-  it("turns an unknown type into a could-not-read part", async () => {
-    const { parts } = await ok(
-      materialize({ files: [file("deck.numbers", Buffer.from([1, 2, 3]))] }),
-    );
-    expect(parts).toEqual([
-      {
-        name: "deck.numbers",
-        kind: "text",
-        text: "could not read deck.numbers (numbers)",
-      },
-    ]);
-  });
-
-  it("sends pdf and images natively", async () => {
-    const parts = [
-      ...(await bytesToParts(
-        "r.pdf",
-        undefined,
-        Buffer.from("%PDF-1.4 /Type /Page"),
-      )),
-      ...(await bytesToParts("shot.PNG", undefined, Buffer.from("png"))),
-    ];
-    expect(parts.map((part) => [part.kind, part.mimeType])).toEqual([
-      ["file", "application/pdf"],
-      ["image", "image/png"],
-    ]);
-  });
-
-  it("sends a 40-page pdf whole, past the text per-file cap", async () => {
-    const pdf = Buffer.from(`%PDF-1.4 ${"/Type /Page\n".repeat(40)}`);
+  it("refuses an uploaded file it cannot read instead of grading around it", async () => {
     const result = await materialize({
-      files: [
-        { name: "capstone.pdf", size: pdf.length, load: async () => pdf },
-      ],
+      files: [file("deck.numbers", Buffer.from([1, 2, 3]))],
     });
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.parts.map((part) => [part.name, part.kind])).toEqual([
-      ["capstone.pdf", "file"],
-    ]);
+    expect(result).toEqual(
+      expect.objectContaining({
+        ok: false,
+        code: "source_unreadable",
+        source: {
+          kind: "file",
+          code: "file_unsupported_type",
+          name: "deck.numbers",
+          retryable: false,
+        },
+      }),
+    );
   });
 
-  it("sends an html notebook export without its styles", async () => {
-    const style = `<style>${".jp-Cell{margin:0}".repeat(60_000)}</style>`;
-    const html = Buffer.from(
-      `<html><head>${style}</head><body><pre>exercise_14 = fit()</pre></body></html>`,
+  it.each([
+    ["empty.py", Buffer.alloc(0), "file_empty"],
+    ["report.docx", Buffer.from("PK not really a document"), "file_corrupt"],
+    ["data.ipynb", Buffer.from("{not json"), "file_corrupt"],
+  ])("refuses %s as %s", async (name, bytes, code) => {
+    expect(await materialize({ files: [file(name, bytes)] })).toEqual(
+      expect.objectContaining({
+        ok: false,
+        code: "source_unreadable",
+        source: expect.objectContaining({ kind: "file", code, name }),
+      }),
     );
-    const parts = await bytesToParts("Project.html", undefined, html);
-    expect(parts[0].text).toContain("exercise_14 = fit()");
-    expect(parts[0].text).not.toContain("abridged");
+  });
+
+  it("still grades an archive with one unreadable file inside, and lists it", async () => {
+    const zip = new JSZip();
+    zip.file("main.py", "print(1)");
+    zip.file("diagram.numbers", Buffer.from([1, 2, 3]));
+    const buffer = await zip.generateAsync({ type: "nodebuffer" });
+    const { parts } = await ok(
+      materialize({ files: [file("work.zip", buffer)] }),
+    );
+    expect(textOf(parts, "work.zip/main.py")).toBe("print(1)");
+    expect(textOf(parts, "work.zip/diagram.numbers")).toContain(
+      "could not read work.zip/diagram.numbers",
+    );
+  });
+
+  it("passes an unreadable link through as a refusal", async () => {
+    const result = await materialize(
+      { urls: ["https://a.example.com/gone"] },
+      {
+        fetchUrl: () =>
+          Promise.reject(
+            new UnreadableSourceError({
+              kind: "url",
+              code: "url_unreachable",
+              name: "https://a.example.com/gone",
+              retryable: false,
+              httpStatus: 404,
+            }),
+          ),
+      },
+    );
+    expect(result).toEqual(
+      expect.objectContaining({
+        ok: false,
+        code: "source_unreadable",
+        source: expect.objectContaining({
+          code: "url_unreachable",
+          httpStatus: 404,
+        }),
+      }),
+    );
   });
 
   it("reads code and text as text, and refuses binary bytes in a text file", async () => {

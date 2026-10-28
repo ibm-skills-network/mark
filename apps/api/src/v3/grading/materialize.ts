@@ -1,7 +1,7 @@
 import * as mammoth from "mammoth";
 import { Open as OpenZip } from "unzipper";
 import * as XLSX from "xlsx";
-import type { Part } from "./contracts";
+import type { Part, UnreadableSource, UnreadableSourceCode } from "./contracts";
 import { htmlFileToParts } from "./formats/html-file";
 import { notebookToParts } from "./formats/notebook";
 import { pptxToParts } from "./formats/pptx";
@@ -105,7 +105,8 @@ export type BytesToPartsDeps = Pick<MaterializeDeps, "renderer">;
 export type MaterializeFailureCode =
   | "over_budget"
   | "part_too_large"
-  | "submission_too_large";
+  | "submission_too_large"
+  | "source_unreadable";
 
 export interface MaterializeStats {
   filesSeen: number;
@@ -130,7 +131,19 @@ export type MaterializeResult =
       message: string;
       partName?: string;
       estimatedTokens?: number;
+      source?: UnreadableSource;
     };
+
+/**
+ * A submitted link or file could not be read. The submission is not graded
+ * around it: the learner is told what to fix, or the job retries.
+ */
+export class UnreadableSourceError extends Error {
+  constructor(readonly source: UnreadableSource) {
+    super(`${source.kind} could not be read (${source.code})`);
+    this.name = "UnreadableSourceError";
+  }
+}
 
 /** A hard limit was hit; the submission fails rather than being cut. */
 export class MaterializeLimitError extends Error {
@@ -255,17 +268,31 @@ export function estimatePartsTokens(parts: Part[]): number {
   return parts.reduce((sum, part) => sum + estimatePartTokens(part), 0);
 }
 
+// Parts that stand in for a file we could not read, with the issue code a
+// top-level upload is refused with.
+const unreadableParts = new WeakMap<Part, UnreadableSourceCode>();
+
 export function couldNotReadPart(
   name: string,
   type: string | undefined,
   reason?: string,
+  code: UnreadableSourceCode = "file_corrupt",
 ): Part {
   const suffix = reason ? `: ${reason}` : "";
-  return {
+  const part: Part = {
     name,
     kind: "text",
     text: `could not read ${name} (${type || "unknown type"})${suffix}`,
   };
+  unreadableParts.set(part, code);
+  return part;
+}
+
+/** The issue code when `parts` is only a could-not-read placeholder. */
+export function unreadableCodeOf(
+  parts: Part[],
+): UnreadableSourceCode | undefined {
+  return parts.length === 1 ? unreadableParts.get(parts[0]) : undefined;
 }
 
 /** A text part, abridged with a visible marker when over the per-file cap. */
@@ -698,7 +725,14 @@ export async function bytesToParts(
   }
   if (extension === "html" || extension === "htm" || mime === "text/html") {
     if (looksBinary(buffer)) {
-      return [couldNotReadPart(name, extension || mime, "binary content")];
+      return [
+        couldNotReadPart(
+          name,
+          extension || mime,
+          "binary content",
+          "file_unsupported_type",
+        ),
+      ];
     }
     const [page, ...images] = htmlFileToParts(name, decodeText(buffer));
     return [
@@ -712,7 +746,14 @@ export async function bytesToParts(
     mime === "application/json";
   if (isText) {
     if (looksBinary(buffer)) {
-      return [couldNotReadPart(name, extension || mime, "binary content")];
+      return [
+        couldNotReadPart(
+          name,
+          extension || mime,
+          "binary content",
+          "file_unsupported_type",
+        ),
+      ];
     }
     const isTable = TABLE_EXTENSIONS.has(extension) || mime === "text/csv";
     return [
@@ -722,7 +763,14 @@ export async function bytesToParts(
       }),
     ];
   }
-  return [couldNotReadPart(name, extension || mime || undefined)];
+  return [
+    couldNotReadPart(
+      name,
+      extension || mime || undefined,
+      undefined,
+      "file_unsupported_type",
+    ),
+  ];
 }
 
 // ── archives ────────────────────────────────────────────────────────────────
@@ -912,6 +960,15 @@ export async function materialize(
 
     for (const [order, file] of candidates.entries()) {
       const buffer = await file.load();
+      const uploaded = file.depth === 0;
+      if (uploaded && buffer.length === 0) {
+        throw new UnreadableSourceError({
+          kind: "file",
+          code: "file_empty",
+          name: file.name,
+          retryable: false,
+        });
+      }
       const parts = await bytesToParts(
         file.name,
         file.mimeType,
@@ -919,6 +976,18 @@ export async function materialize(
         limits,
         { renderer: deps.renderer },
       );
+      // Every uploaded file is required, as in legacy grading: one we cannot
+      // read is the learner's to fix, not something to grade around. Inside
+      // an archive it is listed and the rest is graded.
+      const unreadable = uploaded ? unreadableCodeOf(parts) : undefined;
+      if (unreadable) {
+        throw new UnreadableSourceError({
+          kind: "file",
+          code: unreadable,
+          name: file.name,
+          retryable: false,
+        });
+      }
       const tooBig = parts.find(
         (part) =>
           part.kind !== "text" &&
@@ -947,6 +1016,14 @@ export async function materialize(
         code: error.code,
         message: error.message,
         partName: error.partName,
+      };
+    }
+    if (error instanceof UnreadableSourceError) {
+      return {
+        ok: false,
+        code: "source_unreadable",
+        message: error.message,
+        source: error.source,
       };
     }
     throw error;

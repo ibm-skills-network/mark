@@ -193,11 +193,35 @@ export type GradingResult = z.infer<typeof gradingResultSchema>;
 export const GRADING_FAILURE_CODES = [
   "grading.v3.invalid_input",
   "grading.v3.over_budget",
+  "grading.v3.cost_ceiling",
+  "grading.v3.source_unreadable",
   "grading.v3.model_unavailable",
   "grading.v3.model_error",
   "grading.v3.check_failed",
 ] as const;
 export type GradingFailureCode = (typeof GRADING_FAILURE_CODES)[number];
+
+/** Why a submitted link or file could not be read; mirrors legacy issue codes. */
+export type UnreadableSourceCode =
+  | "url_unreachable"
+  | "url_blocked"
+  | "url_invalid"
+  | "url_empty"
+  | "url_unsupported"
+  | "url_temporarily_unavailable"
+  | "file_empty"
+  | "file_corrupt"
+  | "file_unsupported_type";
+
+export interface UnreadableSource {
+  kind: "url" | "file";
+  code: UnreadableSourceCode;
+  /** The learner's link or file name; never logged. */
+  name: string;
+  /** True when the same link may work later (timeout, 429, 5xx). */
+  retryable: boolean;
+  httpStatus?: number;
+}
 
 export interface GradingFailure {
   code: GradingFailureCode;
@@ -211,6 +235,8 @@ export interface GradingFailure {
   promptVersion: string;
   estimatedTokens?: number;
   tokenBudget?: number;
+  /** Set for grading.v3.source_unreadable. */
+  source?: UnreadableSource;
   debug?: GradingDebug;
 }
 

@@ -212,7 +212,10 @@ describe("gradeWithV3", () => {
     });
     expect(outcome).toEqual({
       status: "failed",
-      failure: expect.objectContaining({ code: "grading.v3.over_budget" }),
+      failure: expect.objectContaining({
+        code: "grading.v3.cost_ceiling",
+        retryable: false,
+      }),
     });
     expect(client.requests).toHaveLength(0);
   });
@@ -253,6 +256,32 @@ describe("gradeSubmission", () => {
         estimatedTokens: expect.any(Number),
       }),
     );
+  });
+
+  it("fails as unreadable, without a model call, when the upload cannot be read", async () => {
+    const client = new FakeClient([good]);
+    const { parts: _parts, ...question } = input;
+    const outcome = await gradeSubmission(
+      question,
+      {
+        files: [
+          {
+            name: "deck.numbers",
+            load: () => Promise.resolve(Buffer.from([1, 2, 3])),
+          },
+        ],
+      },
+      { client, logger: logger() },
+    );
+    expect(outcome).toEqual({
+      status: "failed",
+      failure: expect.objectContaining({
+        code: "grading.v3.source_unreadable",
+        retryable: false,
+        source: expect.objectContaining({ code: "file_unsupported_type" }),
+      }),
+    });
+    expect(client.requests).toHaveLength(0);
   });
 
   it("fails clearly, without a model call, when a file is over the limit", async () => {

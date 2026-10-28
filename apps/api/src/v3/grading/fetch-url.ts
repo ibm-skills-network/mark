@@ -11,13 +11,19 @@ import {
   BlockedUrlError,
   isBlockedAddress,
 } from "src/api/attempt/common/utils/ssrf-safe-http";
-import type { GradingLogger, Part } from "./contracts";
+import type {
+  GradingLogger,
+  Part,
+  UnreadableSource,
+  UnreadableSourceCode,
+} from "./contracts";
 import { htmlToText } from "./html-text";
 import {
   bytesToParts,
-  couldNotReadPart,
   DEFAULT_MATERIALIZE_LIMITS,
   MaterializeLimitError,
+  unreadableCodeOf,
+  UnreadableSourceError,
 } from "./materialize";
 
 export const FETCH_MAX_REDIRECTS = 3;
@@ -40,9 +46,12 @@ export interface FetchUrlDeps {
   ): Promise<FetchResponse>;
 }
 
-/** Why a URL could not be read; becomes the text of the part. */
+/** Why a URL could not be read, with the issue code the learner sees. */
 export class UrlFetchRefusedError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    readonly code: UnreadableSourceCode = "url_unreachable",
+  ) {
     super(message);
     this.name = "UrlFetchRefusedError";
   }
@@ -134,20 +143,56 @@ async function assertPublicTarget(url: URL, deps: FetchUrlDeps): Promise<void> {
   }
 }
 
-function describeFailure(error: unknown): string {
-  if (error instanceof UrlFetchRefusedError) return error.message;
-  if (error instanceof BlockedUrlError) return "the address is not allowed";
+const RETRYABLE_NETWORK_CODES = new Set([
+  "ECONNABORTED",
+  "ETIMEDOUT",
+  "ECONNRESET",
+  "ECONNREFUSED",
+  "EAI_AGAIN",
+  "EPIPE",
+  "ERR_SOCKET_CONNECTION_TIMEOUT",
+]);
+
+/** Issue code and retryability for a failed fetch; no learner content. */
+function classifyFailure(error: unknown): {
+  code: UnreadableSourceCode;
+  retryable: boolean;
+} {
+  if (error instanceof UrlFetchRefusedError) {
+    return { code: error.code, retryable: false };
+  }
+  if (error instanceof BlockedUrlError) {
+    return { code: "url_blocked", retryable: false };
+  }
   const code = (error as { code?: unknown })?.code;
-  if (code === "ECONNABORTED" || code === "ETIMEDOUT")
-    return "the request timed out";
-  if (code === "ERR_BLOCKED_ADDRESS") return "the address is not allowed";
+  if (code === "ERR_BLOCKED_ADDRESS") {
+    return { code: "url_blocked", retryable: false };
+  }
   if (
     error instanceof Error &&
     /maxcontentlength|content length/i.test(error.message)
   ) {
-    return `the response is larger than ${FETCH_MAX_BYTES} bytes`;
+    return { code: "url_unsupported", retryable: false };
   }
-  return "the request failed";
+  if (typeof code === "string" && RETRYABLE_NETWORK_CODES.has(code)) {
+    return { code: "url_temporarily_unavailable", retryable: true };
+  }
+  if (error instanceof Error && error.name === "TimeoutError") {
+    return { code: "url_temporarily_unavailable", retryable: true };
+  }
+  return { code: "url_unreachable", retryable: false };
+}
+
+/** 429 and 5xx may clear up; any other non-2xx is the learner's link. */
+function statusSource(name: string, status: number): UnreadableSource {
+  const retryable = status === 429 || status >= 500;
+  return {
+    kind: "url",
+    code: retryable ? "url_temporarily_unavailable" : "url_unreachable",
+    name,
+    retryable,
+    httpStatus: status,
+  };
 }
 
 /** The final URL and body after following at most FETCH_MAX_REDIRECTS. */
@@ -159,7 +204,7 @@ export async function guardedFetch(
   try {
     url = new URL(rawUrl);
   } catch {
-    throw new UrlFetchRefusedError("it is not a valid URL");
+    throw new UrlFetchRefusedError("it is not a valid URL", "url_invalid");
   }
   for (let hop = 0; hop <= FETCH_MAX_REDIRECTS; hop += 1) {
     await assertPublicTarget(url, deps);
@@ -170,6 +215,7 @@ export async function guardedFetch(
     if (response.body.length > FETCH_MAX_BYTES) {
       throw new UrlFetchRefusedError(
         `the response is larger than ${FETCH_MAX_BYTES} bytes`,
+        "url_unsupported",
       );
     }
     const location = response.headers.location;
@@ -204,7 +250,8 @@ function partName(url: string): string {
 /**
  * A learner URL as parts. GitHub blob links are read as the raw file; other
  * pages become readable text; PDFs and images go to the model natively.
- * Never throws for a bad link: the part says why it couldn't be read.
+ * A link that can't be read throws UnreadableSourceError: the submission is
+ * not graded around it.
  */
 export async function fetchUrlAsParts(
   rawUrl: string,
@@ -214,54 +261,63 @@ export async function fetchUrlAsParts(
   const normalized = normalizeLearnerUrl(rawUrl) || rawUrl.trim();
   const name = partName(normalized);
   const target = convertGitHubUrlToRaw(normalized) ?? normalized;
-  try {
-    const { url, response } = await guardedFetch(target, deps);
-    if (response.status < 200 || response.status >= 300) {
-      return [
-        couldNotReadPart(
-          name,
-          "url",
-          `the server answered HTTP ${response.status}`,
-        ),
-      ];
-    }
-    const contentType = (response.headers["content-type"] ?? "")
-      .split(";")[0]
-      .trim()
-      .toLowerCase();
-    if (
-      contentType === "text/html" ||
-      contentType === "application/xhtml+xml"
-    ) {
-      const text = htmlToText(response.body.toString("utf8"));
-      return [
-        { name, kind: "text", text: `Page text of ${url.href}\n\n${text}` },
-      ];
-    }
-    // Raw files (GitHub raw serves text/plain) and documents: by the path's
-    // extension, falling back to the content type.
-    const pathName = decodeURIComponent(url.pathname.split("/").pop() ?? "");
-    const parts = await bytesToParts(
-      pathName.includes(".") ? pathName : `${pathName || "download"}.bin`,
-      contentType || undefined,
-      response.body,
-      { ...DEFAULT_MATERIALIZE_LIMITS, maxFileBytes: FETCH_MAX_BYTES },
-    );
-    return parts.map((part, index) => ({
-      ...part,
-      name: parts.length === 1 ? name : `${name} #${index + 1}`,
-      ...(part.kind === "text" && part.text?.startsWith("could not read ")
-        ? { text: `could not read ${name} (${contentType || "unknown type"})` }
-        : {}),
-    }));
-  } catch (error) {
-    if (error instanceof MaterializeLimitError) throw error;
-    const reason = describeFailure(error);
+  const refuse = (source: UnreadableSource, errorClass?: string): never => {
     logger?.warn("grading.v3.url_fetch_failed", {
       host: safeHost(target),
-      reason,
-      errorClass: error instanceof Error ? error.name : typeof error,
+      code: source.code,
+      retryable: source.retryable,
+      httpStatus: source.httpStatus,
+      errorClass,
     });
-    return [couldNotReadPart(name, "url", reason)];
+    throw new UnreadableSourceError(source);
+  };
+
+  let url: URL;
+  let response: FetchResponse;
+  try {
+    ({ url, response } = await guardedFetch(target, deps));
+  } catch (error) {
+    if (error instanceof MaterializeLimitError) throw error;
+    return refuse(
+      { kind: "url", name, ...classifyFailure(error) },
+      error instanceof Error ? error.name : typeof error,
+    );
   }
+  if (response.status < 200 || response.status >= 300) {
+    return refuse(statusSource(name, response.status));
+  }
+  if (response.body.toString("utf8").trim().length === 0) {
+    return refuse({ kind: "url", code: "url_empty", name, retryable: false });
+  }
+  const contentType = (response.headers["content-type"] ?? "")
+    .split(";")[0]
+    .trim()
+    .toLowerCase();
+  if (contentType === "text/html" || contentType === "application/xhtml+xml") {
+    const text = htmlToText(response.body.toString("utf8"));
+    return [
+      { name, kind: "text", text: `Page text of ${url.href}\n\n${text}` },
+    ];
+  }
+  // Raw files (GitHub raw serves text/plain) and documents: by the path's
+  // extension, falling back to the content type.
+  const pathName = decodeURIComponent(url.pathname.split("/").pop() ?? "");
+  const parts = await bytesToParts(
+    pathName.includes(".") ? pathName : `${pathName || "download"}.bin`,
+    contentType || undefined,
+    response.body,
+    { ...DEFAULT_MATERIALIZE_LIMITS, maxFileBytes: FETCH_MAX_BYTES },
+  );
+  if (unreadableCodeOf(parts)) {
+    return refuse({
+      kind: "url",
+      code: "url_unsupported",
+      name,
+      retryable: false,
+    });
+  }
+  return parts.map((part, index) => ({
+    ...part,
+    name: parts.length === 1 ? name : `${name} #${index + 1}`,
+  }));
 }

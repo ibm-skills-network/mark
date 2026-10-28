@@ -12,7 +12,10 @@ import { GradingRateLimiterService } from "src/api/attempt/services/grading-rate
 import { QuestionResponseService } from "src/api/attempt/services/question-response/question-response.service";
 import { S3Service } from "src/api/files/services/s3.service";
 import { OversizedSubmissionError } from "src/api/llm/features/grading/errors/oversized-submission.error";
-import { RetryableProcessingError } from "src/api/llm/features/grading/errors/source-processing.error";
+import {
+  RetryableProcessingError,
+  SourceProcessingError,
+} from "src/api/llm/features/grading/errors/source-processing.error";
 import { UserRole } from "src/auth/interfaces/user.session.interface";
 import { PrismaService } from "src/database/prisma.service";
 import type { GradingFailure, GradingOutcome } from "../v3/grading/contracts";
@@ -442,6 +445,83 @@ describe("GradingBridgeService", () => {
         v3FailureCode: "grading.v3.check_failed",
       }),
     );
+  });
+
+  const liveText = () =>
+    bridge.gradeLive(
+      question,
+      { id: 77, learnerTextResponse: "x" } as never,
+      context,
+      mode("live"),
+    );
+
+  it("live: an unreachable link is a learner-fixable issue, like legacy", async () => {
+    grader.grade.mockResolvedValue(
+      failed({
+        code: "grading.v3.source_unreadable",
+        source: {
+          kind: "url",
+          code: "url_unreachable",
+          name: "https://github.com/a/b/blob/main/x.yml",
+          retryable: false,
+          httpStatus: 404,
+        },
+      }),
+    );
+    const error = await liveText().catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(SourceProcessingError);
+    expect(error).toMatchObject({
+      code: "url_unreachable",
+      reason: "url_fetch_failed",
+      questionId: question.id,
+      source: expect.objectContaining({ kind: "url", httpStatus: 404 }),
+    });
+  });
+
+  it("live: an unreadable upload is a learner-fixable issue", async () => {
+    grader.grade.mockResolvedValue(
+      failed({
+        code: "grading.v3.source_unreadable",
+        source: {
+          kind: "file",
+          code: "file_corrupt",
+          name: "report.docx",
+          retryable: false,
+        },
+      }),
+    );
+    await expect(liveText()).rejects.toMatchObject({
+      code: "file_corrupt",
+      reason: "extraction_failed",
+      source: expect.objectContaining({
+        kind: "file",
+        fileName: "report.docx",
+      }),
+    });
+  });
+
+  it("live: a link that is down for now goes to the job retry", async () => {
+    grader.grade.mockResolvedValue(
+      failed({
+        code: "grading.v3.source_unreadable",
+        retryable: true,
+        source: {
+          kind: "url",
+          code: "url_temporarily_unavailable",
+          name: "https://a.example.com",
+          retryable: true,
+          httpStatus: 503,
+        },
+      }),
+    );
+    await expect(liveText()).rejects.toBeInstanceOf(RetryableProcessingError);
+  });
+
+  it("live: the cost ceiling is a grading failure, not an oversized file", async () => {
+    grader.grade.mockResolvedValue(failed({ code: "grading.v3.cost_ceiling" }));
+    const error = await liveText().catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(V3GradingFailedError);
+    expect(error).not.toBeInstanceOf(OversizedSubmissionError);
   });
 
   it("loads uploaded files from storage and maps a missing object like legacy", async () => {
