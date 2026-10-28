@@ -1,9 +1,11 @@
 import JSZip from "jszip";
+import { PDFDocument } from "pdf-lib";
 import * as XLSX from "xlsx";
 import type { Part } from "./contracts";
 import {
   bytesToParts,
   DEFAULT_MATERIALIZE_LIMITS,
+  estimatePartTokens,
   UnreadableSourceError,
   materialize,
   type MaterializeLimits,
@@ -402,6 +404,15 @@ describe("materialize: limits", () => {
       );
     },
   );
+
+  it("counts the pages of a PDF whose page tree is compressed", async () => {
+    const document = await PDFDocument.create();
+    for (let page = 0; page < 300; page += 1) document.addPage();
+    const pdf = Buffer.from(await document.save({ useObjectStreams: true }));
+    expect(pdf.toString("latin1")).not.toMatch(/\/Type\s*\/Page(?!s)/);
+    const [part] = await bytesToParts("long.pdf", "application/pdf", pdf);
+    expect(estimatePartTokens(part)).toBeGreaterThanOrEqual(300 * 1600);
+  });
 
   it("does not expand archives nested deeper than the limit", async () => {
     const inner = new JSZip();

@@ -1,4 +1,5 @@
 import * as mammoth from "mammoth";
+import { PDFDocument } from "pdf-lib";
 import { Open as OpenZip } from "unzipper";
 import * as XLSX from "xlsx";
 import type { Part, UnreadableSource, UnreadableSourceCode } from "./contracts";
@@ -252,11 +253,30 @@ function countPdfPages(base64: string): number {
   return Math.max(1, matches?.length ?? 0);
 }
 
+/**
+ * Pages in a PDF, read from its page tree, which compressed object streams
+ * hide from a text scan. Undefined when the PDF can't be parsed; the model
+ * call then reports the file.
+ */
+async function pdfPageCount(buffer: Buffer): Promise<number | undefined> {
+  try {
+    const document = await PDFDocument.load(buffer, {
+      ignoreEncryption: true,
+      updateMetadata: false,
+    });
+    return document.getPageCount();
+  } catch {
+    // An unparseable PDF falls back to the text scan in estimatePartTokens.
+    return undefined;
+  }
+}
+
 export function estimatePartTokens(part: Part): number {
   const header = 30;
   if (part.kind === "text") return header + estimateTextTokens(part.text ?? "");
   if (part.kind === "image") return header + IMAGE_TOKEN_ESTIMATE;
-  return header + countPdfPages(part.base64 ?? "") * PDF_PAGE_TOKEN_ESTIMATE;
+  const pages = Math.max(part.pageCount ?? 0, countPdfPages(part.base64 ?? ""));
+  return header + pages * PDF_PAGE_TOKEN_ESTIMATE;
 }
 
 export function partBytes(part: Part): number {
@@ -624,12 +644,14 @@ export async function bytesToParts(
   await refuseOfficeBomb(name, extension, buffer, limits);
 
   if (extension === "pdf" || mime === "application/pdf") {
+    const pageCount = await pdfPageCount(buffer);
     return [
       {
         name,
         kind: "file",
         mimeType: "application/pdf",
         base64: buffer.toString("base64"),
+        ...(pageCount ? { pageCount } : {}),
       },
     ];
   }

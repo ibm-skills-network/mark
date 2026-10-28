@@ -23,6 +23,8 @@ export const partSchema = z
      * holds is accepted as visual_unverified.
      */
     verifyAgainst: z.array(z.string().min(1).max(500)).max(200).optional(),
+    /** Pages of a PDF file part, when counted; drives its token estimate. */
+    pageCount: z.number().int().min(1).optional(),
   })
   .superRefine((part, context) => {
     if (part.kind === "text" && typeof part.text !== "string") {
