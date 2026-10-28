@@ -36,7 +36,13 @@ function verdict(
   points: number,
   quotes: Array<{ part: string; text: string }> = [],
 ): ModelGradeOutput["verdicts"][number] {
-  return { criterionId, points, reason: "r", quotes, feedback: "f" };
+  return {
+    criterionId,
+    points,
+    reason: "r",
+    quotes,
+    feedback: "f",
+  };
 }
 
 describe("structuralFailures", () => {
@@ -209,7 +215,7 @@ describe("applyEvidenceChecks", () => {
     expect(result.failures[0].code).toBe("quote_unknown_part");
   });
 
-  it("checks quotes from a rendered file part against its text parts", () => {
+  describe("quotes from rendered pages and images", () => {
     const rendered: Part[] = [
       { name: "deck.pptx", kind: "text", text: "## Slide 1\nRevenue grew 12%" },
       {
@@ -219,28 +225,120 @@ describe("applyEvidenceChecks", () => {
         base64: "AA==",
         verifyAgainst: ["deck.pptx"],
       },
+      {
+        name: "chart.png",
+        kind: "image",
+        mimeType: "image/png",
+        base64: "AA==",
+      },
     ];
-    const result = applyEvidenceChecks(
-      output([
-        verdict("c1", 2, [
-          { part: "deck.pptx (slides)", text: "Revenue grew 12%" },
+
+    it("checks a rendered-page quote against its text parts first", () => {
+      const result = applyEvidenceChecks(
+        output([
+          verdict("c1", 2, [
+            { part: "deck.pptx (slides)", text: "Revenue grew 12%" },
+          ]),
+          verdict("c2", 0),
         ]),
-        verdict("c2", 3, [
-          { part: "deck.pptx (slides)", text: "Costs fell by half" },
+        criteria,
+        rendered,
+      );
+      expect(result.quoteChecks[0]).toEqual(
+        expect.objectContaining({ accepted: true, rule: "verbatim" }),
+      );
+      expect(result.evidence).toEqual({ verified: 1, visualUnverified: 0 });
+    });
+
+    it("accepts a chart-only quote from a rendered PDF part as visual_unverified and keeps the points", () => {
+      const result = applyEvidenceChecks(
+        output([
+          verdict("c1", 2, [
+            { part: "deck.pptx (slides)", text: "Revenue grew 12%" },
+          ]),
+          verdict("c2", 3, [
+            { part: "deck.pptx (slides)", text: "Q3 bar is the tallest" },
+          ]),
         ]),
-      ]),
-      criteria,
-      rendered,
-    );
-    expect(result.verdicts.map((item) => item.points)).toEqual([2, 0]);
-    expect(result.quoteChecks.map((check) => check.accepted)).toEqual([
-      true,
-      false,
-    ]);
-    expect(result.failures.map((failure) => failure.code)).toEqual([
-      "quote_not_found",
-      "points_without_evidence",
-    ]);
+        criteria,
+        rendered,
+      );
+      expect(result.verdicts.map((item) => item.points)).toEqual([2, 3]);
+      expect(result.failures).toEqual([]);
+      expect(result.quoteChecks[1]).toEqual({
+        criterionId: "c2",
+        part: "deck.pptx (slides)",
+        accepted: true,
+        rule: "visual_unverified",
+      });
+      expect(
+        result.verdicts.map((item) => item.visualUnverifiedQuotes),
+      ).toEqual([0, 1]);
+      expect(result.evidence).toEqual({ verified: 1, visualUnverified: 1 });
+    });
+
+    it("accepts a quote from an image part as visual_unverified", () => {
+      const result = applyEvidenceChecks(
+        output([
+          verdict("c1", 2, [{ part: "chart.png", text: "Sales by region" }]),
+          verdict("c2", 0),
+        ]),
+        criteria,
+        rendered,
+      );
+      expect(result.verdicts[0].points).toBe(2);
+      expect(result.quoteChecks[0]).toEqual(
+        expect.objectContaining({ accepted: true, rule: "visual_unverified" }),
+      );
+    });
+
+    it("rejects a fabricated quote naming a part that does not exist", () => {
+      const result = applyEvidenceChecks(
+        output([
+          verdict("c1", 2, [
+            { part: "deck.pptx (charts)", text: "Q3 bar is the tallest" },
+          ]),
+          verdict("c2", 0),
+        ]),
+        criteria,
+        rendered,
+      );
+      expect(result.verdicts[0].points).toBe(0);
+      expect(result.failures.map((failure) => failure.code)).toEqual([
+        "quote_unknown_part",
+        "points_without_evidence",
+      ]);
+      expect(result.evidence).toEqual({ verified: 0, visualUnverified: 0 });
+    });
+
+    it("still rejects a fabricated quote from a text part", () => {
+      const result = applyEvidenceChecks(
+        output([
+          verdict("c1", 2, [{ part: "deck.pptx", text: "Costs fell by half" }]),
+          verdict("c2", 0),
+        ]),
+        criteria,
+        rendered,
+      );
+      expect(result.verdicts[0].points).toBe(0);
+      expect(result.failures.map((failure) => failure.code)).toEqual([
+        "quote_not_found",
+        "points_without_evidence",
+      ]);
+    });
+
+    it("rejects an empty quote from a rendered part", () => {
+      const result = applyEvidenceChecks(
+        output([
+          verdict("c1", 2, [{ part: "deck.pptx (slides)", text: "  " }]),
+          verdict("c2", 0),
+        ]),
+        criteria,
+        rendered,
+      );
+      expect(result.verdicts[0].points).toBe(0);
+      expect(result.failures[0].code).toBe("quote_empty");
+    });
   });
 
   it("never puts quote text in failure details", () => {
@@ -404,7 +502,7 @@ describe("checkQuote", () => {
         criterionId: "c2",
         part: "report.pdf",
         accepted: true,
-        rule: "file_part",
+        rule: "visual_unverified",
       },
     ]);
   });

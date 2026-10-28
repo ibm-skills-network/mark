@@ -1,6 +1,7 @@
 import type {
   CheckFailure,
   CriterionVerdict,
+  EvidenceCounts,
   ModelGradeOutput,
   Part,
   Quote,
@@ -186,7 +187,7 @@ export type QuoteRule =
   | "normalized"
   | "part_name"
   | "fuzzy"
-  | "file_part";
+  | "visual_unverified";
 
 export type QuoteCheck =
   | { accepted: true; rule: QuoteRule }
@@ -214,7 +215,11 @@ function indexPart(part: Part): PartIndex {
 
 const MIN_PART_NAME_QUOTE_CHARS = 3;
 
-/** Check one quote against the part it names. */
+/**
+ * Check one quote against the part it names. A quote from a file or image
+ * part can't be read back here, so any non-empty one is accepted as
+ * visual_unverified.
+ */
 export function checkQuote(
   quote: Quote,
   part: Part | undefined,
@@ -223,7 +228,8 @@ export function checkQuote(
   if (!part) return { accepted: false, code: "quote_unknown_part" };
   const verbatim = normalizeWhitespace(quote.text);
   if (verbatim.length === 0) return { accepted: false, code: "quote_empty" };
-  if (part.kind !== "text") return { accepted: true, rule: "file_part" };
+  if (part.kind !== "text")
+    return { accepted: true, rule: "visual_unverified" };
   const partIndex = index ?? indexPart(part);
   if (partIndex.verbatim.includes(verbatim))
     return { accepted: true, rule: "verbatim" };
@@ -245,7 +251,9 @@ export function checkQuote(
 
 /**
  * checkQuote, except that a rendered file part with `verifyAgainst` has its
- * quotes checked against those text parts: accepted if any of them holds it.
+ * quotes checked against those text parts first. A quote none of them holds
+ * is still accepted as visual_unverified: it may come from a chart or an
+ * image on the page, which is what the page render is sent for.
  */
 function checkQuoteAgainstParts(
   quote: Quote,
@@ -266,12 +274,14 @@ function checkQuoteAgainstParts(
       part?.kind === "text" ? indexFor(part) : undefined,
     );
   }
-  let last: QuoteCheck = { accepted: false, code: "quote_not_found" };
-  for (const target of targets) {
-    last = checkQuote(quote, target, indexFor(target));
-    if (last.accepted) return last;
+  if (normalizeWhitespace(quote.text).length === 0) {
+    return { accepted: false, code: "quote_empty" };
   }
-  return last;
+  for (const target of targets) {
+    const check = checkQuote(quote, target, indexFor(target));
+    if (check.accepted) return check;
+  }
+  return { accepted: true, rule: "visual_unverified" };
 }
 
 /** One quote's outcome, without its text. */
@@ -284,6 +294,7 @@ export interface EvidenceCheckResult {
   verdicts: CriterionVerdict[];
   failures: CheckFailure[];
   quoteChecks: QuoteCheckRecord[];
+  evidence: EvidenceCounts;
 }
 
 /**
@@ -312,11 +323,13 @@ export function applyEvidenceChecks(
   );
   const failures: CheckFailure[] = [];
   const verdicts: CriterionVerdict[] = [];
+  const evidence: EvidenceCounts = { verified: 0, visualUnverified: 0 };
 
   for (const criterion of criteria) {
     const verdict = verdictById.get(criterion.id);
     if (!verdict) continue;
     const validQuotes: Quote[] = [];
+    let visualUnverifiedQuotes = 0;
     for (const quote of verdict.quotes) {
       const part = partsByName.get(quote.part);
       const check = checkQuoteAgainstParts(quote, part, partsByName, indexFor);
@@ -336,6 +349,11 @@ export function applyEvidenceChecks(
         });
       } else {
         validQuotes.push(quote);
+        if (check.rule === "visual_unverified") {
+          visualUnverifiedQuotes += 1;
+        } else {
+          evidence.verified += 1;
+        }
       }
     }
     let points = verdict.points;
@@ -353,9 +371,11 @@ export function applyEvidenceChecks(
       reason: verdict.reason,
       quotes: validQuotes,
       feedback: verdict.feedback,
+      visualUnverifiedQuotes,
     });
+    evidence.visualUnverified += visualUnverifiedQuotes;
   }
-  return { verdicts, failures, quoteChecks };
+  return { verdicts, failures, quoteChecks, evidence };
 }
 
 export function describeFailuresForRetry(failures: CheckFailure[]): string {

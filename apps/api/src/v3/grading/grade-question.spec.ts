@@ -104,6 +104,7 @@ describe("gradeWithV3", () => {
         promptVersion: PROMPT_VERSION,
         usage,
         checkFailures: [],
+        evidence: { verified: 2, visualUnverified: 0 },
       }),
     });
     expect(client.requests).toHaveLength(1);

@@ -21,6 +21,7 @@ import { readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import {
+  type EvidenceCounts,
   type GradingDebug,
   type GradingEffort,
   gradingEffortSchema,
@@ -165,6 +166,8 @@ interface RunRow {
   status: string;
   points: string;
   checkFailures: number;
+  /** Kept quotes: confirmed against text, or visual and unconfirmed. */
+  evidence?: EvidenceCounts;
   inputTokens: number;
   cachedInputTokens: number;
   outputTokens: number;
@@ -185,6 +188,7 @@ function printTable(rows: RunRow[]): void {
     "status",
     "points",
     "checks",
+    "ev ok/vis",
     "in",
     "cached",
     "out",
@@ -200,6 +204,9 @@ function printTable(rows: RunRow[]): void {
     row.status,
     row.points,
     String(row.checkFailures),
+    row.evidence
+      ? `${row.evidence.verified}/${row.evidence.visualUnverified}`
+      : "-",
     String(row.inputTokens),
     String(row.cachedInputTokens),
     String(row.outputTokens),
@@ -353,6 +360,9 @@ async function main(): Promise<void> {
             outcome.status === "graded"
               ? outcome.result.checkFailures.length
               : outcome.failure.checkFailures.length,
+          ...(outcome.status === "graded"
+            ? { evidence: outcome.result.evidence }
+            : {}),
           ...usage,
           estimatedTokens,
           costUsd,

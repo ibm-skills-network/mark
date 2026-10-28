@@ -302,6 +302,7 @@ describe("GradingBridgeService", () => {
             reason: "r",
             quotes: [{ part: "answer", text: "42" }],
             feedback: "Right.",
+            visualUnverifiedQuotes: 0,
           },
         ],
         totalPoints: 4,
@@ -316,6 +317,7 @@ describe("GradingBridgeService", () => {
         effort: "low",
         promptVersion: "grade.v1",
         checkFailures: [],
+        evidence: { verified: 1, visualUnverified: 0 },
       },
     } satisfies GradingOutcome);
 
@@ -500,6 +502,7 @@ describe("toLegacyResponse", () => {
         effort: "low",
         promptVersion: "grade.v2",
         checkFailures: [],
+        evidence: { verified: 0, visualUnverified: 0 },
         debug: {
           reasoningSummary: ["private reasoning"],
           parts: [],

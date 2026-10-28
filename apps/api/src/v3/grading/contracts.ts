@@ -19,7 +19,8 @@ export const partSchema = z
     base64: z.string().optional(),
     /**
      * For a file rendered from a document we also send as text: quotes from
-     * this part are checked against these text parts instead of accepted.
+     * this part are checked against these text parts first; one none of them
+     * holds is accepted as visual_unverified.
      */
     verifyAgainst: z.array(z.string().min(1).max(500)).max(200).optional(),
   })
@@ -82,6 +83,8 @@ export const criterionVerdictSchema = z.object({
   reason: z.string(),
   quotes: z.array(quoteSchema),
   feedback: z.string(),
+  /** Kept quotes from file or image parts that no text part could confirm. */
+  visualUnverifiedQuotes: z.number().int().min(0),
 });
 export type CriterionVerdict = z.infer<typeof criterionVerdictSchema>;
 
@@ -161,6 +164,13 @@ export const gradingDebugSchema = z.object({
 });
 export type GradingDebug = z.infer<typeof gradingDebugSchema>;
 
+/** Kept quotes: confirmed against text, or visual and unconfirmed. */
+export const evidenceCountsSchema = z.object({
+  verified: z.number().int().min(0),
+  visualUnverified: z.number().int().min(0),
+});
+export type EvidenceCounts = z.infer<typeof evidenceCountsSchema>;
+
 export const gradingResultSchema = z.object({
   verdicts: z.array(criterionVerdictSchema),
   totalPoints: z.number(),
@@ -170,6 +180,7 @@ export const gradingResultSchema = z.object({
   effort: gradingEffortSchema,
   promptVersion: z.string(),
   checkFailures: z.array(checkFailureSchema),
+  evidence: evidenceCountsSchema,
   debug: gradingDebugSchema.optional(),
 });
 export type GradingResult = z.infer<typeof gradingResultSchema>;

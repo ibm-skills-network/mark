@@ -287,6 +287,7 @@ export async function gradeWithV3(
           code: item.code,
           criterionId: item.criterionId,
         })),
+        evidence: checked.evidence,
         durationMs: now() - started,
       });
       return {
@@ -300,6 +301,7 @@ export async function gradeWithV3(
           effort,
           promptVersion: PROMPT_VERSION,
           checkFailures,
+          evidence: checked.evidence,
           ...debugBlock(checked.quoteChecks),
         },
       };
