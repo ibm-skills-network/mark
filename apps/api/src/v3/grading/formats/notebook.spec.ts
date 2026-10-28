@@ -79,6 +79,23 @@ describe("notebookToParts", () => {
     expect(text).not.toContain(PNG);
   });
 
+  it("sends up to 20 image outputs by default", () => {
+    const image = {
+      output_type: "display_data",
+      data: { "image/png": PNG },
+    };
+    const { images } = notebookToParts(
+      "nb.ipynb",
+      notebook(
+        Array.from({ length: 21 }, (_, index) =>
+          code(`plot(${index})`, [image]),
+        ),
+      ),
+      400_000,
+    );
+    expect(images).toHaveLength(20);
+  });
+
   it("over the cap, shortens long outputs first and keeps every cell's source", () => {
     const longOutput = Array.from(
       { length: 5000 },

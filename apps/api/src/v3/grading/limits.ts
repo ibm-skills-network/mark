@@ -27,7 +27,7 @@ export const NOTEBOOK_OUTPUT_TAIL_LINES = 10;
 /** A single output's characters after line shortening (one-line dumps). */
 export const NOTEBOOK_OUTPUT_MAX_CHARS = 6000;
 /** Image outputs sent as image parts per notebook. */
-export const NOTEBOOK_MAX_IMAGE_OUTPUTS = 10;
+export const NOTEBOOK_MAX_IMAGE_OUTPUTS = 20;
 
 /** PowerPoint: embedded images sent per deck, and the smallest one sent. */
 export const PPTX_MAX_IMAGES = 20;
