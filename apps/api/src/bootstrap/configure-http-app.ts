@@ -27,8 +27,9 @@ const LEGACY_BODY_LIMIT = "1000mb";
 const V3_BODY_LIMIT = "1mb";
 const V3_PATH_PREFIX = "/api/v3/";
 
+/** Routing ignores case, so the v3 body limit must too. */
 function isV3Path(url: string): boolean {
-  return url.startsWith(V3_PATH_PREFIX);
+  return url.slice(0, V3_PATH_PREFIX.length).toLowerCase() === V3_PATH_PREFIX;
 }
 
 /** Runs `handler` only for v3 paths (`v3: true`) or only for legacy paths. */

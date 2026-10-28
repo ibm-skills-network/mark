@@ -143,17 +143,20 @@ describe("v3 core", () => {
   describe("body limits", () => {
     const mib = 1024 * 1024;
 
-    it("refuses v3 bodies over 1 MiB with the envelope", async () => {
-      const res = await http()
-        .post("/api/v3/probe/echo")
-        .set("x-request-id", "rid-7")
-        .set("content-type", "application/json")
-        .send(JSON.stringify({ n: 1, pad: "x".repeat(mib + 10) }));
-      expect(res.status).toBe(413);
-      expect(res.text).toBe(
-        '{"code":"PAYLOAD_TOO_LARGE","message":"Payload too large","requestId":"rid-7"}',
-      );
-    });
+    it.each(["/api/v3/probe/echo", "/API/V3/probe/echo", "/api/V3/probe/echo"])(
+      "refuses v3 bodies over 1 MiB with the envelope at %s",
+      async (path) => {
+        const res = await http()
+          .post(path)
+          .set("x-request-id", "rid-7")
+          .set("content-type", "application/json")
+          .send(JSON.stringify({ n: 1, pad: "x".repeat(mib + 10) }));
+        expect(res.status).toBe(413);
+        expect(res.text).toBe(
+          '{"code":"PAYLOAD_TOO_LARGE","message":"Payload too large","requestId":"rid-7"}',
+        );
+      },
+    );
 
     it("keeps the legacy limit for legacy routes", async () => {
       const res = await http()
