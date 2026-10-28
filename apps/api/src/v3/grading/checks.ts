@@ -372,6 +372,10 @@ export function applyEvidenceChecks(
       quotes: validQuotes,
       feedback: verdict.feedback,
       visualUnverifiedQuotes,
+      needsVerification: verdict.needsVerification,
+      verificationReason: verdict.needsVerification
+        ? verdict.verificationReason
+        : null,
     });
     evidence.visualUnverified += visualUnverifiedQuotes;
   }

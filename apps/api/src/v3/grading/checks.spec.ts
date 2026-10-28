@@ -42,6 +42,8 @@ function verdict(
     reason: "r",
     quotes,
     feedback: "f",
+    needsVerification: false,
+    verificationReason: null,
   };
 }
 
@@ -341,6 +343,33 @@ describe("applyEvidenceChecks", () => {
     });
   });
 
+  it("passes needsVerification through, with no reason when it is false", () => {
+    const result = applyEvidenceChecks(
+      output([
+        {
+          ...verdict("c1", 2, [{ part: "answer", text: "The result is 42." }]),
+          needsVerification: true,
+          verificationReason: "The total needs summing over all rows.",
+        },
+        {
+          ...verdict("c2", 0),
+          verificationReason: "stray reason",
+        },
+      ]),
+      criteria,
+      parts,
+    );
+    expect(
+      result.verdicts.map((item) => [
+        item.needsVerification,
+        item.verificationReason,
+      ]),
+    ).toEqual([
+      [true, "The total needs summing over all rows."],
+      [false, null],
+    ]);
+  });
+
   it("never puts quote text in failure details", () => {
     const result = applyEvidenceChecks(
       output([
@@ -527,6 +556,8 @@ describe("quotes from rich-text answers", () => {
               },
             ],
             feedback: "f",
+            needsVerification: false,
+            verificationReason: null,
           },
         ],
         overallFeedback: "",

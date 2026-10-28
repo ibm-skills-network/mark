@@ -159,6 +159,27 @@ function caseFiles(caseFile: string, spikeCase: SpikeCase): SubmissionFile[] {
   });
 }
 
+interface NeedsVerificationSummary {
+  count: number;
+  reasons: Array<{ criterionId: string; reason: string | null }>;
+}
+
+function needsVerificationOf(
+  outcome: GradingOutcome,
+): NeedsVerificationSummary | undefined {
+  if (outcome.status !== "graded") return undefined;
+  const flagged = outcome.result.verdicts.filter(
+    (verdict) => verdict.needsVerification,
+  );
+  return {
+    count: flagged.length,
+    reasons: flagged.map((verdict) => ({
+      criterionId: verdict.criterionId,
+      reason: verdict.verificationReason,
+    })),
+  };
+}
+
 interface RunRow {
   caseId: string;
   effort: GradingEffort;
@@ -168,6 +189,8 @@ interface RunRow {
   checkFailures: number;
   /** Kept quotes: confirmed against text, or visual and unconfirmed. */
   evidence?: EvidenceCounts;
+  /** Criteria the model could not decide without running or computing. */
+  needsVerification?: NeedsVerificationSummary;
   inputTokens: number;
   cachedInputTokens: number;
   outputTokens: number;
@@ -189,6 +212,7 @@ function printTable(rows: RunRow[]): void {
     "points",
     "checks",
     "ev ok/vis",
+    "verify",
     "in",
     "cached",
     "out",
@@ -207,6 +231,7 @@ function printTable(rows: RunRow[]): void {
     row.evidence
       ? `${row.evidence.verified}/${row.evidence.visualUnverified}`
       : "-",
+    row.needsVerification ? String(row.needsVerification.count) : "-",
     String(row.inputTokens),
     String(row.cachedInputTokens),
     String(row.outputTokens),
@@ -226,6 +251,20 @@ function printTable(rows: RunRow[]): void {
   process.stdout.write(
     `\ntotal cost $${total.toFixed(5)} over ${rows.length} run(s)\n`,
   );
+  const flagged = rows.filter((row) => (row.needsVerification?.count ?? 0) > 0);
+  if (flagged.length > 0) {
+    process.stdout.write("\nneeds verification:\n");
+    for (const row of flagged) {
+      process.stdout.write(
+        `  ${row.caseId} ${row.effort} run ${row.run}: ${row.needsVerification?.count} criterion(s)\n`,
+      );
+      for (const item of row.needsVerification?.reasons ?? []) {
+        process.stdout.write(
+          `    - ${item.criterionId}: ${item.reason ?? "(no reason given)"}\n`,
+        );
+      }
+    }
+  }
 }
 
 async function main(): Promise<void> {
@@ -361,7 +400,10 @@ async function main(): Promise<void> {
               ? outcome.result.checkFailures.length
               : outcome.failure.checkFailures.length,
           ...(outcome.status === "graded"
-            ? { evidence: outcome.result.evidence }
+            ? {
+                evidence: outcome.result.evidence,
+                needsVerification: needsVerificationOf(outcome),
+              }
             : {}),
           ...usage,
           estimatedTokens,

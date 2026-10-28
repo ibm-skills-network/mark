@@ -45,7 +45,7 @@ import {
   buildGradePrompt,
   buildRetryMessages,
   PROMPT_VERSION,
-} from "./prompts/grade.v2";
+} from "./prompts/grade.v3";
 
 /** Ids for logs only; never learner content. */
 export interface GradingLogContext {
@@ -288,6 +288,10 @@ export async function gradeWithV3(
           criterionId: item.criterionId,
         })),
         evidence: checked.evidence,
+        // Count only: the reasons are model text about learner work.
+        needsVerificationCount: checked.verdicts.filter(
+          (verdict) => verdict.needsVerification,
+        ).length,
         durationMs: now() - started,
       });
       return {

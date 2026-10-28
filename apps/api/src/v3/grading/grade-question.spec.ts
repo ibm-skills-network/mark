@@ -13,7 +13,7 @@ import {
   buildGradePrompt,
   GRADE_INSTRUCTIONS,
   PROMPT_VERSION,
-} from "./prompts/grade.v2";
+} from "./prompts/grade.v3";
 
 const usage = {
   inputTokens: 1000,
@@ -78,6 +78,8 @@ const good: ModelGradeOutput = {
       reason: "right",
       quotes: [{ part: "answer", text: "It is 42" }],
       feedback: "Correct.",
+      needsVerification: false,
+      verificationReason: null,
     },
     {
       criterionId: "c2",
@@ -85,6 +87,8 @@ const good: ModelGradeOutput = {
       reason: "brief",
       quotes: [{ part: "answer", text: "6 * 7 = 42" }],
       feedback: "Say more.",
+      needsVerification: false,
+      verificationReason: null,
     },
   ],
   overallFeedback: "Good.",
@@ -268,8 +272,8 @@ describe("gradeSubmission", () => {
 });
 
 describe("prompt and request", () => {
-  it("is grade.v2, with the partial-credit and substance-over-form rules", () => {
-    expect(PROMPT_VERSION).toBe("grade.v2");
+  it("is grade.v3, with the partial-credit, substance-over-form and verification rules", () => {
+    expect(PROMPT_VERSION).toBe("grade.v3");
     const flat = GRADE_INSTRUCTIONS.replaceAll(/\s+/g, " ");
     expect(flat).toContain(
       "When a criterion's levels include partial credit, choose the level the evidence best matches; if the work partly meets a higher level, prefer the partial level over 0.",
@@ -278,7 +282,84 @@ describe("prompt and request", () => {
       "Correct code whose output is missing earns the level the rubric gives for missing output, not 0.",
     );
     expect(flat).toContain(
-      "Grade the substance of the work, not its form. A wrong filename, the page, sheet or cell position of content, the exact name of a step or heading, and the order of items do not cost points when the required work is clearly present — unless the question explicitly makes that the skill being tested (for example, 'rename the sheet to Summary' or 'save the file as report.pdf'). When you award points despite a form difference, say so in the reason.",
+      "unless the question explicitly makes that the skill being assessed (for example, an Excel task to rename a sheet, or a task about file naming conventions). An instruction to save, name or upload a file a certain way is not by itself the skill being assessed. When a rubric level awards points only for a form detail like this, grade the content against the level it would otherwise meet, and say in the reason that the form differed.",
+    );
+    expect(flat).toContain(
+      "A rubric's spelling of a name (repository, file, project) that differs only in punctuation, hyphens or case from what the question uses is a rubric typo, not a learner error.",
+    );
+    expect(flat).toContain(
+      "Set needsVerification to true only when you cannot decide this criterion from what you were given and running code or computing over the data would decide it — for example a total or accuracy figure that can't be checked from an abridged sheet, or 'the code runs' with no saved output. Give the reason in one sentence. Otherwise false.",
+    );
+    expect(flat).not.toContain("save the file as report.pdf");
+  });
+
+  it("asks for needsVerification and verificationReason on every verdict, strict-schema style", () => {
+    const client = new FakeClient([good]);
+    return gradeWithV3(input, { client, logger: logger() }).then(() => {
+      const schema = client.requests[0].jsonSchema as {
+        properties: {
+          verdicts: {
+            items: {
+              required: string[];
+              additionalProperties: boolean;
+              properties: Record<string, unknown>;
+            };
+          };
+        };
+      };
+      const verdict = schema.properties.verdicts.items;
+      expect(verdict.additionalProperties).toBe(false);
+      expect(verdict.required).toEqual(
+        expect.arrayContaining(["needsVerification", "verificationReason"]),
+      );
+      expect(verdict.required).toHaveLength(
+        Object.keys(verdict.properties).length,
+      );
+      expect(verdict.properties.needsVerification).toEqual({
+        type: "boolean",
+      });
+      expect(JSON.stringify(verdict.properties.verificationReason)).toContain(
+        '"null"',
+      );
+    });
+  });
+
+  it("returns needsVerification and its reason on the result's verdicts", async () => {
+    const flagged: ModelGradeOutput = {
+      ...good,
+      verdicts: [
+        good.verdicts[0],
+        {
+          ...good.verdicts[1],
+          needsVerification: true,
+          verificationReason: "The method's output was not saved.",
+        },
+      ],
+    };
+    const log = logger();
+    const outcome = await gradeWithV3(input, {
+      client: new FakeClient([flagged]),
+      logger: log,
+    });
+    expect(outcome.status).toBe("graded");
+    if (outcome.status !== "graded") return;
+    expect(
+      outcome.result.verdicts.map((verdict) => [
+        verdict.criterionId,
+        verdict.needsVerification,
+        verdict.verificationReason,
+      ]),
+    ).toEqual([
+      ["c1", false, null],
+      ["c2", true, "The method's output was not saved."],
+    ]);
+    expect(log.info).toHaveBeenCalledWith(
+      "grading.v3.graded",
+      expect.objectContaining({ needsVerificationCount: 1 }),
+    );
+    // The reason is model text about learner work and stays out of logs.
+    expect(JSON.stringify(log.info.mock.calls)).not.toContain(
+      "output was not saved",
     );
   });
 

@@ -1,7 +1,7 @@
 import type { GradingInput, Part, RubricCriterion } from "../contracts";
 import type { PromptContent, PromptMessage } from "../model-client";
 
-export const PROMPT_VERSION = "grade.v2";
+export const PROMPT_VERSION = "grade.v3";
 
 /**
  * Fixed instructions. They come first so every grade shares the cached
@@ -13,7 +13,7 @@ export const GRADE_INSTRUCTIONS = `You are grading one learner's submission for 
 How to grade:
 1. Grade every rubric criterion, each exactly once, using its id. Return one verdict per criterion and no others.
 2. Award only what the criteria describe. Withhold points only for something a criterion requires. Do not add requirements of your own, and do not reward things no criterion asks for.
-3. Grade the substance of the work, not its form. A wrong filename, the page, sheet or cell position of content, the exact name of a step or heading, and the order of items do not cost points when the required work is clearly present — unless the question explicitly makes that the skill being tested (for example, 'rename the sheet to Summary' or 'save the file as report.pdf'). When you award points despite a form difference, say so in the reason.
+3. Grade the substance of the work, not its form. A wrong filename, the page, sheet or cell position of content, the exact name of a step or heading, and the order of items do not cost points when the required work is clearly present — unless the question explicitly makes that the skill being assessed (for example, an Excel task to rename a sheet, or a task about file naming conventions). An instruction to save, name or upload a file a certain way is not by itself the skill being assessed. When a rubric level awards points only for a form detail like this, grade the content against the level it would otherwise meet, and say in the reason that the form differed. A rubric's spelling of a name (repository, file, project) that differs only in punctuation, hyphens or case from what the question uses is a rubric typo, not a learner error.
 4. Points for a criterion must be between 0 and that criterion's maximum. When a criterion lists levels, pick the level that matches the evidence.
 5. When a criterion's levels include partial credit, choose the level the evidence best matches; if the work partly meets a higher level, prefer the partial level over 0. Correct code whose output is missing earns the level the rubric gives for missing output, not 0.
 6. For every point you award, quote the evidence: give the part name exactly as written in the part's header, and text copied exactly from that part. Short exact quotes are better than long paraphrases. For a PDF or image part, quote the words you can read in it as closely as you can.
@@ -24,6 +24,8 @@ How to grade:
 
 What to write:
 - reason: one or two sentences on why the criterion earned these points, for the instructor.
+- needsVerification: Set needsVerification to true only when you cannot decide this criterion from what you were given and running code or computing over the data would decide it — for example a total or accuracy figure that can't be checked from an abridged sheet, or 'the code runs' with no saved output. Give the reason in one sentence. Otherwise false.
+- verificationReason: that one-sentence reason when needsVerification is true; null when it is false.
 - feedback: one or two sentences for the learner on this criterion: what was done well or what is missing, and how to improve. Address the learner as "you".
 - overallFeedback: a short paragraph for the learner on the whole submission.
 - Write feedback in the same language as the question.`;

@@ -18,6 +18,8 @@ describe("V3GradingService", () => {
                 reason: "r",
                 quotes: [{ part: "answer", text: "42" }],
                 feedback: "f",
+                needsVerification: false,
+                verificationReason: null,
               },
             ],
             overallFeedback: "ok",

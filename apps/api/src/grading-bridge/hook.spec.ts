@@ -303,6 +303,8 @@ describe("GradingBridgeService", () => {
             quotes: [{ part: "answer", text: "42" }],
             feedback: "Right.",
             visualUnverifiedQuotes: 0,
+            needsVerification: false,
+            verificationReason: null,
           },
         ],
         totalPoints: 4,

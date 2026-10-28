@@ -85,6 +85,9 @@ export const criterionVerdictSchema = z.object({
   feedback: z.string(),
   /** Kept quotes from file or image parts that no text part could confirm. */
   visualUnverifiedQuotes: z.number().int().min(0),
+  /** The model could not decide this without running code or computing. */
+  needsVerification: z.boolean(),
+  verificationReason: z.string().nullable(),
 });
 export type CriterionVerdict = z.infer<typeof criterionVerdictSchema>;
 
@@ -100,6 +103,8 @@ export const modelGradeOutputSchema = z.strictObject({
       reason: z.string(),
       quotes: z.array(z.strictObject({ part: z.string(), text: z.string() })),
       feedback: z.string(),
+      needsVerification: z.boolean(),
+      verificationReason: z.string().nullable(),
     }),
   ),
   overallFeedback: z.string(),
