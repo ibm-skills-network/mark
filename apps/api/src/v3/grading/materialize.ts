@@ -12,6 +12,7 @@ import {
   MAX_FILES_CONSIDERED,
   MAX_FILES_SENT,
   MAX_TOKENS_PER_FILE,
+  MAX_TOKENS_PER_NATIVE_FILE,
   MAX_TOKENS_PER_SUBMISSION,
   skipReason,
   ZIP_MAX_DEPTH,
@@ -49,6 +50,8 @@ export interface MaterializeLimits {
   maxFilesConsidered: number;
   maxFilesSent: number;
   maxTokensPerFile: number;
+  /** Cap for a PDF or image sent as-is; text dumps use maxTokensPerFile. */
+  maxTokensPerNativeFile: number;
   /** Estimated input tokens for the whole submission. */
   tokenBudget: number;
   /** Raw bytes per file; a larger file fails the submission. */
@@ -67,6 +70,7 @@ export const DEFAULT_MATERIALIZE_LIMITS: MaterializeLimits = {
   maxFilesConsidered: MAX_FILES_CONSIDERED,
   maxFilesSent: MAX_FILES_SENT,
   maxTokensPerFile: MAX_TOKENS_PER_FILE,
+  maxTokensPerNativeFile: MAX_TOKENS_PER_NATIVE_FILE,
   tokenBudget: MAX_TOKENS_PER_SUBMISSION,
   maxFileBytes: MAX_FILE_BYTES,
   maxTotalBytes: 40 * 1024 * 1024,
@@ -837,12 +841,12 @@ export async function materialize(
       const tooBig = parts.find(
         (part) =>
           part.kind !== "text" &&
-          estimatePartTokens(part) > limits.maxTokensPerFile,
+          estimatePartTokens(part) > limits.maxTokensPerNativeFile,
       );
       if (tooBig) {
         skipped.push({
           name: file.name,
-          reason: `not sent: about ${estimatePartTokens(tooBig)} tokens, over the ${limits.maxTokensPerFile}-token per-file cap`,
+          reason: `not sent: about ${estimatePartTokens(tooBig)} tokens, over the ${limits.maxTokensPerNativeFile}-token per-file cap`,
         });
         continue;
       }

@@ -7,7 +7,10 @@
 export const MAX_FILES_CONSIDERED = 200;
 export const MAX_FILES_SENT = 50;
 export const MAX_TOKENS_PER_FILE = 40_000;
-export const MAX_TOKENS_PER_SUBMISSION = 150_000;
+/** PDFs and images go to the model as-is; about 100 PDF pages. */
+export const MAX_TOKENS_PER_NATIVE_FILE = 160_000;
+/** Stays under the provider's long-context price step (272k input). */
+export const MAX_TOKENS_PER_SUBMISSION = 200_000;
 /** Raw bytes for one file before conversion; over this it is not loaded. */
 export const MAX_FILE_BYTES = 20 * 1024 * 1024;
 

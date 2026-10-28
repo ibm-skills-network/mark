@@ -115,6 +115,20 @@ describe("materialize: formats", () => {
     ]);
   });
 
+  it("sends a 40-page pdf whole, past the text per-file cap", async () => {
+    const pdf = Buffer.from(`%PDF-1.4 ${"/Type /Page\n".repeat(40)}`);
+    const result = await materialize({
+      files: [
+        { name: "capstone.pdf", size: pdf.length, load: async () => pdf },
+      ],
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.parts.map((part) => [part.name, part.kind])).toEqual([
+      ["capstone.pdf", "file"],
+    ]);
+  });
+
   it("reads code and text as text, and refuses binary bytes in a text file", async () => {
     expect(
       (await bytesToParts("main.py", undefined, Buffer.from("print(1)")))[0]
