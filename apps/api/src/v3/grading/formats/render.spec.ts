@@ -158,6 +158,12 @@ describe("renderToPdf with a fake soffice", () => {
     expect(profile).toContain(
       `<prop oor:name="BlockUntrustedRefererLinks" oor:op="fuse"><value>true</value>`,
     );
+    // Never recalculate on load: WEBSERVICE() and friends would fetch URLs.
+    for (const mode of ["OOXMLRecalcMode", "ODFRecalcMode"]) {
+      expect(profile).toContain(
+        `<item oor:path="/org.openoffice.Office.Calc/Formula/Load"><prop oor:name="${mode}" oor:op="fuse"><value>1</value>`,
+      );
+    }
   });
 
   it("kills the process group on timeout and still removes the temp directory", async () => {
