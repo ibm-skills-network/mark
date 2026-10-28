@@ -2,6 +2,7 @@ import * as mammoth from "mammoth";
 import { Open as OpenZip } from "unzipper";
 import * as XLSX from "xlsx";
 import type { Part } from "./contracts";
+import { htmlFileToParts } from "./formats/html-file";
 import { notebookToParts } from "./formats/notebook";
 import { pptxToParts } from "./formats/pptx";
 import { isRenderFailure, type Renderer } from "./formats/render";
@@ -657,6 +658,16 @@ export async function bytesToParts(
         limits,
         renderer,
       )),
+      ...images,
+    ];
+  }
+  if (extension === "html" || extension === "htm" || mime === "text/html") {
+    if (looksBinary(buffer)) {
+      return [couldNotReadPart(name, extension || mime, "binary content")];
+    }
+    const [page, ...images] = htmlFileToParts(name, decodeText(buffer));
+    return [
+      textPart(name, page.text ?? "", limits, { mimeType: "text/html" }),
       ...images,
     ];
   }

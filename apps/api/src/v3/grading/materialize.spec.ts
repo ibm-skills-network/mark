@@ -127,6 +127,16 @@ describe("materialize: formats", () => {
     ]);
   });
 
+  it("sends an html notebook export without its styles", async () => {
+    const style = `<style>${".jp-Cell{margin:0}".repeat(60_000)}</style>`;
+    const html = Buffer.from(
+      `<html><head>${style}</head><body><pre>exercise_14 = fit()</pre></body></html>`,
+    );
+    const parts = await bytesToParts("Project.html", undefined, html);
+    expect(parts[0].text).toContain("exercise_14 = fit()");
+    expect(parts[0].text).not.toContain("abridged");
+  });
+
   it("reads code and text as text, and refuses binary bytes in a text file", async () => {
     expect(
       (await bytesToParts("main.py", undefined, Buffer.from("print(1)")))[0]
