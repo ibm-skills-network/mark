@@ -16,6 +16,11 @@
  * debug block (parts sent, raw output, quote checks) into the results file;
  * with --dry-run it writes the parts list only. --no-render skips the
  * LibreOffice page renders (pptx, docx, xlsx chart sheets) to compare.
+ * --classify sorts each case's rubric criteria into read / compute /
+ * execute (one extra low-effort call per case) and prints which runs a
+ * code-running pass would take; nothing is run. --rubric-file <json>
+ * replaces a case's rubric with `rewritten[caseId].rubric` from that file
+ * when present, for comparing rewritten rubrics.
  */
 import { readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -28,6 +33,7 @@ import {
   type GradingLogger,
   type GradingOutcome,
   gradingQuestionSchema,
+  withLogContext,
 } from "../contracts";
 import { fetchUrlAsParts } from "../fetch-url";
 import { createRenderer } from "../formats/render";
@@ -40,6 +46,14 @@ import {
   type SubmissionFile,
 } from "../materialize";
 import { OpenAiGradingModelClient } from "../model-client";
+import {
+  classifyRubric,
+  type CriterionClassification,
+  type EscalationDecision,
+  materializeSignals,
+  type MaterializeSignals,
+  wouldEscalate,
+} from "../rubric-classifier";
 
 const caseSchema = z.object({
   caseId: z.string().min(1),
@@ -71,6 +85,8 @@ interface Options {
   verbose: boolean;
   debug: boolean;
   render: boolean;
+  classify: boolean;
+  rubricFile?: string;
 }
 
 function parseArguments(argv: string[]): Options {
@@ -81,7 +97,7 @@ function parseArguments(argv: string[]): Options {
   const casesDirectory = value("--cases");
   if (!casesDirectory) {
     throw new Error(
-      "usage: spike-runner --cases <dir> [--effort low,medium] [--runs 1] [--dry-run] [--max-cost 1] [--out file] [--model id] [--verbose] [--debug] [--no-render]",
+      "usage: spike-runner --cases <dir> [--effort low,medium] [--runs 1] [--dry-run] [--max-cost 1] [--out file] [--model id] [--verbose] [--debug] [--no-render] [--classify] [--rubric-file file]",
     );
   }
   const efforts = (value("--effort") ?? "low")
@@ -105,6 +121,8 @@ function parseArguments(argv: string[]): Options {
     verbose: argv.includes("--verbose"),
     debug: argv.includes("--debug"),
     render: !argv.includes("--no-render"),
+    classify: argv.includes("--classify"),
+    rubricFile: value("--rubric-file"),
   };
 }
 
@@ -144,6 +162,42 @@ async function loadCases(
     cases.push({ file, spikeCase: parsed.data });
   }
   return cases;
+}
+
+const rubricSchema = gradingQuestionSchema.shape.rubric;
+const rubricFileSchema = z.record(
+  z.string(),
+  z.object({ rubric: rubricSchema.optional() }).loose(),
+);
+
+/**
+ * Replace each case's rubric with `rewritten[caseId].rubric` when the file
+ * has one. Accepts `{ "rewritten": { ... } }` or the map itself.
+ */
+async function applyRubricFile(
+  file: string,
+  cases: Array<{ file: string; spikeCase: SpikeCase }>,
+): Promise<number> {
+  const json: unknown = JSON.parse(await readFile(file, "utf8"));
+  const map =
+    json && typeof json === "object" && "rewritten" in json
+      ? (json as { rewritten: unknown }).rewritten
+      : json;
+  const parsed = rubricFileSchema.safeParse(map);
+  if (!parsed.success) {
+    throw new Error(
+      `${file}: not a valid rubric file (${parsed.error.issues.map((issue) => issue.path.join(".")).join(", ")})`,
+    );
+  }
+  let replaced = 0;
+  for (const entry of cases) {
+    const rubric = parsed.data[entry.spikeCase.caseId]?.rubric;
+    if (rubric) {
+      entry.spikeCase.input.rubric = rubric;
+      replaced += 1;
+    }
+  }
+  return replaced;
 }
 
 function caseFiles(caseFile: string, spikeCase: SpikeCase): SubmissionFile[] {
@@ -191,6 +245,11 @@ interface RunRow {
   evidence?: EvidenceCounts;
   /** Criteria the model could not decide without running or computing. */
   needsVerification?: NeedsVerificationSummary;
+  /** --classify: each criterion's kind. */
+  kinds?: CriterionClassification[];
+  materializeSignals?: MaterializeSignals;
+  /** Whether a code-running pass would take this run (none is made). */
+  escalation?: EscalationDecision;
   inputTokens: number;
   cachedInputTokens: number;
   outputTokens: number;
@@ -267,6 +326,64 @@ function printTable(rows: RunRow[]): void {
   }
 }
 
+function signalled(signals: MaterializeSignals | undefined): boolean {
+  return (
+    !!signals &&
+    (signals.abridgedDataFiles.length > 0 || signals.filesNotSent.length > 0)
+  );
+}
+
+function printRoutingSummary(rows: RunRow[], classified: boolean): void {
+  const graded = rows.filter((row) => row.escalation);
+  if (graded.length === 0) return;
+  if (classified) {
+    process.stdout.write("\ncriterion kinds:\n");
+    const seen = new Set<string>();
+    for (const row of rows) {
+      if (!row.kinds || seen.has(row.caseId)) continue;
+      seen.add(row.caseId);
+      const count = (kind: string) =>
+        row.kinds?.filter((item) => item.kind === kind).length ?? 0;
+      process.stdout.write(
+        `  ${row.caseId}: read=${count("read")} compute=${count("compute")} execute=${count("execute")}\n`,
+      );
+    }
+  } else {
+    process.stdout.write(
+      "\n(no --classify: escalation below uses needsVerification only)\n",
+    );
+  }
+  const cells = new Map<string, number>();
+  for (const row of graded) {
+    const computeOrExecute =
+      row.kinds?.some((item) => item.kind !== "read") ?? false;
+    const flagged = (row.needsVerification?.count ?? 0) > 0;
+    const key = [
+      computeOrExecute ? "compute/execute" : "read only",
+      flagged ? "flagged" : "not flagged",
+      signalled(row.materializeSignals) ? "abridged/not sent" : "whole",
+    ].join(" × ");
+    cells.set(key, (cells.get(key) ?? 0) + 1);
+  }
+  process.stdout.write(
+    "\ngraded runs by (criterion kinds × needsVerification × materialization):\n",
+  );
+  for (const [key, count] of [...cells.entries()].sort()) {
+    process.stdout.write(`  ${key}: ${count}\n`);
+  }
+  const escalatedRuns = graded.filter((row) => row.escalation?.escalate);
+  const cases = new Set(graded.map((row) => row.caseId));
+  const escalatedCases = new Set(escalatedRuns.map((row) => row.caseId));
+  process.stdout.write(
+    `\nwould escalate (no code is run): ${escalatedRuns.length} of ${graded.length} graded run(s); ${escalatedCases.size} of ${cases.size} case(s)\n`,
+  );
+  for (const row of escalatedRuns) {
+    process.stdout.write(
+      `  ${row.caseId} ${row.effort} run ${row.run}: ${row.escalation?.reasons.join(", ")}\n`,
+    );
+  }
+}
+
 async function main(): Promise<void> {
   const options = parseArguments(process.argv.slice(2));
   const casesStat = await stat(options.casesDirectory);
@@ -275,6 +392,12 @@ async function main(): Promise<void> {
   }
   const logger = stderrLogger(options.verbose);
   const cases = await loadCases(options.casesDirectory);
+  if (options.rubricFile) {
+    const replaced = await applyRubricFile(options.rubricFile, cases);
+    process.stderr.write(
+      `rubric file: replaced ${replaced} of ${cases.length} case rubric(s)\n`,
+    );
+  }
   const renderer = options.render ? createRenderer({ logger }) : undefined;
   const client = options.dryRun
     ? undefined
@@ -282,6 +405,10 @@ async function main(): Promise<void> {
   const rows: RunRow[] = [];
   let spentUsd = 0;
   let aborted = false;
+  const classifications = new Map<
+    string,
+    { criteria?: CriterionClassification[]; costUsd: number; error?: string }
+  >();
 
   for (const { file, spikeCase } of cases) {
     const materialized = await materialize(
@@ -306,6 +433,40 @@ async function main(): Promise<void> {
         ...(renderer ? { renderer } : {}),
       },
     );
+    let kinds: CriterionClassification[] | undefined;
+    if (options.classify && client && materialized.ok) {
+      let cached = classifications.get(spikeCase.caseId);
+      if (!cached) {
+        try {
+          const classification = await classifyRubric(
+            spikeCase.input,
+            spikeCase.input.rubric,
+            client,
+            withLogContext(logger, { caseId: spikeCase.caseId }),
+          );
+          cached = {
+            criteria: classification.criteria,
+            costUsd: estimateCostUsd(classification.usage),
+          };
+        } catch (error) {
+          logger.error("spike.classify_failed", {
+            caseId: spikeCase.caseId,
+            error: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined,
+          });
+          cached = {
+            costUsd: 0,
+            error: error instanceof Error ? error.message : String(error),
+          };
+        }
+        spentUsd += cached.costUsd;
+        classifications.set(spikeCase.caseId, cached);
+      }
+      kinds = cached.criteria;
+    }
+    const signals = materialized.ok
+      ? materializeSignals(materialized.parts)
+      : undefined;
     for (const effort of options.efforts) {
       const blank = {
         caseId: spikeCase.caseId,
@@ -387,6 +548,7 @@ async function main(): Promise<void> {
             : outcome.failure.usage;
         const costUsd = estimateCostUsd(usage);
         spentUsd += costUsd;
+        const needsVerification = needsVerificationOf(outcome);
         rows.push({
           ...blank,
           run,
@@ -402,9 +564,19 @@ async function main(): Promise<void> {
           ...(outcome.status === "graded"
             ? {
                 evidence: outcome.result.evidence,
-                needsVerification: needsVerificationOf(outcome),
+                needsVerification,
+                escalation: wouldEscalate({
+                  kinds: kinds ?? [],
+                  needsVerification: needsVerification?.reasons ?? [],
+                  materializeSignals: signals ?? {
+                    abridgedDataFiles: [],
+                    filesNotSent: [],
+                  },
+                }),
               }
             : {}),
+          ...(kinds ? { kinds } : {}),
+          ...(signals ? { materializeSignals: signals } : {}),
           ...usage,
           estimatedTokens,
           costUsd,
@@ -419,9 +591,20 @@ async function main(): Promise<void> {
   }
 
   printTable(rows);
+  printRoutingSummary(rows, options.classify);
   await writeFile(
     options.out,
-    JSON.stringify({ options, spentUsd, aborted, rows }, undefined, 2),
+    JSON.stringify(
+      {
+        options,
+        spentUsd,
+        aborted,
+        classifications: Object.fromEntries(classifications),
+        rows,
+      },
+      undefined,
+      2,
+    ),
   );
   process.stdout.write(`results written to ${options.out}\n`);
   if (aborted) process.exitCode = 2;
