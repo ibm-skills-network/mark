@@ -2,6 +2,7 @@ import * as mammoth from "mammoth";
 import { Open as OpenZip } from "unzipper";
 import * as XLSX from "xlsx";
 import type { Part } from "./contracts";
+import { notebookToParts } from "./formats/notebook";
 import { describeWorkbookCharts } from "./formats/xlsx-charts";
 import {
   abridgeTable,
@@ -431,77 +432,6 @@ async function spreadsheetToParts(
   return parts;
 }
 
-// ── notebooks ───────────────────────────────────────────────────────────────
-
-interface NotebookOutput {
-  output_type?: string;
-  text?: string | string[];
-  data?: Record<string, unknown>;
-  ename?: string;
-  evalue?: string;
-  traceback?: string[];
-}
-
-interface NotebookCell {
-  cell_type?: string;
-  source?: string | string[];
-  outputs?: NotebookOutput[];
-}
-
-function joinSource(source: unknown): string {
-  if (Array.isArray(source)) return source.map(String).join("");
-  return typeof source === "string" ? source : "";
-}
-
-function stripAnsi(text: string): string {
-  // eslint-disable-next-line no-control-regex
-  return text.replaceAll(/\u001B\[[\d;]*[A-Za-z]/g, "");
-}
-
-function renderOutput(output: NotebookOutput): string[] {
-  const lines: string[] = [];
-  if (output.output_type === "stream") {
-    lines.push(joinSource(output.text));
-  } else if (output.output_type === "error") {
-    lines.push(
-      `${output.ename ?? "Error"}: ${output.evalue ?? ""}`,
-      stripAnsi((output.traceback ?? []).join("\n")),
-    );
-  } else if (output.data) {
-    const data = output.data;
-    if (data["text/plain"] !== undefined) {
-      lines.push(joinSource(data["text/plain"]));
-    } else if (data["text/markdown"] !== undefined) {
-      lines.push(joinSource(data["text/markdown"]));
-    }
-    for (const type of Object.keys(data)) {
-      if (type.startsWith("image/")) {
-        lines.push(`[image output (${type}) not included]`);
-      }
-    }
-  }
-  return lines;
-}
-
-export function notebookToText(json: string): string {
-  const parsed = JSON.parse(json) as { cells?: NotebookCell[] };
-  const cells = Array.isArray(parsed.cells) ? parsed.cells : [];
-  const blocks = cells.map((cell, index) => {
-    const type = cell.cell_type ?? "unknown";
-    const lines = [
-      `--- cell ${index + 1} [${type}] ---`,
-      joinSource(cell.source),
-    ];
-    const outputs = Array.isArray(cell.outputs) ? cell.outputs : [];
-    if (outputs.length > 0) {
-      lines.push("--- output ---");
-      for (const output of outputs) lines.push(...renderOutput(output));
-    }
-    return lines.join("\n");
-  });
-  return blocks.length > 0 ? blocks.join("\n\n") : "(notebook has no cells)";
-}
-
 // ── one file ────────────────────────────────────────────────────────────────
 
 /** Convert one file's bytes to parts by extension, then mime type. */
@@ -549,7 +479,13 @@ export async function bytesToParts(
   }
   if (extension === "ipynb") {
     try {
-      return [textPart(name, notebookToText(decodeText(buffer)), limits)];
+      // Notebook-aware: sources kept, outputs shrink first; never re-cut.
+      const notebook = notebookToParts(
+        name,
+        decodeText(buffer),
+        limits.maxTokensPerFile,
+      );
+      return [{ name, kind: "text", text: notebook.text }, ...notebook.images];
     } catch (error) {
       if (error instanceof MaterializeLimitError) throw error;
       return [couldNotReadPart(name, "ipynb", "not valid notebook JSON")];

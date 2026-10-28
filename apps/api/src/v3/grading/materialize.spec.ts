@@ -6,7 +6,6 @@ import {
   DEFAULT_MATERIALIZE_LIMITS,
   materialize,
   type MaterializeLimits,
-  notebookToText,
   type SubmissionFile,
 } from "./materialize";
 
@@ -141,25 +140,29 @@ describe("materialize: formats", () => {
     expect(binary[0].text).toContain("could not read notes.txt");
   });
 
-  it("reads notebook cells in order with text outputs and notes images", () => {
-    const text = notebookToText(
-      JSON.stringify({
-        cells: [
-          { cell_type: "markdown", source: ["# Title"] },
-          {
-            cell_type: "code",
-            source: "print(2+2)",
-            outputs: [
-              { output_type: "stream", text: ["4\n"] },
-              { output_type: "display_data", data: { "image/png": "AAA" } },
-            ],
-          },
-        ],
-      }),
+  it("reads a notebook with its text outputs and image outputs as images", async () => {
+    const notebook = JSON.stringify({
+      cells: [
+        { cell_type: "markdown", source: ["# Title"] },
+        {
+          cell_type: "code",
+          source: "print(2+2)",
+          outputs: [
+            { output_type: "stream", text: ["4\n"] },
+            { output_type: "display_data", data: { "image/png": "AAAA" } },
+          ],
+        },
+      ],
+    });
+    const { parts } = await ok(
+      materialize({ files: [file("nb.ipynb", notebook)] }),
     );
+    const text = textOf(parts, "nb.ipynb");
     expect(text.indexOf("# Title")).toBeLessThan(text.indexOf("print(2+2)"));
     expect(text).toContain("4\n");
-    expect(text).toContain("[image output (image/png) not included]");
+    expect(parts.find((part) => part.kind === "image")?.name).toBe(
+      "nb.ipynb › output image 1 (cell 2)",
+    );
   });
 
   it("adds a charts part naming each chart's kind and sheet", async () => {

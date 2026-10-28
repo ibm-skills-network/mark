@@ -21,6 +21,14 @@ export const ZIP_MAX_RATIO = 100;
 /** ...once it is at least this big (tiny files compress absurdly well). */
 export const ZIP_RATIO_MIN_BYTES = 1024 * 1024;
 
+/** Notebook outputs: long text outputs keep their first and last lines. */
+export const NOTEBOOK_OUTPUT_HEAD_LINES = 40;
+export const NOTEBOOK_OUTPUT_TAIL_LINES = 10;
+/** A single output's characters after line shortening (one-line dumps). */
+export const NOTEBOOK_OUTPUT_MAX_CHARS = 6000;
+/** Image outputs sent as image parts per notebook. */
+export const NOTEBOOK_MAX_IMAGE_OUTPUTS = 10;
+
 export const TABLE_HEAD_ROWS = 200;
 export const TABLE_TAIL_ROWS = 20;
 
