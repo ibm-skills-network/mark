@@ -148,14 +148,16 @@ export type V3TestApp = {
 
 /**
  * Builds mark-api's HTTP stack (configureHttpApp + the real global modules)
- * with the v3 module and the probes. Implementers may adjust provider
- * overrides here only, and must say so in their report.
+ * with the v3 module and the probes. Prisma and the database circuit breaker
+ * are stubbed unless `overrides` replaces them.
  */
 export async function createV3TestApp(
   options: {
     env?: Record<string, string | undefined>;
     instana?: FakeInstana | null;
     extraV3Modules?: Array<new () => unknown>;
+    /** Replaces providers after the defaults (e.g. a real PrismaClient). */
+    overrides?: Array<{ provide: unknown; useValue: unknown }>;
   } = {},
 ): Promise<V3TestApp> {
   const saved: Record<string, string | undefined> = {};
@@ -178,7 +180,7 @@ export async function createV3TestApp(
     options.instana === undefined ? new FakeInstana() : options.instana;
 
   try {
-    const moduleRef = await Test.createTestingModule({
+    let builder = Test.createTestingModule({
       imports: [
         WinstonModule.forRoot({
           level: "debug",
@@ -199,8 +201,11 @@ export async function createV3TestApp(
       .overrideProvider(DatabaseCircuitBreakerService)
       .useValue({ getStats: () => ({}) })
       .overrideProvider(INSTANA)
-      .useValue(instana)
-      .compile();
+      .useValue(instana);
+    for (const { provide, useValue } of options.overrides ?? []) {
+      builder = builder.overrideProvider(provide).useValue(useValue);
+    }
+    const moduleRef = await builder.compile();
 
     const app = moduleRef.createNestApplication();
     configureHttpApp(app);
