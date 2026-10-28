@@ -3,6 +3,7 @@ import { Open as OpenZip } from "unzipper";
 import * as XLSX from "xlsx";
 import type { Part } from "./contracts";
 import { notebookToParts } from "./formats/notebook";
+import { pptxToParts } from "./formats/pptx";
 import { describeWorkbookCharts } from "./formats/xlsx-charts";
 import {
   abridgeTable,
@@ -498,6 +499,21 @@ export async function bytesToParts(
     } catch (error) {
       if (error instanceof MaterializeLimitError) throw error;
       return [couldNotReadPart(name, "docx", "unreadable document")];
+    }
+  }
+  if (extension === "pptx") {
+    try {
+      const [deck, ...images] = await pptxToParts(name, buffer);
+      return [textPart(name, deck.text ?? "", limits), ...images];
+    } catch (error) {
+      if (error instanceof MaterializeLimitError) throw error;
+      return [
+        couldNotReadPart(
+          name,
+          "pptx",
+          error instanceof Error ? error.message : "unreadable deck",
+        ),
+      ];
     }
   }
   const isText =

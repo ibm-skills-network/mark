@@ -29,6 +29,11 @@ export const NOTEBOOK_OUTPUT_MAX_CHARS = 6000;
 /** Image outputs sent as image parts per notebook. */
 export const NOTEBOOK_MAX_IMAGE_OUTPUTS = 10;
 
+/** PowerPoint: embedded images sent per deck, and the smallest one sent. */
+export const PPTX_MAX_IMAGES = 20;
+export const PPTX_MIN_IMAGE_BYTES = 10 * 1024;
+export const PPTX_MAX_SLIDES = 500;
+
 export const TABLE_HEAD_ROWS = 200;
 export const TABLE_TAIL_ROWS = 20;
 
