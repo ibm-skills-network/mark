@@ -7,7 +7,11 @@ import {
   GradingModelUnavailableError,
   toResponsesRequest,
 } from "./model-client";
-import { buildGradePrompt, PROMPT_VERSION } from "./prompts/grade.v1";
+import {
+  buildGradePrompt,
+  GRADE_INSTRUCTIONS,
+  PROMPT_VERSION,
+} from "./prompts/grade.v2";
 
 const usage = {
   inputTokens: 1000,
@@ -257,6 +261,20 @@ describe("gradeSubmission", () => {
 });
 
 describe("prompt and request", () => {
+  it("is grade.v2, with the partial-credit and substance-over-form rules", () => {
+    expect(PROMPT_VERSION).toBe("grade.v2");
+    const flat = GRADE_INSTRUCTIONS.replaceAll(/\s+/g, " ");
+    expect(flat).toContain(
+      "When a criterion's levels include partial credit, choose the level the evidence best matches; if the work partly meets a higher level, prefer the partial level over 0.",
+    );
+    expect(flat).toContain(
+      "Correct code whose output is missing earns the level the rubric gives for missing output, not 0.",
+    );
+    expect(flat).toContain(
+      "Grade the substance of the work, not its form. A wrong filename, the page, sheet or cell position of content, the exact name of a step or heading, and the order of items do not cost points when the required work is clearly present — unless the question explicitly makes that the skill being tested (for example, 'rename the sheet to Summary' or 'save the file as report.pdf'). When you award points despite a form difference, say so in the reason.",
+    );
+  });
+
   it("orders instructions, question, rubric, then the submission last", () => {
     const messages = buildGradePrompt(input);
     expect(messages[0].role).toBe("developer");

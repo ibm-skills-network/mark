@@ -43,7 +43,7 @@ import {
   buildGradePrompt,
   buildRetryMessages,
   PROMPT_VERSION,
-} from "./prompts/grade.v1";
+} from "./prompts/grade.v2";
 
 /** Ids for logs only; never learner content. */
 export interface GradingLogContext {
