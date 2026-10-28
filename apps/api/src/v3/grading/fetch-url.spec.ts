@@ -1,5 +1,6 @@
 import {
   FETCH_MAX_BYTES,
+  defaultFetchUrlDeps,
   type FetchResponse,
   fetchUrlAsParts,
   type FetchUrlDeps,
@@ -280,5 +281,33 @@ describe("fetchUrlAsParts", () => {
     ).toEqual(
       expect.objectContaining({ code: "url_unsupported", retryable: false }),
     );
+  });
+});
+
+describe("defaultFetchUrlDeps.request", () => {
+  it("gives up on a server that drips bytes past the timeout", async () => {
+    const { createServer } = await import("node:http");
+    const server = createServer((_request, reply) => {
+      reply.writeHead(200, { "content-type": "text/plain" });
+      const drip = setInterval(() => reply.write("x"), 100);
+      reply.on("close", () => clearInterval(drip));
+    });
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", resolve),
+    );
+    const { port } = server.address() as { port: number };
+    const started = Date.now();
+    try {
+      await expect(
+        defaultFetchUrlDeps.request(new URL(`http://127.0.0.1:${port}/`), {
+          timeoutMs: 1000,
+          maxBytes: FETCH_MAX_BYTES,
+        }),
+      ).rejects.toThrow();
+      expect(Date.now() - started).toBeLessThan(3000);
+    } finally {
+      server.closeAllConnections();
+      server.close();
+    }
   });
 });

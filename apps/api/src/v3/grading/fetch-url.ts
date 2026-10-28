@@ -104,7 +104,10 @@ export const defaultFetchUrlDeps: FetchUrlDeps = {
   async request(url, { timeoutMs, maxBytes }) {
     const response = await axios.get<ArrayBuffer>(url.href, {
       responseType: "arraybuffer",
+      // `timeout` only fires on an idle socket; the signal bounds the whole
+      // request, so a server dripping bytes can't hold the job open.
       timeout: timeoutMs,
+      signal: AbortSignal.timeout(timeoutMs),
       maxContentLength: maxBytes,
       maxRedirects: 0,
       validateStatus: () => true,
@@ -177,7 +180,10 @@ function classifyFailure(error: unknown): {
   if (typeof code === "string" && RETRYABLE_NETWORK_CODES.has(code)) {
     return { code: "url_temporarily_unavailable", retryable: true };
   }
-  if (error instanceof Error && error.name === "TimeoutError") {
+  if (
+    error instanceof Error &&
+    (error.name === "TimeoutError" || error.name === "CanceledError")
+  ) {
     return { code: "url_temporarily_unavailable", retryable: true };
   }
   return { code: "url_unreachable", retryable: false };
