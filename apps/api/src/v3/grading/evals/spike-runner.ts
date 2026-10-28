@@ -25,6 +25,7 @@ import {
 } from "../contracts";
 import { fetchUrlAsParts } from "../fetch-url";
 import { gradeWithV3 } from "../grade-question";
+import { htmlToMarkdown, looksLikeHtml } from "../html-text";
 import { estimateCallCostUsd, estimateCostUsd } from "../limits";
 import { materialize, type SubmissionFile } from "../materialize";
 import { OpenAiGradingModelClient } from "../model-client";
@@ -223,7 +224,12 @@ async function main(): Promise<void> {
   for (const { file, spikeCase } of cases) {
     const materialized = await materialize(
       {
-        text: spikeCase.responseText,
+        // Same conversion the bridge applies to rich-text answers.
+        text:
+          spikeCase.responseText !== undefined &&
+          looksLikeHtml(spikeCase.responseText)
+            ? htmlToMarkdown(spikeCase.responseText)
+            : spikeCase.responseText,
         files: caseFiles(file, spikeCase),
         urls: spikeCase.urls,
         questionContext: [

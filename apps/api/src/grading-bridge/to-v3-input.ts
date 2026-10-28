@@ -6,14 +6,15 @@ import type {
   GradingQuestion,
   RubricCriterion,
 } from "../v3/grading/contracts";
-import { htmlToText, looksLikeHtml } from "../v3/grading/html-text";
+import { htmlToMarkdown, looksLikeHtml } from "../v3/grading/html-text";
 import type {
   SubmissionFile,
   SubmissionSource,
 } from "../v3/grading/materialize";
 
+/** Rich text → light Markdown so lists, headings and code keep their shape. */
 function plain(text: string): string {
-  return looksLikeHtml(text) ? htmlToText(text) : text.trim();
+  return looksLikeHtml(text) ? htmlToMarkdown(text) : text.trim();
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -124,7 +125,7 @@ export type LoadStoredFile = (bucket: string, key: string) => Promise<Buffer>;
 
 /**
  * The legacy extracted learner response (what gets stored) → what v3 reads.
- * Text answers lose their HTML; files are loaded from storage on demand.
+ * Text answers become light Markdown; files are loaded from storage on demand.
  */
 export function toSubmissionSource(
   questionType: QuestionType,

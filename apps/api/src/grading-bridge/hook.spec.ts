@@ -343,7 +343,8 @@ describe("GradingBridgeService", () => {
         ],
       },
     ]);
-    expect(source.text).toBe("It is 42");
+    // Rich text arrives as light Markdown.
+    expect(source.text).toBe("It is **42**");
     expect(logContext).toEqual(
       expect.objectContaining({ questionId: 77, attemptId: 345, mode: "live" }),
     );
