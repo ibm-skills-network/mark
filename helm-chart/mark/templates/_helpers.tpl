@@ -225,11 +225,9 @@ Migration annotations
 {{- end }}
 
 {{/*
-Readiness probe that keeps a migration pod out of its Service.
+a readiness probe hack that keeps a migration pod from receiving traffic.
 A migration pod carries its service's labels, because the network policies use
-them to let it reach Postgres. Those same labels match the Service selector. A
-pod with no readiness probe counts as ready as soon as it starts, so the Service
-sends it live requests it cannot answer, and the caller gets a 502.
+them to let it reach Postgres. But those same labels match the service selector. 
 A pod with a readiness probe is not ready until the probe first passes. This
 probe's first check is a day away, so it never runs and the pod never takes traffic.
 */}}
