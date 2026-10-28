@@ -24,7 +24,7 @@ export enum DownstreamService {
 )
 @Injectable()
 @Controller({
-  version: ["1", "2"],
+  version: ["1", "2", "3"],
 })
 export class ApiController {
   constructor(private readonly apiService: ApiService) {}
