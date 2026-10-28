@@ -203,6 +203,73 @@ describe("gradeWithV3", () => {
     });
   });
 
+  it("keeps the evidence of a file whose name has quotes and angle brackets", async () => {
+    const tricky = 'notes "final" <v2>.txt';
+    const client = new FakeClient([
+      {
+        ...good,
+        verdicts: good.verdicts.map((verdict) => ({
+          ...verdict,
+          quotes: verdict.quotes.map((quote) => ({
+            ...quote,
+            part: "notes 'final' (v2).txt",
+          })),
+        })),
+      },
+    ]);
+    const outcome = await gradeWithV3(
+      {
+        ...input,
+        parts: [
+          { name: tricky, kind: "text", text: "It is 42 because 6 * 7 = 42." },
+        ],
+      },
+      { client, logger: logger() },
+    );
+    const prompt = JSON.stringify(client.requests[0].messages);
+    expect(prompt).toContain(`name=\\"notes 'final' (v2).txt\\"`);
+    expect(prompt).not.toContain("<v2>");
+    expect(outcome).toEqual({
+      status: "graded",
+      result: expect.objectContaining({ totalPoints: 3, checkFailures: [] }),
+    });
+  });
+
+  it("gives files with the same name distinct names, so each keeps its evidence", async () => {
+    const client = new FakeClient([
+      {
+        ...good,
+        verdicts: [
+          {
+            ...good.verdicts[0],
+            quotes: [{ part: "main.py", text: "It is 42" }],
+          },
+          {
+            ...good.verdicts[1],
+            quotes: [{ part: "main.py (2)", text: "6 * 7 = 42" }],
+          },
+        ],
+      },
+    ]);
+    const outcome = await gradeWithV3(
+      {
+        ...input,
+        parts: [
+          { name: "main.py", kind: "text", text: "It is 42" },
+          { name: "main.py", kind: "text", text: "6 * 7 = 42" },
+        ],
+      },
+      { client, logger: logger() },
+    );
+    expect(JSON.stringify(client.requests[0].messages)).toContain(
+      "main.py (2)",
+    );
+    expect(outcome).toEqual({
+      status: "graded",
+      result: expect.objectContaining({ totalPoints: 3, checkFailures: [] }),
+    });
+  });
+
   it("refuses to call the model over the cost ceiling", async () => {
     const client = new FakeClient([good]);
     const outcome = await gradeWithV3(input, {

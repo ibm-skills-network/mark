@@ -18,6 +18,7 @@ import {
   type GradingQuestion,
   type GradingUsage,
   type ModelGradeOutput,
+  type Part,
   modelGradeOutputSchema,
   ZERO_USAGE,
 } from "./contracts";
@@ -109,10 +110,49 @@ function parseModelOutput(
  * Nest, no database. One model call, checks, at most one retry when the
  * verdicts are structurally wrong, then a result or a failure.
  */
+/**
+ * Part names the model sees and quotes back. Characters that could break
+ * the part header (quotes, angle brackets, control characters) are replaced
+ * and repeated names numbered, so the prompt and the evidence check agree
+ * on one unique name per part.
+ */
+export function withSafePartNames(parts: Part[]): Part[] {
+  const used = new Set<string>();
+  const renamed = new Map<string, string>();
+  const named = parts.map((part) => {
+    const base =
+      part.name
+        .replaceAll('"', "'")
+        .replaceAll("<", "(")
+        .replaceAll(">", ")")
+        .replaceAll(/\p{Cc}/gu, " ")
+        .trim() || "part";
+    let name = base;
+    for (let copy = 2; used.has(name); copy += 1) name = `${base} (${copy})`;
+    used.add(name);
+    if (!renamed.has(part.name)) renamed.set(part.name, name);
+    return { ...part, name };
+  });
+  return named.map((part) =>
+    part.verifyAgainst
+      ? {
+          ...part,
+          verifyAgainst: part.verifyAgainst.map(
+            (name) => renamed.get(name) ?? name,
+          ),
+        }
+      : part,
+  );
+}
+
 export async function gradeWithV3(
-  input: GradingInput,
+  rawInput: GradingInput,
   deps: GradeDeps,
 ): Promise<GradingOutcome> {
+  const input: GradingInput = {
+    ...rawInput,
+    parts: withSafePartNames(rawInput.parts),
+  };
   const now = deps.now ?? (() => Date.now());
   const started = now();
   const context = deps.context ?? {};
