@@ -13,6 +13,7 @@ import {
   UserSession,
 } from "src/auth/interfaces/user.session.interface";
 import { PrismaService } from "src/database/prisma.service";
+import { unwrapLegacyText } from "src/helpers/legacy-text";
 import {
   AssignmentResponseDto,
   GetAssignmentResponseDto,
@@ -59,6 +60,12 @@ const FIELDS = [
 ] as const;
 
 type FieldKey = (typeof FIELDS)[number];
+
+const LEARNER_TEXT_FIELDS = [
+  "introduction",
+  "instructions",
+  "gradingCriteriaOverview",
+] as const;
 
 /** Typed defaults for overlapping fields */
 const DEFAULTS = {
@@ -451,10 +458,29 @@ export class AssignmentRepository {
     }
 
     const { currentVersion, versions, ...base } = result;
-    return buildLearnerAssignment(
+    const learnerView = buildLearnerAssignment(
       base,
       pickActiveVersion(currentVersion, versions),
     );
+
+    // Learner reads are plain JSON, so text still stored in the legacy base64
+    // transport encoding is decoded here rather than by the browser.
+    const unwrappedFields: string[] = [];
+    for (const field of LEARNER_TEXT_FIELDS) {
+      const stored = learnerView[field];
+      const text = unwrapLegacyText(stored);
+      if (text !== stored) {
+        learnerView[field] = text;
+        unwrappedFields.push(field);
+      }
+    }
+    if (unwrappedFields.length > 0) {
+      this.logger.log(
+        `legacy_text.unwrapped assignmentId=${id} fields=${unwrappedFields.join(",")}`,
+      );
+    }
+
+    return learnerView;
   }
 
   /**

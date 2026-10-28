@@ -414,6 +414,34 @@ describe("AssignmentRepository", () => {
       });
     });
 
+    it("serves legacy base64 text fields to a learner as plain text", async () => {
+      const b64 = (text: string) => Buffer.from(text).toString("base64");
+      const base = createMockAssignment({
+        id: 1,
+        introduction: b64("<p>Welcome!</p>"),
+        instructions: b64("<p><strong>Scenario:</strong></p>"),
+        gradingCriteriaOverview: "<p>Already plain</p>",
+      });
+      jest.spyOn(prismaService.assignment, "findUnique").mockResolvedValue({
+        ...base,
+        currentVersion: {
+          ...base,
+          id: 7,
+          isActive: true,
+          introduction: b64("<p>Version intro</p>"),
+        },
+        versions: [],
+      } as never);
+
+      const result = await repository.findById(1, sampleLearnerSession);
+
+      expect(result).toMatchObject({
+        introduction: "<p>Version intro</p>",
+        instructions: "<p><strong>Scenario:</strong></p>",
+        gradingCriteriaOverview: "<p>Already plain</p>",
+      });
+    });
+
     it.each([
       ['{"a":1}', { a: 1 }],
       ["not json", null],
