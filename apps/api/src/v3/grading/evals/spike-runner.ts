@@ -14,7 +14,8 @@
  * estimates without calling the model. Needs OPENAI_API_KEY otherwise.
  * --debug asks the model for its reasoning summary and writes each run's
  * debug block (parts sent, raw output, quote checks) into the results file;
- * with --dry-run it writes the parts list only.
+ * with --dry-run it writes the parts list only. --no-render skips the
+ * LibreOffice page renders (pptx, docx, xlsx chart sheets) to compare.
  */
 import { readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -28,6 +29,7 @@ import {
   gradingQuestionSchema,
 } from "../contracts";
 import { fetchUrlAsParts } from "../fetch-url";
+import { createRenderer } from "../formats/render";
 import { gradeWithV3 } from "../grade-question";
 import { htmlToMarkdown, looksLikeHtml } from "../html-text";
 import { estimateCallCostUsd, estimateCostUsd } from "../limits";
@@ -67,6 +69,7 @@ interface Options {
   model?: string;
   verbose: boolean;
   debug: boolean;
+  render: boolean;
 }
 
 function parseArguments(argv: string[]): Options {
@@ -77,7 +80,7 @@ function parseArguments(argv: string[]): Options {
   const casesDirectory = value("--cases");
   if (!casesDirectory) {
     throw new Error(
-      "usage: spike-runner --cases <dir> [--effort low,medium] [--runs 1] [--dry-run] [--max-cost 1] [--out file] [--model id] [--verbose] [--debug]",
+      "usage: spike-runner --cases <dir> [--effort low,medium] [--runs 1] [--dry-run] [--max-cost 1] [--out file] [--model id] [--verbose] [--debug] [--no-render]",
     );
   }
   const efforts = (value("--effort") ?? "low")
@@ -100,6 +103,7 @@ function parseArguments(argv: string[]): Options {
     model: value("--model"),
     verbose: argv.includes("--verbose"),
     debug: argv.includes("--debug"),
+    render: !argv.includes("--no-render"),
   };
 }
 
@@ -225,6 +229,7 @@ async function main(): Promise<void> {
   }
   const logger = stderrLogger(options.verbose);
   const cases = await loadCases(options.casesDirectory);
+  const renderer = options.render ? createRenderer({ logger }) : undefined;
   const client = options.dryRun
     ? undefined
     : new OpenAiGradingModelClient({ model: options.model });
@@ -250,7 +255,10 @@ async function main(): Promise<void> {
           ),
         ].join("\n"),
       },
-      { fetchUrl: (url) => fetchUrlAsParts(url, undefined, logger) },
+      {
+        fetchUrl: (url) => fetchUrlAsParts(url, undefined, logger),
+        ...(renderer ? { renderer } : {}),
+      },
     );
     for (const effort of options.efforts) {
       const blank = {

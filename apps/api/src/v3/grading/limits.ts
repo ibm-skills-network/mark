@@ -34,6 +34,12 @@ export const PPTX_MAX_IMAGES = 20;
 export const PPTX_MIN_IMAGE_BYTES = 10 * 1024;
 export const PPTX_MAX_SLIDES = 500;
 
+/** LibreOffice rendering of pptx, docx and chart sheets to PDF. */
+export const RENDER_TIMEOUT_MS = 30_000;
+export const RENDER_MAX_PDF_BYTES = 30 * 1024 * 1024;
+/** Conversions at once per process; each soffice is a few hundred MB. */
+export const RENDER_MAX_CONCURRENT = 2;
+
 export const TABLE_HEAD_ROWS = 200;
 export const TABLE_TAIL_ROWS = 20;
 

@@ -17,6 +17,11 @@ export const partSchema = z
     mimeType: z.string().min(1).max(200).optional(),
     text: z.string().optional(),
     base64: z.string().optional(),
+    /**
+     * For a file rendered from a document we also send as text: quotes from
+     * this part are checked against these text parts instead of accepted.
+     */
+    verifyAgainst: z.array(z.string().min(1).max(500)).max(200).optional(),
   })
   .superRefine((part, context) => {
     if (part.kind === "text" && typeof part.text !== "string") {
@@ -219,4 +224,17 @@ export interface GradingLogger {
   info(message: string, meta?: Record<string, unknown>): unknown;
   warn(message: string, meta?: Record<string, unknown>): unknown;
   error(message: string, meta?: Record<string, unknown>): unknown;
+}
+
+/** A logger that adds `context` to every entry's metadata. */
+export function withLogContext(
+  logger: GradingLogger,
+  context: Record<string, unknown>,
+): GradingLogger {
+  return {
+    debug: (message, meta) => logger.debug(message, { ...context, ...meta }),
+    info: (message, meta) => logger.info(message, { ...context, ...meta }),
+    warn: (message, meta) => logger.warn(message, { ...context, ...meta }),
+    error: (message, meta) => logger.error(message, { ...context, ...meta }),
+  };
 }

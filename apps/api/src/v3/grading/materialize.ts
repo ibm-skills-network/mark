@@ -4,6 +4,8 @@ import * as XLSX from "xlsx";
 import type { Part } from "./contracts";
 import { notebookToParts } from "./formats/notebook";
 import { pptxToParts } from "./formats/pptx";
+import { isRenderFailure, type Renderer } from "./formats/render";
+import { chartSheetsWorkbook } from "./formats/xlsx-render";
 import { describeWorkbookCharts } from "./formats/xlsx-charts";
 import {
   abridgeTable,
@@ -87,7 +89,12 @@ export const DEFAULT_MATERIALIZE_LIMITS: MaterializeLimits = {
 export interface MaterializeDeps {
   /** Turns a learner URL into parts; failures come back as a text part. */
   fetchUrl?: (url: string) => Promise<Part[]>;
+  /** Renders pptx, docx and chart sheets to PDF; text only when absent. */
+  renderer?: Renderer;
 }
+
+/** What bytesToParts needs from MaterializeDeps. */
+export type BytesToPartsDeps = Pick<MaterializeDeps, "renderer">;
 
 export type MaterializeFailureCode =
   | "over_budget"
@@ -433,6 +440,105 @@ async function spreadsheetToParts(
   return parts;
 }
 
+// ── rendered pages ──────────────────────────────────────────────────────────
+
+/** PDF parts made by rendering; dropped first when a file is over budget. */
+const renderedParts = new WeakSet<Part>();
+
+function isRenderedPart(part: Part): boolean {
+  return renderedParts.has(part);
+}
+
+function renderNotSentPart(partName: string, reason: string): Part {
+  return { name: partName, kind: "text", text: `[not sent: ${reason}]` };
+}
+
+/**
+ * The file rendered to PDF as one file part, its quotes checked against the
+ * text parts named in `verifyAgainst`. Over the native-file cap the pages
+ * are replaced by a note; a failed render adds nothing (the text parts
+ * still carry the content).
+ */
+async function renderedPagesPart(
+  name: string,
+  partName: string,
+  extension: string,
+  buffer: Buffer,
+  verifyAgainst: string[],
+  limits: MaterializeLimits,
+  renderer: Renderer,
+): Promise<Part[]> {
+  const rendered = await renderer.toPdf(buffer, extension);
+  if (isRenderFailure(rendered)) return [];
+  const part: Part = {
+    name: partName,
+    kind: "file",
+    mimeType: "application/pdf",
+    base64: rendered.toString("base64"),
+    verifyAgainst,
+  };
+  const tokens = estimatePartTokens(part);
+  if (tokens > limits.maxTokensPerNativeFile) {
+    const pages = countPdfPages(part.base64 ?? "");
+    renderer.logger?.info("grading.v3.render.over_page_cap", {
+      extension,
+      pages,
+      estimatedTokens: tokens,
+      cap: limits.maxTokensPerNativeFile,
+    });
+    return [
+      renderNotSentPart(
+        partName,
+        `the rendered pages of ${name} (${pages} pages, about ${tokens} tokens) are over the ${limits.maxTokensPerNativeFile}-token cap; only the extracted text was sent`,
+      ),
+    ];
+  }
+  renderedParts.add(part);
+  return [part];
+}
+
+/** Over budget with its rendered pages: the same file without them. */
+function withoutRenderedPages(parts: Part[]): Part[] | undefined {
+  if (!parts.some((part) => isRenderedPart(part))) return undefined;
+  return parts.map((part) =>
+    isRenderedPart(part)
+      ? renderNotSentPart(
+          part.name,
+          "the rendered pages did not fit the submission budget; only the extracted text was sent",
+        )
+      : part,
+  );
+}
+
+async function chartPagesParts(
+  name: string,
+  buffer: Buffer,
+  sheetParts: Part[],
+  limits: MaterializeLimits,
+  renderer: Renderer,
+): Promise<Part[]> {
+  let workbook: Awaited<ReturnType<typeof chartSheetsWorkbook>>;
+  try {
+    workbook = await chartSheetsWorkbook(buffer);
+  } catch (error) {
+    // The CSV and chart-description parts still grade; log and move on.
+    renderer.logger?.warn("grading.v3.render.xlsx_prepare_failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return [];
+  }
+  if (!workbook) return [];
+  return renderedPagesPart(
+    name,
+    `${name} (chart pages)`,
+    "xlsx",
+    workbook.buffer,
+    sheetParts.filter((part) => part.kind === "text").map((part) => part.name),
+    limits,
+    renderer,
+  );
+}
+
 // ── one file ────────────────────────────────────────────────────────────────
 
 /** Convert one file's bytes to parts by extension, then mime type. */
@@ -441,7 +547,9 @@ export async function bytesToParts(
   mimeType: string | undefined,
   buffer: Buffer,
   limits: MaterializeLimits = DEFAULT_MATERIALIZE_LIMITS,
+  deps: BytesToPartsDeps = {},
 ): Promise<Part[]> {
+  const { renderer } = deps;
   if (buffer.length > limits.maxFileBytes) {
     throw new MaterializeLimitError(
       "part_too_large",
@@ -476,7 +584,13 @@ export async function bytesToParts(
     ];
   }
   if (SPREADSHEET_EXTENSIONS.has(extension)) {
-    return spreadsheetToParts(name, buffer, extension, limits);
+    const sheets = await spreadsheetToParts(name, buffer, extension, limits);
+    // Only xlsx: xlsm can carry macros, xls is a different container.
+    if (!renderer || extension !== "xlsx") return sheets;
+    return [
+      ...sheets,
+      ...(await chartPagesParts(name, buffer, sheets, limits, renderer)),
+    ];
   }
   if (extension === "ipynb") {
     try {
@@ -493,18 +607,33 @@ export async function bytesToParts(
     }
   }
   if (extension === "docx") {
+    let text: Part;
     try {
       const { value } = await mammoth.extractRawText({ buffer });
-      return [textPart(name, value, limits)];
+      text = textPart(name, value, limits);
     } catch (error) {
       if (error instanceof MaterializeLimitError) throw error;
       return [couldNotReadPart(name, "docx", "unreadable document")];
     }
+    if (!renderer) return [text];
+    return [
+      text,
+      ...(await renderedPagesPart(
+        name,
+        `${name} (pages)`,
+        "docx",
+        buffer,
+        [name],
+        limits,
+        renderer,
+      )),
+    ];
   }
   if (extension === "pptx") {
+    let deckParts: Part[];
     try {
       const [deck, ...images] = await pptxToParts(name, buffer);
-      return [textPart(name, deck.text ?? "", limits), ...images];
+      deckParts = [textPart(name, deck.text ?? "", limits), ...images];
     } catch (error) {
       if (error instanceof MaterializeLimitError) throw error;
       return [
@@ -515,6 +644,21 @@ export async function bytesToParts(
         ),
       ];
     }
+    if (!renderer) return deckParts;
+    const [deckText, ...images] = deckParts;
+    return [
+      deckText,
+      ...(await renderedPagesPart(
+        name,
+        `${name} (slides)`,
+        "pptx",
+        buffer,
+        [name],
+        limits,
+        renderer,
+      )),
+      ...images,
+    ];
   }
   const isText =
     TEXT_EXTENSIONS.has(extension) ||
@@ -726,6 +870,7 @@ export async function materialize(
         file.mimeType,
         buffer,
         limits,
+        { renderer: deps.renderer },
       );
       const tooBig = parts.find(
         (part) =>
@@ -767,11 +912,27 @@ export async function materialize(
   const byPriority = [...converted].sort(
     (a, b) => a.priority - b.priority || a.order - b.order,
   );
-  for (const file of byPriority) {
-    const fits =
-      chosen.length < limits.maxFilesSent &&
-      tokens + file.tokens <= limits.tokenBudget &&
-      bytes + file.bytes <= limits.maxTotalBytes;
+  const fitsBudget = (candidate: ConvertedFile): boolean =>
+    chosen.length < limits.maxFilesSent &&
+    tokens + candidate.tokens <= limits.tokenBudget &&
+    bytes + candidate.bytes <= limits.maxTotalBytes;
+  for (const original of byPriority) {
+    let file = original;
+    let fits = fitsBudget(file);
+    const textOnly = fits ? undefined : withoutRenderedPages(file.parts);
+    if (textOnly) {
+      // Rendered pages are extra; send the file's text rather than nothing.
+      const fallback: ConvertedFile = {
+        ...file,
+        parts: textOnly,
+        tokens: estimatePartsTokens(textOnly),
+        bytes: textOnly.reduce((sum, part) => sum + partBytes(part), 0),
+      };
+      if (fitsBudget(fallback)) {
+        file = fallback;
+        fits = true;
+      }
+    }
     if (fits) {
       chosen.push(file);
       tokens += file.tokens;

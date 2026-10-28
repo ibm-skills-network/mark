@@ -243,6 +243,37 @@ export function checkQuote(
   return { accepted: false, code: "quote_not_found" };
 }
 
+/**
+ * checkQuote, except that a rendered file part with `verifyAgainst` has its
+ * quotes checked against those text parts: accepted if any of them holds it.
+ */
+function checkQuoteAgainstParts(
+  quote: Quote,
+  part: Part | undefined,
+  partsByName: Map<string, Part>,
+  indexFor: (part: Part) => PartIndex,
+): QuoteCheck {
+  const targets =
+    part && part.kind !== "text"
+      ? (part.verifyAgainst ?? [])
+          .map((name) => partsByName.get(name))
+          .filter((target): target is Part => target?.kind === "text")
+      : [];
+  if (!part || targets.length === 0) {
+    return checkQuote(
+      quote,
+      part,
+      part?.kind === "text" ? indexFor(part) : undefined,
+    );
+  }
+  let last: QuoteCheck = { accepted: false, code: "quote_not_found" };
+  for (const target of targets) {
+    last = checkQuote(quote, target, indexFor(target));
+    if (last.accepted) return last;
+  }
+  return last;
+}
+
 /** One quote's outcome, without its text. */
 export type QuoteCheckRecord = {
   criterionId: string;
@@ -288,11 +319,7 @@ export function applyEvidenceChecks(
     const validQuotes: Quote[] = [];
     for (const quote of verdict.quotes) {
       const part = partsByName.get(quote.part);
-      const check = checkQuote(
-        quote,
-        part,
-        part?.kind === "text" ? indexFor(part) : undefined,
-      );
+      const check = checkQuoteAgainstParts(quote, part, partsByName, indexFor);
       quoteChecks.push({
         criterionId: criterion.id,
         part: quote.part,

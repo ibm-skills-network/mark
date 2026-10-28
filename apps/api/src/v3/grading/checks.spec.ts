@@ -209,6 +209,40 @@ describe("applyEvidenceChecks", () => {
     expect(result.failures[0].code).toBe("quote_unknown_part");
   });
 
+  it("checks quotes from a rendered file part against its text parts", () => {
+    const rendered: Part[] = [
+      { name: "deck.pptx", kind: "text", text: "## Slide 1\nRevenue grew 12%" },
+      {
+        name: "deck.pptx (slides)",
+        kind: "file",
+        mimeType: "application/pdf",
+        base64: "AA==",
+        verifyAgainst: ["deck.pptx"],
+      },
+    ];
+    const result = applyEvidenceChecks(
+      output([
+        verdict("c1", 2, [
+          { part: "deck.pptx (slides)", text: "Revenue grew 12%" },
+        ]),
+        verdict("c2", 3, [
+          { part: "deck.pptx (slides)", text: "Costs fell by half" },
+        ]),
+      ]),
+      criteria,
+      rendered,
+    );
+    expect(result.verdicts.map((item) => item.points)).toEqual([2, 0]);
+    expect(result.quoteChecks.map((check) => check.accepted)).toEqual([
+      true,
+      false,
+    ]);
+    expect(result.failures.map((failure) => failure.code)).toEqual([
+      "quote_not_found",
+      "points_without_evidence",
+    ]);
+  });
+
   it("never puts quote text in failure details", () => {
     const result = applyEvidenceChecks(
       output([
