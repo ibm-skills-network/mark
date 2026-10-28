@@ -298,6 +298,14 @@ export interface EvidenceCheckResult {
 }
 
 /**
+ * Shown to the learner for a criterion whose points were removed because no
+ * quoted evidence could be found in the submission, instead of the model's
+ * feedback, which was written for the points it gave.
+ */
+export const ZEROED_FEEDBACK =
+  "We couldn't find the part of your submission that shows this, so no points were given for it.";
+
+/**
  * Evidence checks on structurally valid verdicts. Quotes that don't hold up
  * are dropped and recorded; a criterion left with points but no valid quote
  * is set to 0. Verdicts come back in rubric order.
@@ -357,20 +365,22 @@ export function applyEvidenceChecks(
       }
     }
     let points = verdict.points;
+    let feedback = verdict.feedback;
     if (points > 0 && validQuotes.length === 0) {
       failures.push({
         code: "points_without_evidence",
         criterionId: criterion.id,
-        detail: `${points} points with no valid quote; set to 0`,
+        detail: `criterion ${criterion.id}: ${points} points with no quote found in the part it names; set to 0`,
       });
       points = 0;
+      feedback = ZEROED_FEEDBACK;
     }
     verdicts.push({
       criterionId: criterion.id,
       points,
       reason: verdict.reason,
       quotes: validQuotes,
-      feedback: verdict.feedback,
+      feedback,
       visualUnverifiedQuotes,
       needsVerification: verdict.needsVerification,
       verificationReason: verdict.needsVerification

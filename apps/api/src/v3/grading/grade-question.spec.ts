@@ -1,7 +1,9 @@
 import type OpenAI from "openai";
 import type { GradingInput, ModelGradeOutput } from "./contracts";
 import { gradeSubmission, gradeWithV3 } from "./grade-question";
-import { MAX_OUTPUT_TOKENS } from "./limits";
+import { ZEROED_FEEDBACK } from "./checks";
+import { estimateCallCostUsd, MAX_OUTPUT_TOKENS } from "./limits";
+import { estimatePartsTokens } from "./materialize";
 import {
   type GradingModelClient,
   type GradingModelRequest,
@@ -164,23 +166,6 @@ describe("gradeWithV3", () => {
     expect(outcome.status).toBe("graded");
   });
 
-  it("zeroes a fabricated quote without retrying", async () => {
-    const fabricated = {
-      ...good,
-      verdicts: [
-        {
-          ...good.verdicts[0],
-          quotes: [{ part: "answer", text: "The answer is 42" }],
-        },
-        good.verdicts[1],
-      ],
-    };
-    const client = new FakeClient([fabricated]);
-    const outcome = await gradeWithV3(input, { client, logger: logger() });
-    expect(client.requests).toHaveLength(1);
-    expect(outcome.status === "graded" && outcome.result.totalPoints).toBe(1);
-  });
-
   it("scales to the question's points when the rubric adds up differently", async () => {
     const outcome = await gradeWithV3(
       { ...input, totalPoints: 10 },
@@ -267,6 +252,57 @@ describe("gradeWithV3", () => {
     expect(outcome).toEqual({
       status: "graded",
       result: expect.objectContaining({ totalPoints: 3, checkFailures: [] }),
+    });
+  });
+
+  const invented: ModelGradeOutput = {
+    ...good,
+    verdicts: [
+      {
+        ...good.verdicts[0],
+        quotes: [
+          { part: "answer", text: "a sentence the learner never wrote" },
+        ],
+      },
+      good.verdicts[1],
+    ],
+  };
+
+  it("retries once when a criterion's points have no quote it can find", async () => {
+    const client = new FakeClient([invented, good]);
+    const outcome = await gradeWithV3(input, { client, logger: logger() });
+    expect(client.requests).toHaveLength(2);
+    expect(JSON.stringify(client.requests[1].messages)).toContain("c1");
+    expect(outcome).toEqual({
+      status: "graded",
+      result: expect.objectContaining({ totalPoints: 3 }),
+    });
+  });
+
+  it("zeroes it on the second miss and does not show the model's praise", async () => {
+    const client = new FakeClient([invented, invented]);
+    const outcome = await gradeWithV3(input, { client, logger: logger() });
+    expect(client.requests).toHaveLength(2);
+    if (outcome.status !== "graded") throw new Error("expected a grade");
+    const c1 = outcome.result.verdicts.find((v) => v.criterionId === "c1");
+    expect(c1).toEqual(
+      expect.objectContaining({ points: 0, feedback: ZEROED_FEEDBACK }),
+    );
+    expect(outcome.result.totalPoints).toBe(1);
+  });
+
+  it("keeps the first grade when a retry would cross the cost ceiling", async () => {
+    const client = new FakeClient([invented]);
+    const outcome = await gradeWithV3(input, {
+      client,
+      logger: logger(),
+      costCeilingUsd:
+        estimateCallCostUsd(estimatePartsTokens(input.parts)) * 1.1,
+    });
+    expect(client.requests).toHaveLength(1);
+    expect(outcome).toEqual({
+      status: "graded",
+      result: expect.objectContaining({ totalPoints: 1 }),
     });
   });
 
@@ -571,7 +607,8 @@ describe("debug mode", () => {
         },
       ],
     };
-    const client = new FakeClient([withMadeUpQuote], summary);
+    // The made-up quote zeroes c2 twice: the retry, then the final grade.
+    const client = new FakeClient([withMadeUpQuote, withMadeUpQuote], summary);
     const log = logger();
     const outcome = await gradeWithV3(input, {
       client,
@@ -581,7 +618,7 @@ describe("debug mode", () => {
     expect(client.requests[0].reasoningSummary).toBe(true);
     if (outcome.status !== "graded") throw new Error("expected graded");
     expect(outcome.result.debug).toEqual({
-      reasoningSummary: summary,
+      reasoningSummary: [...summary, ...summary],
       parts: [
         {
           name: "answer",
@@ -589,7 +626,10 @@ describe("debug mode", () => {
           estimatedTokens: expect.any(Number) as number,
         },
       ],
-      rawOutputs: [JSON.stringify(withMadeUpQuote)],
+      rawOutputs: [
+        JSON.stringify(withMadeUpQuote),
+        JSON.stringify(withMadeUpQuote),
+      ],
       quoteChecks: [
         { criterionId: "c1", part: "answer", accepted: true, rule: "verbatim" },
         {

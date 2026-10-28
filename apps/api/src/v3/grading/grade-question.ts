@@ -300,8 +300,23 @@ export async function gradeWithV3(
     const structural = parsed.ok
       ? structuralFailures(parsed.output, criteria)
       : [];
-    if (parsed.ok && structural.length === 0) {
-      const checked = applyEvidenceChecks(parsed.output, criteria, input.parts);
+    const checked =
+      parsed.ok && structural.length === 0
+        ? applyEvidenceChecks(parsed.output, criteria, input.parts)
+        : undefined;
+    const unevidenced =
+      checked?.failures.filter(
+        (failure) => failure.code === "points_without_evidence",
+      ) ?? [];
+    // Points the checks removed get one more try with the misses named,
+    // when that call fits the cost ceiling; otherwise this grade stands.
+    const retryUnevidenced =
+      attempt === 1 &&
+      unevidenced.length > 0 &&
+      estimateCostUsd(usage) +
+        estimateCallCostUsd(estimatedTokens + MAX_OUTPUT_TOKENS) <=
+        costCeiling;
+    if (parsed.ok && checked && !retryUnevidenced) {
       const rubricMax = criteria.reduce((sum, item) => sum + item.maxPoints, 0);
       const awarded = checked.verdicts.reduce(
         (sum, item) => sum + item.points,
@@ -354,7 +369,9 @@ export async function gradeWithV3(
     lastFailures =
       parsed.ok === false
         ? [{ code: "missing_verdict", detail: parsed.detail }]
-        : structural;
+        : checked
+          ? checked.failures
+          : structural;
     deps.logger.warn("grading.v3.check_failed", {
       ...context,
       attempt,
