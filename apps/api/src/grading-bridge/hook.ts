@@ -1,11 +1,12 @@
 import { BadRequestException, Inject, Injectable } from "@nestjs/common";
-import { QuestionType } from "@prisma/client";
+import { AIUsageType, QuestionType } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import type { CreateQuestionResponseAttemptRequestDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.request.dto";
 import type { CreateQuestionResponseAttemptResponseDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
 import type { QuestionDto } from "src/api/assignment/dto/update.questions.request.dto";
 import type { GradingContext } from "src/api/attempt/common/interfaces/grading-context.interface";
 import { isMediaResponseType } from "src/api/attempt/common/utils/grading-question-source.util";
+import { AiFeatureFlagsService } from "src/api/ai-feature-flags/ai-feature-flags.service";
 import { GradingFactoryService } from "src/api/attempt/services/grading-factory.service";
 import { S3Service } from "src/api/files/services/s3.service";
 import { OversizedSubmissionError } from "src/api/llm/features/grading/errors/oversized-submission.error";
@@ -32,6 +33,13 @@ export class V3GradingFailedError extends Error {
 }
 
 const OFF: ResolvedMode = { mode: "off", effort: "medium", source: "default" };
+
+/**
+ * Shadow gradings running at once per worker. Shadow is a staging-only
+ * comparison outside the grading rate limiter; past this it is skipped so
+ * it never competes with real grading for the model or memory.
+ */
+export const SHADOW_MAX_IN_FLIGHT = 2;
 
 /**
  * An unreadable link or upload, as the errors legacy grading throws for the
@@ -79,12 +87,14 @@ export interface LegacyGradeResult {
 @Injectable()
 export class GradingBridgeService {
   private readonly logger: Logger;
+  private shadowInFlight = 0;
 
   constructor(
     private readonly modes: GradingModeService,
     private readonly grader: V3GradingService,
     private readonly gradingFactory: GradingFactoryService,
     private readonly s3Service: S3Service,
+    private readonly aiFlags: AiFeatureFlagsService,
     @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
   ) {
     this.logger = parentLogger.child({ context: GradingBridgeService.name });
@@ -196,6 +206,8 @@ export class GradingBridgeService {
     gradingContext: GradingContext,
     mode: ResolvedMode,
   ): Promise<LegacyGradeResult> {
+    // The same kill-switch legacy's model calls go through.
+    this.aiFlags.assertUsageEnabled(AIUsageType.ASSIGNMENT_GRADING);
     const learnerResponse = await this.extractLegacyResponse(
       question,
       requestDto,
@@ -239,6 +251,22 @@ export class GradingBridgeService {
       mode: "shadow",
       questionType: question.type,
     };
+    if (this.aiFlags.isDisabledForUsage(AIUsageType.ASSIGNMENT_GRADING)) {
+      this.logger.info("grading.v3.shadow_skipped", {
+        ...context,
+        reason: "ai_disabled",
+      });
+      return;
+    }
+    if (this.shadowInFlight >= SHADOW_MAX_IN_FLIGHT) {
+      this.logger.info("grading.v3.shadow_skipped", {
+        ...context,
+        reason: "busy",
+        inFlight: this.shadowInFlight,
+      });
+      return;
+    }
+    this.shadowInFlight += 1;
     const started = Date.now();
     try {
       const gradingQuestion = toGradingQuestion(question, mode.effort);
@@ -286,6 +314,8 @@ export class GradingBridgeService {
         stack: error instanceof Error ? error.stack : undefined,
         durationMs: Date.now() - started,
       });
+    } finally {
+      this.shadowInFlight -= 1;
     }
   }
 }

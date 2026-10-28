@@ -16,6 +16,8 @@ import {
   RetryableProcessingError,
   SourceProcessingError,
 } from "src/api/llm/features/grading/errors/source-processing.error";
+import { AiFeatureFlagsService } from "src/api/ai-feature-flags/ai-feature-flags.service";
+import { AiTemporarilyDisabledException } from "src/api/ai-feature-flags/ai-temporarily-disabled.exception";
 import { UserRole } from "src/auth/interfaces/user.session.interface";
 import { PrismaService } from "src/database/prisma.service";
 import type { GradingFailure, GradingOutcome } from "../v3/grading/contracts";
@@ -231,6 +233,13 @@ describe("GradingBridgeService", () => {
   const factory = { getStrategy: jest.fn(() => strategy) };
   const s3 = { getObject: jest.fn() };
   const context = { assignmentId: 12, attemptId: 345 } as never;
+  let gradingDisabled = false;
+  const aiFlags = {
+    isDisabledForUsage: () => gradingDisabled,
+    assertUsageEnabled: () => {
+      if (gradingDisabled) throw new AiTemporarilyDisabledException();
+    },
+  };
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -243,10 +252,12 @@ describe("GradingBridgeService", () => {
         { provide: V3GradingService, useValue: grader },
         { provide: GradingFactoryService, useValue: factory },
         { provide: S3Service, useValue: s3 },
+        { provide: AiFeatureFlagsService, useValue: aiFlags },
         loggerProvider,
       ],
     }).compile();
     bridge = module.get(GradingBridgeService);
+    gradingDisabled = false;
   });
 
   function failed(partial: Partial<GradingFailure>): GradingOutcome {
@@ -522,6 +533,63 @@ describe("GradingBridgeService", () => {
     const error = await liveText().catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(V3GradingFailedError);
     expect(error).not.toBeInstanceOf(OversizedSubmissionError);
+  });
+
+  it("live: the AI grading kill-switch stops v3 before any model work", async () => {
+    gradingDisabled = true;
+    await expect(liveText()).rejects.toBeInstanceOf(
+      AiTemporarilyDisabledException,
+    );
+    expect(grader.grade).toHaveBeenCalledTimes(0);
+  });
+
+  const legacyResult = {
+    learnerResponse: "It is 42",
+    responseDto: { totalPoints: 3 } as never,
+  };
+
+  it("shadow: skips while AI grading is switched off", async () => {
+    gradingDisabled = true;
+    await bridge.runShadow(question, legacyResult, context, mode("shadow"));
+    expect(grader.grade).toHaveBeenCalledTimes(0);
+    expect(childLogger.info).toHaveBeenCalledWith(
+      "grading.v3.shadow_skipped",
+      expect.objectContaining({ reason: "ai_disabled" }),
+    );
+  });
+
+  it("shadow: runs at most two at once per worker and skips the rest", async () => {
+    const pending: Array<() => void> = [];
+    grader.grade.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          pending.push(() => resolve(failed({})));
+        }),
+    );
+    const first = bridge.runShadow(
+      question,
+      legacyResult,
+      context,
+      mode("shadow"),
+    );
+    const second = bridge.runShadow(
+      question,
+      legacyResult,
+      context,
+      mode("shadow"),
+    );
+    await bridge.runShadow(question, legacyResult, context, mode("shadow"));
+    expect(grader.grade).toHaveBeenCalledTimes(2);
+    expect(childLogger.info).toHaveBeenCalledWith(
+      "grading.v3.shadow_skipped",
+      expect.objectContaining({ reason: "busy" }),
+    );
+    for (const release of pending) release();
+    await Promise.all([first, second]);
+    // Slots free up once the running ones finish.
+    void bridge.runShadow(question, legacyResult, context, mode("shadow"));
+    expect(grader.grade).toHaveBeenCalledTimes(3);
+    for (const release of pending) release();
   });
 
   it("loads uploaded files from storage and maps a missing object like legacy", async () => {
