@@ -1,5 +1,66 @@
 import { Open as OpenZip } from "unzipper";
 
+/** An archive entry that inflates past its limit (headers can lie). */
+export class ZipExpansionError extends Error {
+  constructor(readonly limitBytes: number) {
+    super(`archive entry expands past ${limitBytes} bytes`);
+    this.name = "ZipExpansionError";
+  }
+}
+
+interface StreamableEntry {
+  stream(): NodeJS.ReadableStream;
+}
+
+/**
+ * Inflates one entry, stopping as soon as the real bytes pass `maxBytes`.
+ * The header's size is never trusted, so a bomb costs at most `maxBytes`.
+ */
+export async function readEntryCapped(
+  entry: StreamableEntry,
+  maxBytes: number,
+): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  let length = 0;
+  const stream = entry.stream();
+  for await (const chunk of stream) {
+    const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(String(chunk));
+    length += bytes.length;
+    if (length > maxBytes) {
+      (stream as NodeJS.ReadableStream & { destroy?: () => void }).destroy?.();
+      throw new ZipExpansionError(maxBytes);
+    }
+    chunks.push(bytes);
+  }
+  return Buffer.concat(chunks, length);
+}
+
+/**
+ * Inflates every entry of an archive, counting real bytes and keeping
+ * none, and throws once the total passes `maxTotalBytes`. Run before
+ * handing an archive to a parser that inflates it all in memory.
+ */
+export async function assertArchiveExpandsWithin(
+  buffer: Buffer,
+  maxTotalBytes: number,
+): Promise<void> {
+  const directory = await OpenZip.buffer(buffer);
+  let total = 0;
+  for (const entry of directory.files) {
+    if (entry.type !== "File") continue;
+    const stream = entry.stream();
+    for await (const chunk of stream) {
+      total += Buffer.isBuffer(chunk) ? chunk.length : String(chunk).length;
+      if (total > maxTotalBytes) {
+        (
+          stream as NodeJS.ReadableStream & { destroy?: () => void }
+        ).destroy?.();
+        throw new ZipExpansionError(maxTotalBytes);
+      }
+    }
+  }
+}
+
 export interface ZipReadLimits {
   /** Uncompressed bytes for one entry; larger entries read as undefined. */
   maxEntryBytes: number;
@@ -38,10 +99,19 @@ export async function openOfficeZip(
       return undefined;
     }
     if (total + entry.uncompressedSize > limits.maxTotalBytes) return undefined;
-    const bytes = await entry.buffer();
-    // Headers can lie; count the real bytes.
+    let bytes: Buffer;
+    try {
+      // Headers can lie: inflate no further than what is left of the budget.
+      bytes = await readEntryCapped(
+        entry,
+        Math.min(limits.maxEntryBytes, limits.maxTotalBytes - total),
+      );
+    } catch (error) {
+      if (error instanceof ZipExpansionError) return undefined;
+      throw error;
+    }
     total += bytes.length;
-    return bytes.length > limits.maxEntryBytes ? undefined : bytes;
+    return bytes;
   };
   return {
     paths: [...entries.keys()],

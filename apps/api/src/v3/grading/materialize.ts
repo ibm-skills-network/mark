@@ -5,6 +5,11 @@ import type { Part } from "./contracts";
 import { htmlFileToParts } from "./formats/html-file";
 import { notebookToParts } from "./formats/notebook";
 import { pptxToParts } from "./formats/pptx";
+import {
+  assertArchiveExpandsWithin,
+  readEntryCapped,
+  ZipExpansionError,
+} from "./formats/zip-read";
 import { isRenderFailure, type Renderer } from "./formats/render";
 import { chartSheetsWorkbook } from "./formats/xlsx-render";
 import { describeWorkbookCharts } from "./formats/xlsx-charts";
@@ -543,6 +548,35 @@ async function chartPagesParts(
 // ── one file ────────────────────────────────────────────────────────────────
 
 /** Convert one file's bytes to parts by extension, then mime type. */
+const OFFICE_ARCHIVE_EXTENSIONS = new Set(["xlsx", "xlsm", "docx", "pptx"]);
+
+/**
+ * Office files are zip archives that SheetJS and mammoth inflate whole in
+ * memory. Inflate them once first, counting real bytes (headers can lie),
+ * and refuse one that expands past the archive limit.
+ */
+async function refuseOfficeBomb(
+  name: string,
+  extension: string,
+  buffer: Buffer,
+  limits: MaterializeLimits,
+): Promise<void> {
+  const isZip = buffer.length >= 4 && buffer.readUInt32LE(0) === 0x04_03_4b_50;
+  if (!OFFICE_ARCHIVE_EXTENSIONS.has(extension) || !isZip) return;
+  try {
+    await assertArchiveExpandsWithin(buffer, limits.zipMaxUncompressedBytes);
+  } catch (error) {
+    if (error instanceof ZipExpansionError) {
+      throw new MaterializeLimitError(
+        "submission_too_large",
+        `${name} expands past ${limits.zipMaxUncompressedBytes} bytes`,
+        name,
+      );
+    }
+    // Not a readable archive: the format's own parser reports it.
+  }
+}
+
 export async function bytesToParts(
   name: string,
   mimeType: string | undefined,
@@ -560,6 +594,7 @@ export async function bytesToParts(
   }
   const extension = extensionOf(name);
   const mime = (mimeType ?? "").toLowerCase().split(";")[0].trim();
+  await refuseOfficeBomb(name, extension, buffer, limits);
 
   if (extension === "pdf" || mime === "application/pdf") {
     return [
@@ -757,16 +792,17 @@ async function expandZip(
       size,
       depth,
       load: async () => {
-        const bytes = await entry.buffer();
-        // The header can lie about the size; the bytes can't.
-        if (bytes.length > Math.max(size, 0) + 1024) {
+        try {
+          // The header can lie about the size: inflate no further than it says.
+          return await readEntryCapped(entry, Math.max(size, 0) + 1024);
+        } catch (error) {
+          if (!(error instanceof ZipExpansionError)) throw error;
           throw new MaterializeLimitError(
             "submission_too_large",
             `${name} is larger than its archive header says`,
             name,
           );
         }
-        return bytes;
       },
     });
   }

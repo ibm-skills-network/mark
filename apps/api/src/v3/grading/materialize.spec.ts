@@ -336,6 +336,50 @@ describe("materialize: limits", () => {
     );
   });
 
+  /** Rewrites every local and central header to claim `size` bytes. */
+  function understateSizes(buffer: Buffer, size: number): Buffer {
+    const out = Buffer.from(buffer);
+    for (let offset = 0; offset < out.length - 4; offset += 1) {
+      const signature = out.readUInt32LE(offset);
+      if (signature === 0x04_03_4b_50) out.writeUInt32LE(size, offset + 22);
+      if (signature === 0x02_01_4b_50) out.writeUInt32LE(size, offset + 24);
+    }
+    return out;
+  }
+
+  async function lyingArchive(entry: string): Promise<Buffer> {
+    const zip = new JSZip();
+    zip.file(entry, "0".repeat(3 * 1024 * 1024));
+    const buffer = await zip.generateAsync({
+      type: "nodebuffer",
+      compression: "DEFLATE",
+    });
+    return understateSizes(buffer, 100);
+  }
+
+  const smallArchives = {
+    ...DEFAULT_MATERIALIZE_LIMITS,
+    zipMaxUncompressedBytes: 1024 * 1024,
+  };
+
+  it.each([
+    ["bomb.zip", "zeros.txt"],
+    ["book.xlsx", "xl/worksheets/sheet1.xml"],
+    ["report.docx", "word/document.xml"],
+  ])(
+    "refuses %s whose headers understate what it expands to",
+    async (name, entry) => {
+      const result = await materialize(
+        { files: [file(name, await lyingArchive(entry))] },
+        {},
+        smallArchives,
+      );
+      expect(result).toEqual(
+        expect.objectContaining({ ok: false, code: "submission_too_large" }),
+      );
+    },
+  );
+
   it("does not expand archives nested deeper than the limit", async () => {
     const inner = new JSZip();
     inner.file("deep.txt", "deep");
