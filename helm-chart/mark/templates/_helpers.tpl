@@ -223,3 +223,19 @@ Migration annotations
 "helm.sh/hook": pre-install,pre-upgrade
 "helm.sh/hook-weight": "-5"
 {{- end }}
+
+{{/*
+Readiness probe that keeps a migration pod out of its Service.
+A migration pod carries its service's labels, because the network policies use
+them to let it reach Postgres. Those same labels match the Service selector. A
+pod with no readiness probe counts as ready as soon as it starts, so the Service
+sends it live requests it cannot answer, and the caller gets a 502.
+A pod with a readiness probe is not ready until the probe first passes. This
+probe's first check is a day away, so it never runs and the pod never takes traffic.
+*/}}
+{{- define "mark.migrations.readinessProbe" -}}
+readinessProbe:
+  exec:
+    command: ["/bin/sh", "-c", "exit 1"]
+  initialDelaySeconds: 86400
+{{- end }}

@@ -52,6 +52,7 @@ spec:
           {{- end }}
           resources:
             {{- toYaml .resources | nindent 12 }}
+          {{- include "mark.migrations.readinessProbe" $ | nindent 10 }}
           env:
             - name: "SAFETY_ASSURED"
               value: "1"
