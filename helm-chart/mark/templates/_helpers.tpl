@@ -223,3 +223,17 @@ Migration annotations
 "helm.sh/hook": pre-install,pre-upgrade
 "helm.sh/hook-weight": "-5"
 {{- end }}
+
+{{/*
+a readiness probe hack that keeps a migration pod from receiving traffic.
+A migration pod carries its service's labels, because the network policies use
+them to let it reach Postgres. But those same labels match the service selector. 
+A pod with a readiness probe is not ready until the probe first passes. This
+probe's first check is a day away, so it never runs and the pod never takes traffic.
+*/}}
+{{- define "mark.migrations.readinessProbe" -}}
+readinessProbe:
+  exec:
+    command: ["/bin/sh", "-c", "exit 1"]
+  initialDelaySeconds: 86400
+{{- end }}

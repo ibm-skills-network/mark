@@ -44,6 +44,7 @@ spec:
           {{- end }}
           resources:
             {{- toYaml .resources | nindent 12 }}
+          {{- include "mark.migrations.readinessProbe" $ | nindent 10 }}
           envFrom:
             - configMapRef:
                 name: {{ include "mark.api.name" $ }}-config
