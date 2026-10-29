@@ -155,7 +155,7 @@ export class OpenAiGradingModelClient implements GradingModelClient {
     this.client =
       options.client ??
       new OpenAI({
-        apiKey: options.apiKey ?? process.env.OPENAI_API_KEY,
+        apiKey: options.apiKey ?? process.env.OPENAI_API_KEY, // pragma: allowlist secret
         timeout: options.timeoutMs ?? 300_000,
         maxRetries: options.maxRetries ?? 2,
       });
