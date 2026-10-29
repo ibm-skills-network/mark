@@ -1149,3 +1149,17 @@ model SavedSession {
   @@id([storeId, role, assignmentId])
   @@index([updatedAt])
 }
+
+/// Per question type (and optionally per assignment) switch for v3 grading.
+/// The row with assignmentId null is the global row for its question type.
+model GradingModeConfig {
+  id           Int          @id @default(autoincrement())
+  questionType QuestionType
+  assignmentId Int?
+  mode         String       @default("off") /// off | shadow | live
+  effort       String? /// low | medium | high; null = the type's default
+  updatedBy    String
+  updatedAt    DateTime     @updatedAt
+
+  @@unique([questionType, assignmentId])
+}

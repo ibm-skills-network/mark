@@ -14,6 +14,7 @@ import {
   Injectable,
   InternalServerErrorException,
   NotFoundException,
+  Optional,
 } from "@nestjs/common";
 import { Question, QuestionType } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
@@ -80,6 +81,7 @@ import {
   type SlowGradingType,
 } from "../grading-progress.service";
 import { GradingRateLimiterService } from "../grading-rate-limiter.service";
+import { GradingBridgeService } from "../../../../grading-bridge/hook";
 
 function issueHost(issue: GradingIssue): string | undefined {
   if (!issue.source?.url) return undefined;
@@ -120,6 +122,8 @@ export class QuestionResponseService {
     @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
     @Inject("GradingProgressService")
     private readonly progressService?: GradingProgressService,
+    @Optional()
+    private readonly gradingBridge?: GradingBridgeService,
   ) {
     this.logger = parentLogger.child({
       context: QuestionResponseService.name,
@@ -1103,11 +1107,26 @@ export class QuestionResponseService {
         this.loadChoiceRenderings(questionId, assignmentAttemptId);
     }
 
+    // The one v3 fork: off (or no bridge) leaves legacy exactly as it was.
+    const v3Mode = await this.gradingBridge?.resolveMode(
+      question,
+      assignmentId,
+      role,
+    );
+
     let responseDto: CreateQuestionResponseAttemptResponseDto;
     let learnerResponse: unknown;
 
     try {
-      if (question.type === QuestionType.LINK_FILE) {
+      if (v3Mode?.mode === "live" && this.gradingBridge) {
+        if (sourceCheckOnly) return skippedForSourceCheck();
+        ({ responseDto, learnerResponse } = await this.gradingBridge.gradeLive(
+          question,
+          requestDto,
+          gradingContext,
+          v3Mode,
+        ));
+      } else if (question.type === QuestionType.LINK_FILE) {
         ({ responseDto, learnerResponse } = await this.handleLinkFileQuestion(
           question,
           requestDto,
@@ -1242,6 +1261,16 @@ export class QuestionResponseService {
 
       throw new BadRequestException(
         `Failed to process question response: ${errorMessage}`,
+      );
+    }
+
+    if (v3Mode?.mode === "shadow" && this.gradingBridge) {
+      // Not awaited: shadow only logs and must not slow or change the grade.
+      void this.gradingBridge.runShadow(
+        question,
+        { learnerResponse, responseDto },
+        gradingContext,
+        v3Mode,
       );
     }
 

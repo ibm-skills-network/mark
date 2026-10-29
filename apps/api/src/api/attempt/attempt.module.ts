@@ -29,6 +29,8 @@ import { TextGradingStrategy } from "./common/strategies/text-grading.strategy";
 import { TrueFalseGradingStrategy } from "./common/strategies/true-false-grading.strategy";
 import { UrlGradingStrategy } from "./common/strategies/url-grading.strategy";
 import { LocalizationService } from "./common/utils/localization.service";
+import { GradingBridgeService } from "../../grading-bridge/hook";
+import { GradingBridgeModule } from "../../grading-bridge/grading-bridge.module";
 import { LtiSyncModule } from "./lti-sync.module";
 import { AttemptFeedbackService } from "./services/attempt-feedback.service";
 import { AttemptAccessCacheModule } from "./services/attempt-access-cache.module";
@@ -57,6 +59,7 @@ import { TranslationService } from "./services/translation/translation.service";
     JobQueueModule,
     AdminAuthModule,
     AttemptAccessCacheModule,
+    GradingBridgeModule,
   ],
   controllers: [AttemptControllerV2],
   providers: [
@@ -99,6 +102,7 @@ import { TranslationService } from "./services/translation/translation.service";
     S3Service,
     AssignmentRepository,
     QuestionResponseService,
+    GradingBridgeService,
     EvidenceChunkingService,
     CriterionGradeCompilerService,
     CriterionEvidencePipelineService,

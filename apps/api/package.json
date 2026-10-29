@@ -83,6 +83,7 @@
     "isomorphic-dompurify": "^2.36.0",
     "jsdom": "^26.1.0",
     "jsonwebtoken": "^9.0.3",
+    "jszip": "^3.7.1",
     "langchain": "^1.5.14",
     "mammoth": "^1.13.0",
     "minisearch": "^7.2.0",

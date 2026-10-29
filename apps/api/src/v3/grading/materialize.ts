@@ -1,0 +1,1208 @@
+import * as mammoth from "mammoth";
+import { PDFDocument } from "pdf-lib";
+import { Open as OpenZip } from "unzipper";
+import * as XLSX from "xlsx";
+import type { Part, UnreadableSource, UnreadableSourceCode } from "./contracts";
+import { htmlFileToParts } from "./formats/html-file";
+import { notebookToParts } from "./formats/notebook";
+import { pptxToParts } from "./formats/pptx";
+import {
+  assertArchiveExpandsWithin,
+  readEntryCapped,
+  ZipExpansionError,
+} from "./formats/zip-read";
+import { isRenderFailure, type Renderer } from "./formats/render";
+import { chartSheetsWorkbook } from "./formats/xlsx-render";
+import { describeWorkbookCharts } from "./formats/xlsx-charts";
+import {
+  abridgeTable,
+  abridgeText,
+  estimateCallCostUsd,
+  estimateTextTokens,
+  filePriority,
+  MAX_FILE_BYTES,
+  MAX_FILES_CONSIDERED,
+  MAX_FILES_SENT,
+  MAX_TOKENS_PER_FILE,
+  MAX_TOKENS_PER_NATIVE_FILE,
+  MAX_TOKENS_PER_SUBMISSION,
+  skipReason,
+  ZIP_MAX_DEPTH,
+  ZIP_MAX_RATIO,
+  ZIP_MAX_UNCOMPRESSED_BYTES,
+  ZIP_RATIO_MIN_BYTES,
+} from "./limits";
+
+export { estimateTextTokens } from "./limits";
+
+/**
+ * Submission → Part[]. No chunking or ranking: a part is whole, or abridged
+ * with a visible marker, or listed in the "skipped files" part with the
+ * reason. A format we can't read becomes a part that says so.
+ */
+
+export interface SubmissionFile {
+  name: string;
+  mimeType?: string;
+  /** Size in bytes when known up front, checked before loading. */
+  size?: number;
+  load(): Promise<Buffer>;
+}
+
+export interface SubmissionSource {
+  /** The learner's typed answer, already plain text. */
+  text?: string;
+  files?: SubmissionFile[];
+  urls?: string[];
+  /** Question and rubric text; files named in it are sent first. */
+  questionContext?: string;
+}
+
+export interface MaterializeLimits {
+  maxFilesConsidered: number;
+  maxFilesSent: number;
+  maxTokensPerFile: number;
+  /** Cap for a PDF or image sent as-is; text dumps use maxTokensPerFile. */
+  maxTokensPerNativeFile: number;
+  /** Estimated input tokens for the whole submission. */
+  tokenBudget: number;
+  /** Raw bytes per file; a larger file fails the submission. */
+  maxFileBytes: number;
+  /** Bytes across all parts as sent (base64 for files and images). */
+  maxTotalBytes: number;
+  /** Real (value-bearing) cells read from one worksheet. */
+  maxSheetCells: number;
+  zipMaxDepth: number;
+  zipMaxUncompressedBytes: number;
+  zipMaxRatio: number;
+  zipRatioMinBytes: number;
+}
+
+export const DEFAULT_MATERIALIZE_LIMITS: MaterializeLimits = {
+  maxFilesConsidered: MAX_FILES_CONSIDERED,
+  maxFilesSent: MAX_FILES_SENT,
+  maxTokensPerFile: MAX_TOKENS_PER_FILE,
+  maxTokensPerNativeFile: MAX_TOKENS_PER_NATIVE_FILE,
+  tokenBudget: MAX_TOKENS_PER_SUBMISSION,
+  maxFileBytes: MAX_FILE_BYTES,
+  maxTotalBytes: 40 * 1024 * 1024,
+  maxSheetCells: 250_000,
+  zipMaxDepth: ZIP_MAX_DEPTH,
+  zipMaxUncompressedBytes: ZIP_MAX_UNCOMPRESSED_BYTES,
+  zipMaxRatio: ZIP_MAX_RATIO,
+  zipRatioMinBytes: ZIP_RATIO_MIN_BYTES,
+};
+
+export interface MaterializeDeps {
+  /** Turns a learner URL into parts; failures come back as a text part. */
+  fetchUrl?: (url: string) => Promise<Part[]>;
+  /** Renders pptx, docx and chart sheets to PDF; text only when absent. */
+  renderer?: Renderer;
+}
+
+/** What bytesToParts needs from MaterializeDeps. */
+export type BytesToPartsDeps = Pick<MaterializeDeps, "renderer">;
+
+export type MaterializeFailureCode =
+  | "over_budget"
+  | "part_too_large"
+  | "submission_too_large"
+  | "source_unreadable";
+
+export interface MaterializeStats {
+  filesSeen: number;
+  filesSent: number;
+  filesSkipped: number;
+  estimatedTokens: number;
+  /** Worst case for one call: uncached input plus the full output budget. */
+  estimatedCostUsd: number;
+}
+
+export type MaterializeResult =
+  | {
+      ok: true;
+      parts: Part[];
+      estimatedTokens: number;
+      totalBytes: number;
+      stats: MaterializeStats;
+    }
+  | {
+      ok: false;
+      code: MaterializeFailureCode;
+      message: string;
+      partName?: string;
+      estimatedTokens?: number;
+      source?: UnreadableSource;
+    };
+
+/**
+ * A submitted link or file could not be read. The submission is not graded
+ * around it: the learner is told what to fix, or the job retries.
+ */
+export class UnreadableSourceError extends Error {
+  constructor(readonly source: UnreadableSource) {
+    super(`${source.kind} could not be read (${source.code})`);
+    this.name = "UnreadableSourceError";
+  }
+}
+
+/** A hard limit was hit; the submission fails rather than being cut. */
+export class MaterializeLimitError extends Error {
+  constructor(
+    readonly code: MaterializeFailureCode,
+    message: string,
+    readonly partName?: string,
+  ) {
+    super(message);
+    this.name = "MaterializeLimitError";
+  }
+}
+
+const IMAGE_TYPES: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+};
+
+const TEXT_EXTENSIONS = new Set([
+  "txt",
+  "text",
+  "md",
+  "markdown",
+  "rst",
+  "csv",
+  "tsv",
+  "json",
+  "jsonl",
+  "yml",
+  "yaml",
+  "toml",
+  "ini",
+  "cfg",
+  "conf",
+  "properties",
+  "xml",
+  "html",
+  "htm",
+  "css",
+  "scss",
+  "sql",
+  "log",
+  "py",
+  "java",
+  "js",
+  "jsx",
+  "mjs",
+  "cjs",
+  "ts",
+  "tsx",
+  "c",
+  "h",
+  "cpp",
+  "cc",
+  "hpp",
+  "cs",
+  "go",
+  "rs",
+  "rb",
+  "php",
+  "swift",
+  "kt",
+  "kts",
+  "scala",
+  "r",
+  "m",
+  "sh",
+  "bash",
+  "zsh",
+  "ps1",
+  "bat",
+  "dart",
+  "lua",
+  "pl",
+  "jl",
+  "sol",
+  "vue",
+  "svelte",
+  "gradle",
+  "dockerfile",
+  "makefile",
+  "tf",
+  "graphql",
+]);
+
+const SPREADSHEET_EXTENSIONS = new Set(["xlsx", "xlsm", "xls"]);
+const TABLE_EXTENSIONS = new Set(["csv", "tsv"]);
+
+export function extensionOf(name: string): string {
+  const base = name.split(/[/\\]/).pop() ?? name;
+  const lower = base.toLowerCase();
+  if (lower === "dockerfile" || lower === "makefile") return lower;
+  const dot = lower.lastIndexOf(".");
+  return dot === -1 ? "" : lower.slice(dot + 1);
+}
+
+const IMAGE_TOKEN_ESTIMATE = 1500;
+const PDF_PAGE_TOKEN_ESTIMATE = 1600;
+
+function countPdfPages(base64: string): number {
+  const raw = Buffer.from(base64, "base64").toString("latin1");
+  const matches = raw.match(/\/Type\s*\/Page(?!s)/g);
+  return Math.max(1, matches?.length ?? 0);
+}
+
+/**
+ * Pages in a PDF, read from its page tree, which compressed object streams
+ * hide from a text scan. Undefined when the PDF can't be parsed; the model
+ * call then reports the file.
+ */
+async function pdfPageCount(buffer: Buffer): Promise<number | undefined> {
+  try {
+    const document = await PDFDocument.load(buffer, {
+      ignoreEncryption: true,
+      updateMetadata: false,
+    });
+    return document.getPageCount();
+  } catch {
+    // An unparseable PDF falls back to the text scan in estimatePartTokens.
+    return undefined;
+  }
+}
+
+export function estimatePartTokens(part: Part): number {
+  const header = 30;
+  if (part.kind === "text") return header + estimateTextTokens(part.text ?? "");
+  if (part.kind === "image") return header + IMAGE_TOKEN_ESTIMATE;
+  const pages = Math.max(part.pageCount ?? 0, countPdfPages(part.base64 ?? ""));
+  return header + pages * PDF_PAGE_TOKEN_ESTIMATE;
+}
+
+export function partBytes(part: Part): number {
+  if (part.kind === "text") return Buffer.byteLength(part.text ?? "", "utf8");
+  return (part.base64 ?? "").length;
+}
+
+export function estimatePartsTokens(parts: Part[]): number {
+  return parts.reduce((sum, part) => sum + estimatePartTokens(part), 0);
+}
+
+// Parts that stand in for a file we could not read, with the issue code a
+// top-level upload is refused with.
+const unreadableParts = new WeakMap<Part, UnreadableSourceCode>();
+
+export function couldNotReadPart(
+  name: string,
+  type: string | undefined,
+  reason?: string,
+  code: UnreadableSourceCode = "file_corrupt",
+): Part {
+  const suffix = reason ? `: ${reason}` : "";
+  const part: Part = {
+    name,
+    kind: "text",
+    text: `could not read ${name} (${type || "unknown type"})${suffix}`,
+  };
+  unreadableParts.set(part, code);
+  return part;
+}
+
+/** The issue code when `parts` is only a could-not-read placeholder. */
+export function unreadableCodeOf(
+  parts: Part[],
+): UnreadableSourceCode | undefined {
+  return parts.length === 1 ? unreadableParts.get(parts[0]) : undefined;
+}
+
+/** A text part, abridged with a visible marker when over the per-file cap. */
+function textPart(
+  name: string,
+  text: string,
+  limits: MaterializeLimits,
+  options: { mimeType?: string; tablePreambleLines?: number } = {},
+): Part {
+  let body = text;
+  if (estimateTextTokens(text) > limits.maxTokensPerFile) {
+    body =
+      options.tablePreambleLines === undefined
+        ? abridgeText(text, limits.maxTokensPerFile)
+        : abridgeTable(
+            text,
+            limits.maxTokensPerFile,
+            options.tablePreambleLines,
+          );
+  }
+  return {
+    name,
+    kind: "text",
+    text: body,
+    ...(options.mimeType ? { mimeType: options.mimeType } : {}),
+  };
+}
+
+function looksBinary(buffer: Buffer): boolean {
+  return buffer.subarray(0, 8192).includes(0);
+}
+
+const BYTE_ORDER_MARK = 0xfe_ff;
+
+function decodeText(buffer: Buffer): string {
+  const text = buffer.toString("utf8");
+  return text.codePointAt(0) === BYTE_ORDER_MARK ? text.slice(1) : text;
+}
+
+// ── spreadsheets ────────────────────────────────────────────────────────────
+
+function csvField(value: string): string {
+  return /[\n\r",]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value;
+}
+
+function cellText(cell: XLSX.CellObject): string {
+  if (cell.w !== undefined) return cell.w;
+  if (cell.v === undefined || cell.v === null) return "";
+  if (cell.v instanceof Date) return cell.v.toISOString();
+  return String(cell.v);
+}
+
+interface SheetText {
+  csv: string;
+  /** "grid": CSV by row and column letter; "cells": one cell per line. */
+  layout: "grid" | "cells";
+  formulas: string[];
+}
+
+/**
+ * A sheet's text is cut while it is built, well past the per-file cap
+ * (which abridges it afterwards), so a small workbook can't expand into
+ * gigabytes: a few cells spread across thousands of columns, or one long
+ * shared string or shared formula repeated in every cell.
+ */
+function sheetCharCap(limits: MaterializeLimits): number {
+  return limits.maxTokensPerFile * 16;
+}
+
+/** A grid less than a quarter full is listed cell by cell instead. */
+const SPARSE_GRID_FACTOR = 4;
+const SPARSE_GRID_MIN_CELLS = 1000;
+
+/** Lines up to `cap` characters in total, then one marker line. */
+function cappedLines(
+  lines: Iterable<string>,
+  cap: number,
+  what: "sheet" | "formulas",
+): string[] {
+  const kept: string[] = [];
+  let length = 0;
+  for (const line of lines) {
+    length += line.length + 1;
+    if (length > cap) {
+      kept.push(`[${what} cut: over ${cap} characters; the rest was not read]`);
+      break;
+    }
+    kept.push(line);
+  }
+  return kept;
+}
+
+type SheetRows = Map<number, Map<number, string>>;
+
+function* cellLines(rows: SheetRows, rowIndexes: number[]): Generator<string> {
+  yield "cell,value";
+  for (const rowIndex of rowIndexes) {
+    const row = rows.get(rowIndex) ?? new Map<number, string>();
+    for (const col of [...row.keys()].sort((a, b) => a - b)) {
+      const address = XLSX.utils.encode_cell({ r: rowIndex, c: col });
+      yield `${address},${csvField(row.get(col) ?? "")}`;
+    }
+  }
+}
+
+function* gridLines(
+  rows: SheetRows,
+  rowIndexes: number[],
+  minCol: number,
+  maxCol: number,
+  cap: number,
+): Generator<string> {
+  const columns: number[] = [];
+  for (let col = minCol; col <= maxCol; col += 1) columns.push(col);
+  yield ["row", ...columns.map((col) => XLSX.utils.encode_col(col))].join(",");
+  for (const rowIndex of rowIndexes) {
+    const row = rows.get(rowIndex) ?? new Map<number, string>();
+    // Built field by field: one wide row of long cells is enough to blow
+    // past the cap before the line is ever measured.
+    let line = String(rowIndex + 1);
+    for (const col of columns) {
+      if (line.length > cap) break;
+      line += `,${csvField(row.get(col) ?? "")}`;
+    }
+    yield line;
+  }
+}
+
+function sheetToText(
+  worksheet: XLSX.WorkSheet,
+  sheetLabel: string,
+  limits: MaterializeLimits,
+): SheetText {
+  const rows: SheetRows = new Map();
+  const formulas: string[] = [];
+  let minCol = Number.POSITIVE_INFINITY;
+  let maxCol = -1;
+  let cellCount = 0;
+
+  // Walk real cell keys only; a declared range like A1:XFD1048576 is ignored.
+  for (const key of Object.keys(worksheet)) {
+    if (key.startsWith("!")) continue;
+    const cell = worksheet[key] as XLSX.CellObject | undefined;
+    if (!cell) continue;
+    const value = cellText(cell);
+    if (value === "" && !cell.f) continue;
+    cellCount += 1;
+    if (cellCount > limits.maxSheetCells) {
+      throw new MaterializeLimitError(
+        "part_too_large",
+        `${sheetLabel} has more than ${limits.maxSheetCells} filled cells`,
+        sheetLabel,
+      );
+    }
+    const address = XLSX.utils.decode_cell(key);
+    let row = rows.get(address.r);
+    if (!row) {
+      row = new Map();
+      rows.set(address.r, row);
+    }
+    row.set(address.c, value);
+    minCol = Math.min(minCol, address.c);
+    maxCol = Math.max(maxCol, address.c);
+    if (cell.f) formulas.push(`${key}: =${cell.f}`);
+  }
+
+  const cap = sheetCharCap(limits);
+  const cappedFormulas = cappedLines(formulas, cap, "formulas");
+  if (rows.size === 0)
+    return { csv: "(empty sheet)", layout: "grid", formulas: cappedFormulas };
+
+  const rowIndexes = [...rows.keys()].sort((a, b) => a - b);
+  const gridCells = rowIndexes.length * (maxCol - minCol + 1);
+  if (
+    gridCells > SPARSE_GRID_MIN_CELLS &&
+    gridCells > cellCount * SPARSE_GRID_FACTOR
+  ) {
+    return {
+      csv: cappedLines(cellLines(rows, rowIndexes), cap, "sheet").join("\n"),
+      layout: "cells",
+      formulas: cappedFormulas,
+    };
+  }
+
+  return {
+    csv: cappedLines(
+      gridLines(rows, rowIndexes, minCol, maxCol, cap),
+      cap,
+      "sheet",
+    ).join("\n"),
+    layout: "grid",
+    formulas: cappedFormulas,
+  };
+}
+
+async function spreadsheetToParts(
+  name: string,
+  buffer: Buffer,
+  extension: string,
+  limits: MaterializeLimits,
+): Promise<Part[]> {
+  let workbook: XLSX.WorkBook;
+  try {
+    workbook = XLSX.read(buffer, {
+      type: "buffer",
+      cellFormula: true,
+      cellHTML: false,
+      sheetStubs: false,
+    });
+  } catch (error) {
+    return [
+      couldNotReadPart(
+        name,
+        extension,
+        error instanceof Error ? error.message : "unreadable workbook",
+      ),
+    ];
+  }
+  const parts: Part[] = [];
+  // Hidden sheets are included: learners hide working sheets too.
+  for (const [index, sheetName] of workbook.SheetNames.entries()) {
+    const worksheet = workbook.Sheets[sheetName];
+    if (!worksheet) continue;
+    const hiddenFlag = workbook.Workbook?.Sheets?.[index]?.Hidden ?? 0;
+    const label = `${name} › ${sheetName}`;
+    const hiddenNote = hiddenFlag > 0 ? " (hidden sheet)" : "";
+    const sheet = sheetToText(worksheet, label, limits);
+    parts.push(
+      textPart(
+        label,
+        `Sheet "${sheetName}"${hiddenNote} of ${name}. ${
+          sheet.layout === "cells"
+            ? "Mostly empty, so each filled cell is listed as cell address and value."
+            : "Values as CSV; the first column is the row number, the header is the column letter."
+        }\n${sheet.csv}`,
+        limits,
+        { mimeType: "text/csv", tablePreambleLines: 1 },
+      ),
+    );
+    if (sheet.formulas.length > 0) {
+      parts.push(
+        textPart(
+          `${label} (formulas)`,
+          `Formulas on sheet "${sheetName}" of ${name}:\n${sheet.formulas.join("\n")}`,
+          limits,
+        ),
+      );
+    }
+  }
+  if (extension !== "xls") {
+    let charts: string | undefined;
+    try {
+      charts = await describeWorkbookCharts(buffer);
+    } catch (error) {
+      // Visible to the model rather than dropped: the sheets still grade.
+      charts = `charts could not be read: ${error instanceof Error ? error.message : "unknown error"}`;
+    }
+    if (charts) parts.push(textPart(`${name} (charts)`, charts, limits));
+  }
+  if (parts.length === 0) {
+    parts.push(couldNotReadPart(name, extension, "no sheets"));
+  }
+  return parts;
+}
+
+// ── rendered pages ──────────────────────────────────────────────────────────
+
+/** PDF parts made by rendering; dropped first when a file is over budget. */
+const renderedParts = new WeakSet<Part>();
+
+function isRenderedPart(part: Part): boolean {
+  return renderedParts.has(part);
+}
+
+function renderNotSentPart(partName: string, reason: string): Part {
+  return { name: partName, kind: "text", text: `[not sent: ${reason}]` };
+}
+
+/**
+ * The file rendered to PDF as one file part, its quotes checked against the
+ * text parts named in `verifyAgainst`. Over the native-file cap the pages
+ * are replaced by a note; a failed render adds nothing (the text parts
+ * still carry the content).
+ */
+async function renderedPagesPart(
+  name: string,
+  partName: string,
+  extension: string,
+  buffer: Buffer,
+  verifyAgainst: string[],
+  limits: MaterializeLimits,
+  renderer: Renderer,
+): Promise<Part[]> {
+  const rendered = await renderer.toPdf(buffer, extension);
+  if (isRenderFailure(rendered)) return [];
+  const part: Part = {
+    name: partName,
+    kind: "file",
+    mimeType: "application/pdf",
+    base64: rendered.toString("base64"),
+    verifyAgainst,
+  };
+  const tokens = estimatePartTokens(part);
+  if (tokens > limits.maxTokensPerNativeFile) {
+    const pages = countPdfPages(part.base64 ?? "");
+    renderer.logger?.info("grading.v3.render.over_page_cap", {
+      extension,
+      pages,
+      estimatedTokens: tokens,
+      cap: limits.maxTokensPerNativeFile,
+    });
+    return [
+      renderNotSentPart(
+        partName,
+        `the rendered pages of ${name} (${pages} pages, about ${tokens} tokens) are over the ${limits.maxTokensPerNativeFile}-token cap; only the extracted text was sent`,
+      ),
+    ];
+  }
+  renderedParts.add(part);
+  return [part];
+}
+
+/** Over budget with its rendered pages: the same file without them. */
+function withoutRenderedPages(parts: Part[]): Part[] | undefined {
+  if (!parts.some((part) => isRenderedPart(part))) return undefined;
+  return parts.map((part) =>
+    isRenderedPart(part)
+      ? renderNotSentPart(
+          part.name,
+          "the rendered pages did not fit the submission budget; only the extracted text was sent",
+        )
+      : part,
+  );
+}
+
+async function chartPagesParts(
+  name: string,
+  buffer: Buffer,
+  sheetParts: Part[],
+  limits: MaterializeLimits,
+  renderer: Renderer,
+): Promise<Part[]> {
+  let workbook: Awaited<ReturnType<typeof chartSheetsWorkbook>>;
+  try {
+    workbook = await chartSheetsWorkbook(buffer);
+  } catch (error) {
+    // The CSV and chart-description parts still grade; log and move on.
+    renderer.logger?.warn("grading.v3.render.xlsx_prepare_failed", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return [];
+  }
+  if (!workbook) return [];
+  return renderedPagesPart(
+    name,
+    `${name} (chart pages)`,
+    "xlsx",
+    workbook.buffer,
+    sheetParts.filter((part) => part.kind === "text").map((part) => part.name),
+    limits,
+    renderer,
+  );
+}
+
+// ── one file ────────────────────────────────────────────────────────────────
+
+/** Convert one file's bytes to parts by extension, then mime type. */
+const OFFICE_ARCHIVE_EXTENSIONS = new Set(["xlsx", "xlsm", "docx", "pptx"]);
+
+/**
+ * Office files are zip archives that SheetJS and mammoth inflate whole in
+ * memory. Inflate them once first, counting real bytes (headers can lie),
+ * and refuse one that expands past the archive limit.
+ */
+async function refuseOfficeBomb(
+  name: string,
+  extension: string,
+  buffer: Buffer,
+  limits: MaterializeLimits,
+): Promise<void> {
+  const isZip = buffer.length >= 4 && buffer.readUInt32LE(0) === 0x04_03_4b_50;
+  if (!OFFICE_ARCHIVE_EXTENSIONS.has(extension) || !isZip) return;
+  try {
+    await assertArchiveExpandsWithin(buffer, limits.zipMaxUncompressedBytes);
+  } catch (error) {
+    if (error instanceof ZipExpansionError) {
+      throw new MaterializeLimitError(
+        "submission_too_large",
+        `${name} expands past ${limits.zipMaxUncompressedBytes} bytes`,
+        name,
+      );
+    }
+    // Not a readable archive: the format's own parser reports it.
+  }
+}
+
+export async function bytesToParts(
+  name: string,
+  mimeType: string | undefined,
+  buffer: Buffer,
+  limits: MaterializeLimits = DEFAULT_MATERIALIZE_LIMITS,
+  deps: BytesToPartsDeps = {},
+): Promise<Part[]> {
+  const { renderer } = deps;
+  if (buffer.length > limits.maxFileBytes) {
+    throw new MaterializeLimitError(
+      "part_too_large",
+      `${name} is ${buffer.length} bytes, over the ${limits.maxFileBytes} byte limit`,
+      name,
+    );
+  }
+  const extension = extensionOf(name);
+  const mime = (mimeType ?? "").toLowerCase().split(";")[0].trim();
+  await refuseOfficeBomb(name, extension, buffer, limits);
+
+  if (extension === "pdf" || mime === "application/pdf") {
+    const pageCount = await pdfPageCount(buffer);
+    return [
+      {
+        name,
+        kind: "file",
+        mimeType: "application/pdf",
+        base64: buffer.toString("base64"),
+        ...(pageCount ? { pageCount } : {}),
+      },
+    ];
+  }
+  const imageType =
+    IMAGE_TYPES[extension] ??
+    (Object.values(IMAGE_TYPES).includes(mime) ? mime : undefined);
+  if (imageType) {
+    return [
+      {
+        name,
+        kind: "image",
+        mimeType: imageType,
+        base64: buffer.toString("base64"),
+      },
+    ];
+  }
+  if (SPREADSHEET_EXTENSIONS.has(extension)) {
+    const sheets = await spreadsheetToParts(name, buffer, extension, limits);
+    // Only xlsx: xlsm can carry macros, xls is a different container.
+    if (!renderer || extension !== "xlsx") return sheets;
+    return [
+      ...sheets,
+      ...(await chartPagesParts(name, buffer, sheets, limits, renderer)),
+    ];
+  }
+  if (extension === "ipynb") {
+    try {
+      // Notebook-aware: sources kept, outputs shrink first; never re-cut.
+      const notebook = notebookToParts(
+        name,
+        decodeText(buffer),
+        limits.maxTokensPerFile,
+      );
+      return [{ name, kind: "text", text: notebook.text }, ...notebook.images];
+    } catch (error) {
+      if (error instanceof MaterializeLimitError) throw error;
+      return [couldNotReadPart(name, "ipynb", "not valid notebook JSON")];
+    }
+  }
+  if (extension === "docx") {
+    let text: Part;
+    try {
+      const { value } = await mammoth.extractRawText({ buffer });
+      text = textPart(name, value, limits);
+    } catch (error) {
+      if (error instanceof MaterializeLimitError) throw error;
+      return [couldNotReadPart(name, "docx", "unreadable document")];
+    }
+    if (!renderer) return [text];
+    return [
+      text,
+      ...(await renderedPagesPart(
+        name,
+        `${name} (pages)`,
+        "docx",
+        buffer,
+        [name],
+        limits,
+        renderer,
+      )),
+    ];
+  }
+  if (extension === "pptx") {
+    let deckParts: Part[];
+    try {
+      const [deck, ...images] = await pptxToParts(name, buffer);
+      deckParts = [textPart(name, deck.text ?? "", limits), ...images];
+    } catch (error) {
+      if (error instanceof MaterializeLimitError) throw error;
+      return [
+        couldNotReadPart(
+          name,
+          "pptx",
+          error instanceof Error ? error.message : "unreadable deck",
+        ),
+      ];
+    }
+    if (!renderer) return deckParts;
+    const [deckText, ...images] = deckParts;
+    return [
+      deckText,
+      ...(await renderedPagesPart(
+        name,
+        `${name} (slides)`,
+        "pptx",
+        buffer,
+        [name],
+        limits,
+        renderer,
+      )),
+      ...images,
+    ];
+  }
+  if (extension === "html" || extension === "htm" || mime === "text/html") {
+    if (looksBinary(buffer)) {
+      return [
+        couldNotReadPart(
+          name,
+          extension || mime,
+          "binary content",
+          "file_unsupported_type",
+        ),
+      ];
+    }
+    const [page, ...images] = htmlFileToParts(name, decodeText(buffer));
+    return [
+      textPart(name, page.text ?? "", limits, { mimeType: "text/html" }),
+      ...images,
+    ];
+  }
+  const isText =
+    TEXT_EXTENSIONS.has(extension) ||
+    mime.startsWith("text/") ||
+    mime === "application/json";
+  if (isText) {
+    if (looksBinary(buffer)) {
+      return [
+        couldNotReadPart(
+          name,
+          extension || mime,
+          "binary content",
+          "file_unsupported_type",
+        ),
+      ];
+    }
+    const isTable = TABLE_EXTENSIONS.has(extension) || mime === "text/csv";
+    return [
+      textPart(name, decodeText(buffer), limits, {
+        mimeType: mime || undefined,
+        ...(isTable ? { tablePreambleLines: 0 } : {}),
+      }),
+    ];
+  }
+  return [
+    couldNotReadPart(
+      name,
+      extension || mime || undefined,
+      undefined,
+      "file_unsupported_type",
+    ),
+  ];
+}
+
+// ── archives ────────────────────────────────────────────────────────────────
+
+interface CandidateFile {
+  name: string;
+  mimeType?: string;
+  size?: number;
+  load(): Promise<Buffer>;
+  depth: number;
+}
+
+interface SkippedFile {
+  name: string;
+  reason: string;
+}
+
+interface ZipBudget {
+  uncompressedBytes: number;
+}
+
+async function expandZip(
+  archiveName: string,
+  buffer: Buffer,
+  depth: number,
+  limits: MaterializeLimits,
+  budget: ZipBudget,
+  skipped: SkippedFile[],
+): Promise<CandidateFile[]> {
+  let directory: Awaited<ReturnType<typeof OpenZip.buffer>>;
+  try {
+    directory = await OpenZip.buffer(buffer);
+  } catch {
+    skipped.push({ name: archiveName, reason: "not a readable zip archive" });
+    return [];
+  }
+  const entries: CandidateFile[] = [];
+  for (const entry of directory.files) {
+    if (entry.type !== "File") continue;
+    const name = `${archiveName}/${entry.path}`;
+    const reason = skipReason(entry.path);
+    if (reason) {
+      skipped.push({ name, reason });
+      continue;
+    }
+    const size = entry.uncompressedSize;
+    if (
+      size >= limits.zipRatioMinBytes &&
+      size > Math.max(entry.compressedSize, 1) * limits.zipMaxRatio
+    ) {
+      throw new MaterializeLimitError(
+        "submission_too_large",
+        `${name} expands ${Math.round(size / Math.max(entry.compressedSize, 1))}x; refusing a likely zip bomb`,
+        name,
+      );
+    }
+    budget.uncompressedBytes += size;
+    if (budget.uncompressedBytes > limits.zipMaxUncompressedBytes) {
+      throw new MaterializeLimitError(
+        "submission_too_large",
+        `archives expand past ${limits.zipMaxUncompressedBytes} bytes`,
+        archiveName,
+      );
+    }
+    entries.push({
+      name,
+      size,
+      depth,
+      load: async () => {
+        try {
+          // The header can lie about the size: inflate no further than it says.
+          return await readEntryCapped(entry, Math.max(size, 0) + 1024);
+        } catch (error) {
+          if (!(error instanceof ZipExpansionError)) throw error;
+          throw new MaterializeLimitError(
+            "submission_too_large",
+            `${name} is larger than its archive header says`,
+            name,
+          );
+        }
+      },
+    });
+  }
+  return entries;
+}
+
+// ── whole submission ────────────────────────────────────────────────────────
+
+interface ConvertedFile {
+  name: string;
+  order: number;
+  priority: number;
+  parts: Part[];
+  tokens: number;
+  bytes: number;
+}
+
+function skippedPart(skipped: SkippedFile[]): Part {
+  const lines = skipped.map((file) => `- ${file.name}: ${file.reason}`);
+  return {
+    name: "skipped files",
+    kind: "text",
+    text: `${skipped.length} file(s) in the submission were not read or not sent to the grader:\n${lines.join("\n")}`,
+  };
+}
+
+export async function materialize(
+  source: SubmissionSource,
+  deps: MaterializeDeps = {},
+  limits: MaterializeLimits = DEFAULT_MATERIALIZE_LIMITS,
+): Promise<MaterializeResult> {
+  const fixedParts: Part[] = [];
+  const skipped: SkippedFile[] = [];
+  const converted: ConvertedFile[] = [];
+  const questionContext = source.questionContext ?? "";
+  let filesSeen = 0;
+
+  try {
+    if (typeof source.text === "string" && source.text.trim().length > 0) {
+      fixedParts.push(textPart("answer", source.text, limits));
+    }
+    for (const url of source.urls ?? []) {
+      if (!deps.fetchUrl) {
+        fixedParts.push(
+          couldNotReadPart(url, "url", "links are not fetched here"),
+        );
+        continue;
+      }
+      for (const part of await deps.fetchUrl(url)) {
+        fixedParts.push(
+          part.kind === "text"
+            ? textPart(part.name, part.text ?? "", limits)
+            : part,
+        );
+      }
+    }
+
+    // Expand archives and apply the skip list before reading any file bytes.
+    const zipBudget: ZipBudget = { uncompressedBytes: 0 };
+    const queue: CandidateFile[] = (source.files ?? []).map((file) => ({
+      ...file,
+      depth: 0,
+    }));
+    const candidates: CandidateFile[] = [];
+    while (queue.length > 0) {
+      const file = queue.shift();
+      filesSeen += 1;
+      const reason = file.depth === 0 ? skipReason(file.name) : undefined;
+      if (reason) {
+        skipped.push({ name: file.name, reason });
+        continue;
+      }
+      if (candidates.length >= limits.maxFilesConsidered) {
+        skipped.push({
+          name: file.name,
+          reason: `over the ${limits.maxFilesConsidered}-file limit`,
+        });
+        continue;
+      }
+      if (file.size !== undefined && file.size > limits.maxFileBytes) {
+        throw new MaterializeLimitError(
+          "part_too_large",
+          `${file.name} is ${file.size} bytes, over the ${limits.maxFileBytes} byte limit`,
+          file.name,
+        );
+      }
+      if (extensionOf(file.name) === "zip") {
+        if (file.depth >= limits.zipMaxDepth) {
+          skipped.push({ name: file.name, reason: "archive nested too deep" });
+          continue;
+        }
+        const buffer = await file.load();
+        queue.push(
+          ...(await expandZip(
+            file.name,
+            buffer,
+            file.depth + 1,
+            limits,
+            zipBudget,
+            skipped,
+          )),
+        );
+        continue;
+      }
+      candidates.push(file);
+    }
+
+    for (const [order, file] of candidates.entries()) {
+      const buffer = await file.load();
+      const uploaded = file.depth === 0;
+      if (uploaded && buffer.length === 0) {
+        throw new UnreadableSourceError({
+          kind: "file",
+          code: "file_empty",
+          name: file.name,
+          retryable: false,
+        });
+      }
+      const parts = await bytesToParts(
+        file.name,
+        file.mimeType,
+        buffer,
+        limits,
+        { renderer: deps.renderer },
+      );
+      // Every uploaded file is required, as in legacy grading: one we cannot
+      // read is the learner's to fix, not something to grade around. Inside
+      // an archive it is listed and the rest is graded.
+      const unreadable = uploaded ? unreadableCodeOf(parts) : undefined;
+      if (unreadable) {
+        throw new UnreadableSourceError({
+          kind: "file",
+          code: unreadable,
+          name: file.name,
+          retryable: false,
+        });
+      }
+      const tooBig = parts.find(
+        (part) =>
+          part.kind !== "text" &&
+          estimatePartTokens(part) > limits.maxTokensPerNativeFile,
+      );
+      if (tooBig) {
+        skipped.push({
+          name: file.name,
+          reason: `not sent: about ${estimatePartTokens(tooBig)} tokens, over the ${limits.maxTokensPerNativeFile}-token per-file cap`,
+        });
+        continue;
+      }
+      converted.push({
+        name: file.name,
+        order,
+        priority: filePriority(file.name, questionContext),
+        parts,
+        tokens: estimatePartsTokens(parts),
+        bytes: parts.reduce((sum, part) => sum + partBytes(part), 0),
+      });
+    }
+  } catch (error) {
+    if (error instanceof MaterializeLimitError) {
+      return {
+        ok: false,
+        code: error.code,
+        message: error.message,
+        partName: error.partName,
+      };
+    }
+    if (error instanceof UnreadableSourceError) {
+      return {
+        ok: false,
+        code: "source_unreadable",
+        message: error.message,
+        source: error.source,
+      };
+    }
+    throw error;
+  }
+
+  // Fill the budget by priority; what doesn't fit is listed, not dropped.
+  let tokens = estimatePartsTokens(fixedParts);
+  let bytes = fixedParts.reduce((sum, part) => sum + partBytes(part), 0);
+  const chosen: ConvertedFile[] = [];
+  const byPriority = [...converted].sort(
+    (a, b) => a.priority - b.priority || a.order - b.order,
+  );
+  const fitsBudget = (candidate: ConvertedFile): boolean =>
+    chosen.length < limits.maxFilesSent &&
+    tokens + candidate.tokens <= limits.tokenBudget &&
+    bytes + candidate.bytes <= limits.maxTotalBytes;
+  for (const original of byPriority) {
+    let file = original;
+    let fits = fitsBudget(file);
+    const textOnly = fits ? undefined : withoutRenderedPages(file.parts);
+    if (textOnly) {
+      // Rendered pages are extra; send the file's text rather than nothing.
+      const fallback: ConvertedFile = {
+        ...file,
+        parts: textOnly,
+        tokens: estimatePartsTokens(textOnly),
+        bytes: textOnly.reduce((sum, part) => sum + partBytes(part), 0),
+      };
+      if (fitsBudget(fallback)) {
+        file = fallback;
+        fits = true;
+      }
+    }
+    if (fits) {
+      chosen.push(file);
+      tokens += file.tokens;
+      bytes += file.bytes;
+    } else {
+      skipped.push({
+        name: file.name,
+        reason:
+          chosen.length >= limits.maxFilesSent
+            ? `not sent (over the ${limits.maxFilesSent}-file limit)`
+            : "not sent (budget)",
+      });
+    }
+  }
+  chosen.sort((a, b) => a.order - b.order);
+
+  const parts = [...fixedParts, ...chosen.flatMap((file) => file.parts)];
+  if (skipped.length > 0) parts.push(skippedPart(skipped));
+  const estimatedTokens = estimatePartsTokens(parts);
+  if (estimatedTokens > limits.tokenBudget) {
+    return {
+      ok: false,
+      code: "over_budget",
+      message: `submission is about ${estimatedTokens} tokens, over the ${limits.tokenBudget} token budget`,
+      estimatedTokens,
+    };
+  }
+  const totalBytes = parts.reduce((sum, part) => sum + partBytes(part), 0);
+  return {
+    ok: true,
+    parts,
+    estimatedTokens,
+    totalBytes,
+    stats: {
+      filesSeen,
+      filesSent: chosen.length,
+      filesSkipped: skipped.length,
+      estimatedTokens,
+      estimatedCostUsd: estimateCallCostUsd(estimatedTokens),
+    },
+  };
+}

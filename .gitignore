@@ -134,3 +134,4 @@ STRANGELER_FIG.md
 apps/api/src/__lint__/
 apps/api/src/v3/__lint__/
 apps/api/test/v3/__lint__/
+apps/api/src/grading-bridge/__lint__/

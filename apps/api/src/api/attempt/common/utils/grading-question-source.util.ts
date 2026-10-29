@@ -27,14 +27,17 @@ export const isMediaResponseType = (
 const logger = new Logger("GradingQuestionSource");
 
 /** Which stored row a JSON field came from, for the corrupt-data warning. */
-interface JsonFieldSource {
+export interface JsonFieldSource {
   field: string;
   questionId: number | null;
   questionVersionId?: number;
   variantId?: number;
 }
 
-const parseJsonField = (field: unknown, source: JsonFieldSource): unknown => {
+export const parseJsonField = (
+  field: unknown,
+  source: JsonFieldSource,
+): unknown => {
   if (field === null || field === undefined || field === "") {
     return null;
   }

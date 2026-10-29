@@ -3,7 +3,9 @@ export type V3ErrorCode =
   | "UNAUTHORIZED"
   | "FORBIDDEN"
   | "NOT_FOUND"
+  | "CONFLICT"
   | "PAYLOAD_TOO_LARGE"
+  | "TOO_MANY_REQUESTS"
   | "INTERNAL";
 
 /** The only messages a v3 client ever sees; they never carry internals. */
@@ -13,7 +15,9 @@ export type V3PublicMessage =
   | "Unauthorized"
   | "Forbidden"
   | "Not found"
+  | "Conflict"
   | "Payload too large"
+  | "Too many requests"
   | "Internal error";
 
 export type V3ErrorBody = {
@@ -59,8 +63,16 @@ export class V3Error extends Error {
     return new V3Error(404, "NOT_FOUND", "Not found", reason);
   }
 
+  static conflict(reason: string): V3Error {
+    return new V3Error(409, "CONFLICT", "Conflict", reason);
+  }
+
   static payloadTooLarge(reason: string): V3Error {
     return new V3Error(413, "PAYLOAD_TOO_LARGE", "Payload too large", reason);
+  }
+
+  static tooManyRequests(reason: string): V3Error {
+    return new V3Error(429, "TOO_MANY_REQUESTS", "Too many requests", reason);
   }
 
   static internal(reason: string): V3Error {
