@@ -10,13 +10,10 @@ import {
   PlusCircleIcon,
   QuestionMarkCircleIcon,
   InformationCircleIcon,
-  CogIcon,
-  MicrophoneIcon,
   ClockIcon,
   ArchiveBoxIcon,
   BellIcon,
   ChatBubbleBottomCenterTextIcon,
-  PaperClipIcon,
 } from "@heroicons/react/24/outline";
 import {
   ArrowPathIcon,
@@ -24,7 +21,6 @@ import {
   SparklesIcon,
   XMarkIcon,
   ChatBubbleOvalLeftEllipsisIcon,
-  AdjustmentsHorizontalIcon,
 } from "@heroicons/react/24/solid";
 import { AnimatePresence, motion } from "framer-motion";
 import Draggable from "react-draggable";
@@ -33,36 +29,29 @@ import React, { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { useAuthorContext } from "../store/useAuthorContext";
 import { useLearnerContext } from "../store/useLearnerContext";
-import {
-  AttachedFile,
-  ChatRole,
-  ChatMessage,
-  useMarkChatStore,
-} from "../store/useMarkChatStore";
+import { ChatRole, useMarkChatStore } from "../store/useMarkChatStore";
 import { useAuthorStore } from "@/stores/author";
 import { toast } from "sonner";
 import Tippy from "@tippyjs/react";
 import "tippy.js/dist/tippy.css";
 import {
   getOrCreateTodayChat,
+  findTodayChat,
   getUserChats,
   getChatById,
   addMessageToChat,
   endChat,
   getUser,
-  uploadFileToStorage,
 } from "@/lib/shared";
 import { useDropzone } from "react-dropzone";
 import { submitBugReport } from "@/lib/report-client";
-import UserReportsPanel from "./UserReportsPanel";
 import ReportPreviewModal from "@/components/ReportPreviewModal";
 import { useChatbot } from "../../../hooks/useChatbot";
-import { useTheme } from "@/hooks/useTheme";
 import { useMarkSpeech } from "../../../hooks/useMarkSpeech";
 import { useCallback } from "react";
 import SpeechBubble from "../../../components/SpeechBubble";
 import { OrbitingActionDock } from "../../../components/OrbitingActionDock";
-import type { UploadType, User } from "@/config/types";
+import type { User } from "@/config/types";
 
 let cachedUser: User | null = null;
 let cachedUserPromise: Promise<User | null> | null = null;
@@ -257,57 +246,6 @@ const SuggestionsPanel = ({
   );
 };
 
-const SettingsPanel = ({
-  setShowSettings,
-  isRecording,
-  toggleVoiceRecognition,
-  userRole,
-  learnerContext,
-  activeQuestion,
-  handleSwitchQuestion,
-  darkMode,
-  setDarkMode,
-}) => {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: 10 }}
-      className="px-4 py-3 mb-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-sm"
-    >
-      <div className="flex justify-between items-center mb-3">
-        <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
-          Chat Settings
-        </h3>
-        <button
-          onClick={() => setShowSettings(false)}
-          className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-        >
-          <XMarkIcon className="w-4 h-4" />
-        </button>
-      </div>
-
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <label className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2">
-            <AdjustmentsHorizontalIcon className="w-4 h-4" />
-            Theme
-          </label>
-          <select
-            className="text-sm border border-gray-300 rounded-md p-1 bg-white dark:bg-gray-700 dark:border-gray-600 dark:text-gray-300"
-            value={darkMode}
-            onChange={(e) => setDarkMode(e.target.value)}
-          >
-            <option value="system">System Default</option>
-            <option value="light">Light Mode</option>
-            <option value="dark">Dark Mode</option>
-          </select>
-        </div>
-      </div>
-    </motion.div>
-  );
-};
-
 const QuestionSelector = ({
   userRole,
   learnerContext,
@@ -346,7 +284,6 @@ const QuestionSelector = ({
 
 const SpecialActionUI = ({
   specialActions,
-  handleRegradeRequest,
   handleIssueReport,
   handleCreateQuestion,
   handleReportPreview,
@@ -362,24 +299,7 @@ const SpecialActionUI = ({
       exit={{ opacity: 0, y: 10 }}
       className="px-4 py-2 mb-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md"
     >
-      {specialActions.type === "regrade" ? (
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2 text-amber-700 dark:text-amber-400">
-            <ArrowPathIcon className="w-5 h-5" />
-            <h4 className="text-sm font-medium">Regrading Request</h4>
-          </div>
-          <p className="text-xs text-gray-600 dark:text-gray-300">
-            It looks like you're interested in requesting a regrade for this
-            assignment. I can help you submit a formal regrade request.
-          </p>
-          <button
-            onClick={handleRegradeRequest}
-            className="text-xs py-1.5 px-3 bg-amber-100 hover:bg-amber-200 dark:bg-amber-900 dark:hover:bg-amber-800 text-amber-800 dark:text-amber-200 rounded-md transition-colors self-end mt-1"
-          >
-            Continue with regrade request
-          </button>
-        </div>
-      ) : specialActions.type === "report" ? (
+      {specialActions.type === "report" ? (
         <div className="flex flex-col gap-2">
           <div className="flex items-center gap-2 text-red-700 dark:text-red-400">
             <ExclamationTriangleIcon className="w-5 h-5" />
@@ -568,8 +488,8 @@ const WelcomeMessage = ({
                 Need help with your grades?
               </h4>
               <p className="text-xs text-orange-700 dark:text-orange-300">
-                I can explain your feedback and help request a regrade if you
-                think your assessment was scored incorrectly.
+                I can explain your feedback and help you understand how your
+                assessment was scored.
               </p>
             </div>
           )}
@@ -702,7 +622,6 @@ const ChatMessages = ({
               <div className="prose dark:prose-invert text-sm max-w-none">
                 <ReactMarkdown>{messageContent}</ReactMarkdown>
               </div>
-              {msg.role === "user" && <FileAttachmentDisplay message={msg} />}
             </div>
           </motion.div>
         );
@@ -803,182 +722,6 @@ const ChatHistoryDrawer = ({
   );
 };
 
-// File upload constants
-const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB — matches server cap
-const MAX_FILES_PER_MESSAGE = 10;
-
-const ACCEPTED_FILE_TYPES = {
-  "text/plain": [
-    ".txt",
-    ".md",
-    ".py",
-    ".js",
-    ".ts",
-    ".tsx",
-    ".css",
-    ".html",
-    ".sql",
-    ".sh",
-  ],
-  "application/pdf": [".pdf"],
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [
-    ".docx",
-  ],
-  "application/vnd.openxmlformats-officedocument.presentationml.presentation": [
-    ".pptx",
-  ],
-  "text/csv": [".csv"],
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [
-    ".xlsx",
-  ],
-  "application/vnd.ms-excel": [".xls"],
-  "application/x-ipynb+json": [".ipynb"],
-  // 'application/json': ['.ipynb', '.json'],
-  // Code files - multiple MIME types for browser compatibility
-  "text/javascript": [".js"],
-  "application/javascript": [".js"],
-  "application/typescript": [".ts", ".tsx"],
-  "text/typescript": [".ts", ".tsx"],
-  "video/mp2t": [".ts"], // Some browsers report .ts files as this
-  "text/x-python": [".py"],
-  "application/x-python": [".py"],
-  "text/x-python-script": [".py"],
-  "text/html": [".html"],
-  "text/css": [".css"],
-  "application/sql": [".sql"],
-  "text/x-sql": [".sql"],
-  "application/x-sh": [".sh"],
-  "text/x-sh": [".sh"],
-  "application/x-shellscript": [".sh"],
-};
-
-// Helper to format file size
-const formatFileSize = (bytes: number): string => {
-  if (bytes === 0) return "0 Bytes";
-  const k = 1024;
-  const sizes = ["Bytes", "KB", "MB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
-};
-
-// FileAttachmentChips component
-interface FileAttachmentChipsProps {
-  files: AttachedFile[];
-  onRemove: (fileId: string) => void;
-  isUploading: boolean;
-}
-
-const FileAttachmentChips: React.FC<FileAttachmentChipsProps> = ({
-  files,
-  onRemove,
-  isUploading,
-}) => {
-  if (files.length === 0) return null;
-
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: -10 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -10 }}
-      className="flex flex-wrap gap-2 mb-2 max-h-24 overflow-y-auto"
-    >
-      {files.map((file) => (
-        <motion.div
-          key={file.id}
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.9 }}
-          className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-xs ${
-            file.uploadStatus === "error"
-              ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300"
-              : file.uploadStatus === "uploading"
-                ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
-                : file.uploadStatus === "waiting"
-                  ? "bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300"
-                  : "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300"
-          }`}
-        >
-          <PaperClipIcon className="w-3 h-3" />
-          <span className="font-medium truncate max-w-32">{file.fileName}</span>
-          <span className="text-gray-500 dark:text-gray-400">
-            ({formatFileSize(file.fileSize)})
-          </span>
-
-          {file.uploadStatus === "uploading" && (
-            <div className="w-12 h-1 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-              <motion.div
-                className="h-full bg-blue-500"
-                initial={{ width: 0 }}
-                animate={{ width: `${file.uploadProgress}%` }}
-                transition={{ duration: 0.3 }}
-              />
-            </div>
-          )}
-
-          {file.uploadStatus === "waiting" && (
-            <span className="italic">Waiting to upload…</span>
-          )}
-
-          {file.uploadStatus === "error" && (
-            <ExclamationTriangleIcon className="w-3 h-3" />
-          )}
-
-          <button
-            onClick={() => onRemove(file.id)}
-            className="ml-1 hover:bg-white/50 dark:hover:bg-black/20 rounded-full p-0.5"
-            disabled={isUploading}
-          >
-            <XMarkIcon className="w-3 h-3" />
-          </button>
-        </motion.div>
-      ))}
-    </motion.div>
-  );
-};
-
-interface FileAttachmentEntry {
-  id: string;
-  filename: string;
-  size: number;
-  contentType: string;
-  extension: string;
-  s3Link?: string;
-}
-
-// FileAttachmentDisplay component for message history
-interface FileAttachmentDisplayProps {
-  message: ChatMessage;
-}
-
-const FileAttachmentDisplay: React.FC<FileAttachmentDisplayProps> = ({
-  message,
-}) => {
-  if (!message.toolCalls || message.toolCalls.type !== "file_attachments") {
-    return null;
-  }
-
-  const files = message.toolCalls.files || [];
-
-  if (files.length === 0) return null;
-
-  return (
-    <div className="mt-2 space-y-1">
-      {files.map((file: FileAttachmentEntry) => (
-        <div
-          key={file.id}
-          className="flex items-center gap-2 text-xs bg-white/20 dark:bg-black/20 rounded-full px-3 py-1.5 backdrop-blur-sm"
-        >
-          <PaperClipIcon className="w-3 h-3 flex-shrink-0" />
-          <span className="font-medium truncate">{file.filename}</span>
-          <span className="text-white/70 dark:text-white/60 flex-shrink-0">
-            ({formatFileSize(file.size)})
-          </span>
-        </div>
-      ))}
-    </div>
-  );
-};
-
 export const MarkChat = () => {
   const {
     isOpen: isChatbotOpen,
@@ -996,14 +739,6 @@ export const MarkChat = () => {
     isTyping,
     userRole,
     resetChat,
-    attachedFiles,
-    addAttachedFile,
-    removeAttachedFile,
-    updateFileStatus,
-    clearAttachedFiles,
-    addSessionContextFiles,
-    sessionContextFiles,
-    clearSessionContextFiles,
   } = useMarkChatStore();
 
   const {
@@ -1026,15 +761,11 @@ export const MarkChat = () => {
   const chatContainerRef = useRef(null);
   const textareaRef = useRef(null);
   const isSendingRef = useRef(false);
-  const uploadBatchCountRef = useRef(0);
   const [isExpanded, setIsExpanded] = useState(true);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [contextReady, setContextReady] = useState(false);
   const [activeQuestion, setActiveQuestion] = useState(null);
-  const [showSettings, setShowSettings] = useState(false);
   const [feedbackMode, setFeedbackMode] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
-  const { theme: darkMode, setTheme: setDarkMode } = useTheme();
   const [history, setHistory] = useState([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [specialActions, setSpecialActions] = useState({
@@ -1067,204 +798,15 @@ export const MarkChat = () => {
   const [showChatHistory, setShowChatHistory] = useState(false);
   const [userChats, setUserChats] = useState([]);
   const [isLoadingChats, setIsLoadingChats] = useState(false);
-  const [isUploadingFiles, setIsUploadingFiles] = useState(false);
 
-  // File upload handler
-  const handleFileUpload = useCallback(
-    async (file: File) => {
-      const fileId = `file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      const extension = file.name.split(".").pop()?.toLowerCase() || "";
-
-      // Create initial file entry
-      const attachedFile = {
-        id: fileId,
-        fileName: file.name,
-        fileSize: file.size,
-        fileType: file.type,
-        extension,
-        uploadStatus: "uploading" as const,
-        uploadProgress: 0,
-        uploadedAt: new Date().toISOString(),
-      };
-
-      addAttachedFile(attachedFile);
-
-      try {
-        // Generate presigned URL
-        const uploadRequest = {
-          fileName: file.name,
-          fileType: file.type,
-          fileSize: file.size,
-          uploadType: (userRole === "learner"
-            ? "chatbot"
-            : userRole) as UploadType,
-        };
-
-        const uploadedFile = await uploadFileToStorage(file, uploadRequest, {
-          onUploadProgress: (progress) => {
-            const percent = Math.round(
-              (progress.loaded / progress.total) * 100,
-            );
-            updateFileStatus(fileId, {
-              uploadStatus: "uploading",
-              uploadProgress: percent,
-            });
-          },
-          onWaitingForCapacity: () => {
-            updateFileStatus(fileId, { uploadStatus: "waiting" });
-          },
-          onFallback: () => {
-            // Storage domain unreachable from this network; the file is being
-            // re-sent through the API. Hold the indeterminate state rather
-            // than snapping the bar back to 0%.
-            updateFileStatus(fileId, {
-              uploadStatus: "waiting",
-              uploadProgress: 0,
-            });
-          },
-        });
-
-        // Update file as uploaded
-        updateFileStatus(fileId, {
-          uploadStatus: "uploaded",
-          uploadProgress: 100,
-          s3Link: uploadedFile.s3Link,
-          s3Key: uploadedFile.key,
-          s3Bucket: uploadedFile.bucket,
-        });
-
-        toast.success(`${file.name} uploaded successfully`);
-      } catch (error: unknown) {
-        console.error("File upload error:", error);
-        const { UploadError } = await import("@/lib/reliableUpload");
-        const userMessage =
-          error instanceof UploadError
-            ? error.userMessage
-            : error instanceof Error
-              ? error.message
-              : "Upload failed";
-        updateFileStatus(fileId, {
-          uploadStatus: "error",
-          errorMessage: userMessage,
-        });
-        toast.error(`${file.name}: ${userMessage}`);
-      }
-    },
-    [userRole, addAttachedFile, updateFileStatus],
-  );
-
-  // Handle file selection (immediate upload)
-  const handleFileSelect = useCallback(
-    async (files: File[]) => {
-      const existingKeys = new Set(
-        attachedFiles.map((file) => `${file.fileName}:${file.fileSize}`),
-      );
-      const seenIncomingKeys = new Set<string>();
-      const uniqueFiles = files.filter((file) => {
-        const stableKey = `${file.name}:${file.size}:${file.lastModified}`;
-        const existingKey = `${file.name}:${file.size}`;
-        if (existingKeys.has(existingKey)) return false;
-        if (seenIncomingKeys.has(stableKey)) return false;
-        seenIncomingKeys.add(stableKey);
-        return true;
-      });
-
-      if (uniqueFiles.length < files.length) {
-        toast.info("Skipped duplicate file(s).");
-      }
-
-      if (uniqueFiles.length === 0) return;
-
-      const currentQueuedFiles = attachedFiles.filter(
-        (file) => file.uploadStatus !== "error",
-      );
-      if (
-        currentQueuedFiles.length + uniqueFiles.length >
-        MAX_FILES_PER_MESSAGE
-      ) {
-        toast.error(
-          `You can attach up to ${MAX_FILES_PER_MESSAGE} files to a single message.`,
-        );
-        return;
-      }
-
-      // Validate individual file sizes
-      for (const file of uniqueFiles) {
-        if (file.size > MAX_FILE_SIZE) {
-          toast.error(
-            `${file.name} exceeds ${formatFileSize(MAX_FILE_SIZE)} limit`,
-          );
-          return;
-        }
-      }
-
-      // Upload all files
-      uploadBatchCountRef.current += 1;
-      setIsUploadingFiles(true);
-      try {
-        await Promise.all(uniqueFiles.map(handleFileUpload));
-      } finally {
-        uploadBatchCountRef.current = Math.max(
-          0,
-          uploadBatchCountRef.current - 1,
-        );
-        if (uploadBatchCountRef.current === 0) {
-          setIsUploadingFiles(false);
-        }
-      }
-    },
-    [attachedFiles, handleFileUpload],
-  );
-
-  // Handle file removal
-  const handleRemoveFile = useCallback(
-    (fileId: string) => {
-      removeAttachedFile(fileId);
-      toast.success("File removed");
-    },
-    [removeAttachedFile],
-  );
-
-  const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
-    onDrop: handleFileSelect,
-    onDropRejected: (rejectedFiles) => {
-      const error = rejectedFiles[0]?.errors[0];
-      if (error?.code === "file-too-large") {
-        toast.error(
-          `File is too large. Maximum size is ${MAX_FILE_SIZE / 1024 / 1024}MB.`,
-        );
-      } else if (error?.code === "file-invalid-type") {
-        toast.error("File type not supported.");
-      } else {
-        toast.error("File could not be added.");
-      }
-    },
-    accept: ACCEPTED_FILE_TYPES,
-    maxSize: MAX_FILE_SIZE,
-    noClick: true,
-    noKeyboard: true,
-  });
   const [isInitializing, setIsInitializing] = useState(true);
   const [isEndingChat, setIsEndingChat] = useState(false);
   const [shouldAutoOpen, setShouldAutoOpen] = useState(false);
-  const [showReports, setShowReports] = useState(false);
-  const [reportsSearchQuery, setReportsSearchQuery] = useState("");
   const [reportPreviewModal, setReportPreviewModal] = useState({
     isOpen: false,
     type: "report" as "report" | "feedback" | "suggestion" | "inquiry",
     data: null as any,
   });
-  const openReportsPanel = useCallback(
-    (searchQuery = "") => {
-      toggleChatbot();
-      setReportsSearchQuery(searchQuery);
-      setShowReports(true);
-    },
-    [toggleChatbot],
-  );
-  const handleCheckReports = useCallback(() => {
-    openReportsPanel("");
-  }, [openReportsPanel]);
   const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
   const [currentPosition, setCurrentPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -1602,74 +1144,7 @@ export const MarkChat = () => {
       toggleChatbot();
     }
   }, [isDragging, isMobileDevice, dragStartTime, toggleChatbot]);
-  const recognitionRef = useRef(null);
   const context = userRole === "learner" ? learnerContext : authorContext;
-  const checkForIssueStatusQuery = useCallback(
-    (message: string): boolean | number => {
-      const lowerMessage = message.toLowerCase();
-
-      const generalIssuePatterns = [
-        "my issues",
-        "my reports",
-        "reported issues",
-        "issue status",
-        "report status",
-        "check my issues",
-        "check my reports",
-        "view my issues",
-        "view my reports",
-      ];
-
-      const specificIssueMatch =
-        lowerMessage.match(/issue #?(\d+)/i) ||
-        lowerMessage.match(/report #?(\d+)/i) ||
-        lowerMessage.match(/ticket #?(\d+)/i);
-
-      if (specificIssueMatch?.[1]) {
-        return parseInt(specificIssueMatch[1], 10);
-      }
-
-      return generalIssuePatterns.some((pattern) =>
-        lowerMessage.includes(pattern),
-      );
-    },
-    [],
-  );
-  const handleIssueStatusQuery = useCallback(
-    (message: string, issueQuery: boolean | number) => {
-      const now = Date.now();
-      const searchQuery =
-        typeof issueQuery === "number" ? issueQuery.toString() : "";
-
-      setHistory((prev) => [...prev, message]);
-      setHistoryIndex(-1);
-      useMarkChatStore.getState().addMessage({
-        id: `user-${now}`,
-        role: "user",
-        content: message,
-        timestamp: new Date(now).toISOString(),
-      });
-      useMarkChatStore.getState().addMessage({
-        id: `assistant-${now}`,
-        role: "assistant",
-        content:
-          typeof issueQuery === "number"
-            ? `Opened your reports panel and filtered it for report #${issueQuery}.`
-            : "Opened your reports panel so you can review your reported issues.",
-        timestamp: new Date(now).toISOString(),
-      });
-      setUserInput("");
-      setShowSuggestions(false);
-      setSpecialActions({ show: false, type: null, data: null });
-      openReportsPanel(searchQuery);
-
-      if (isRecording) {
-        recognitionRef.current?.stop();
-        setIsRecording(false);
-      }
-    },
-    [isRecording, openReportsPanel, setUserInput],
-  );
   useEffect(() => {
     let cancelled = false;
     const fetchUser = async () => {
@@ -1713,13 +1188,17 @@ export const MarkChat = () => {
 
     const initializeChat = async () => {
       try {
-        const todayChat = await getOrCreateTodayChat(user.userId, assignmentId);
+        const todayChat = await findTodayChat(user.userId, assignmentId);
 
         if (cancelled) return;
 
+        if (!todayChat.id) {
+          setCurrentChatId(null);
+          resetChat();
+          return;
+        }
+
         setCurrentChatId(todayChat.id);
-        clearAttachedFiles();
-        clearSessionContextFiles();
 
         if (todayChat.messages && todayChat.messages.length > 0) {
           const storeMessages = todayChat.messages.map((msg) => ({
@@ -1760,8 +1239,6 @@ export const MarkChat = () => {
     userRole,
     learnerContext.assignmentId,
     authorContext.activeAssignmentId,
-    clearAttachedFiles,
-    clearSessionContextFiles,
     getCurrentAssignmentId,
     markChatUnavailable,
     resetChat,
@@ -1773,28 +1250,6 @@ export const MarkChat = () => {
       setShouldAutoOpen(false);
     }
   }, [shouldAutoOpen, isOpen, isInitializing, toggleChat]);
-
-  useEffect(() => {
-    if (typeof window !== "undefined" && "webkitSpeechRecognition" in window) {
-      const SpeechRecognition =
-        (window as any).SpeechRecognition ||
-        (window as any).webkitSpeechRecognition;
-      recognitionRef.current = new SpeechRecognition();
-      recognitionRef.current.continuous = true;
-      recognitionRef.current.interimResults = true;
-      recognitionRef.current.onresult = (event) => {
-        const transcript = Array.from(event.results)
-          .map((result) => result[0])
-          .map((result) => result.transcript)
-          .join("");
-        setUserInput(transcript);
-      };
-      recognitionRef.current.onerror = (event) => {
-        setIsRecording(false);
-        toast.error("Voice recognition error. Please try again.");
-      };
-    }
-  }, []);
 
   useEffect(() => {
     const loadUserChats = async () => {
@@ -1813,23 +1268,6 @@ export const MarkChat = () => {
     loadUserChats();
   }, [user?.userId, isOpen]);
 
-  const toggleVoiceRecognition = useCallback(() => {
-    if (!recognitionRef.current) {
-      toast.error("Voice recognition is not supported in your browser");
-      return;
-    }
-    if (isRecording) {
-      recognitionRef.current.stop();
-      setIsRecording(false);
-      toast.success("Voice input stopped");
-    } else {
-      setUserInput("");
-      recognitionRef.current.start();
-      setIsRecording(true);
-      toast.success("Voice input started - speak now");
-    }
-  }, [isRecording]);
-
   useEffect(() => {
     setContextReady(true);
     if (userRole === "learner" && learnerContext.currentQuestion) {
@@ -1843,8 +1281,6 @@ export const MarkChat = () => {
       try {
         const chat = await getChatById(chatId);
         setCurrentChatId(chat.id);
-        clearAttachedFiles();
-        clearSessionContextFiles();
 
         if (chat.messages && chat.messages.length > 0) {
           const storeMessages = chat.messages.map((msg) => ({
@@ -1866,37 +1302,13 @@ export const MarkChat = () => {
         toast.error("Could not load selected chat");
       }
     },
-    [resetChat, clearAttachedFiles, clearSessionContextFiles],
+    [resetChat],
   );
 
   const checkForLearnerSpecialActions = useCallback(
     (input) => {
       const lowerInput = input.toLowerCase();
       if (
-        learnerContext.isFeedbackMode &&
-        (lowerInput.includes("regrade") ||
-          lowerInput.includes("wrong grade") ||
-          lowerInput.includes("graded incorrectly") ||
-          lowerInput.includes("review my grade") ||
-          lowerInput.includes("points I deserved") ||
-          lowerInput.includes("scoring issue") ||
-          lowerInput.match(/score(?:.+?)wrong/) ||
-          lowerInput.match(/grade(?:.+?)incorrect/))
-      ) {
-        const actionKey = generateActionKey("regrade", {
-          assignmentId: learnerContext.assignmentId,
-        });
-        if (!dismissedActions.has(actionKey)) {
-          setSpecialActions({
-            show: true,
-            type: "regrade",
-            data: {
-              assignmentId: learnerContext.assignmentId,
-              attemptId: learnerContext.activeAttemptId,
-            },
-          });
-        }
-      } else if (
         lowerInput.includes("issue") ||
         lowerInput.includes("problem with") ||
         lowerInput.includes("bug") ||
@@ -2114,124 +1526,18 @@ export const MarkChat = () => {
     }
   }, []);
 
-  const hasPendingUploads =
-    isUploadingFiles ||
-    attachedFiles.some((f) => f.uploadStatus === "uploading");
-
   const handleSendWithContext = useCallback(
     async (stream = true) => {
       if (isSendingRef.current) return;
 
       const trimmedInput = userInput.trim();
-      const uploadedFiles = attachedFiles.filter(
-        (file) => file.uploadStatus === "uploaded",
-      );
-      const uploadedFileCount = uploadedFiles.length;
-      const issueStatusQuery =
-        uploadedFileCount === 0
-          ? checkForIssueStatusQuery(trimmedInput)
-          : false;
-
-      if (hasPendingUploads) {
-        toast.error("Please wait for files to finish uploading.");
-        return;
-      }
-
-      if (!trimmedInput && uploadedFileCount === 0) return;
-
-      if (issueStatusQuery !== false) {
-        handleIssueStatusQuery(trimmedInput, issueStatusQuery);
-        return;
-      }
-
-      if (uploadedFileCount > 0 && (!currentChatId || !user?.userId)) {
-        toast.error(
-          "Chat session is not ready yet. Please wait a moment and try sending your files again.",
-        );
-        return;
-      }
+      if (!trimmedInput) return;
 
       isSendingRef.current = true;
-      const fileToolCalls =
-        uploadedFileCount > 0
-          ? {
-              type: "file_attachments",
-              files: uploadedFiles.map((file) => ({
-                id: file.id,
-                filename: file.fileName,
-                size: file.fileSize,
-                contentType: file.fileType,
-                extension: file.extension,
-                s3Link:
-                  file.s3Link ||
-                  (file.s3Bucket && file.s3Key
-                    ? `s3://${file.s3Bucket}/${file.s3Key}`
-                    : undefined),
-                s3Key: file.s3Key,
-                s3Bucket: file.s3Bucket,
-              })),
-            }
-          : undefined;
 
-      const fileContextMessage = (() => {
-        const hasNewFiles = uploadedFileCount > 0;
-        const hasSessionFiles = sessionContextFiles.length > 0;
-        if (!hasNewFiles && !hasSessionFiles) return null;
-
-        let content = "";
-
-        if (hasNewFiles) {
-          content += "New files attached for this message:\n\n";
-          uploadedFiles.forEach((file: AttachedFile, index: number) => {
-            const s3Link =
-              file.s3Link ||
-              (file.s3Bucket && file.s3Key
-                ? `s3://${file.s3Bucket}/${file.s3Key}`
-                : "");
-
-            content += `${index + 1}. ${file.fileName} (${formatFileSize(file.fileSize)})\n`;
-            content += `Type: ${file.extension.toUpperCase() || file.fileType}\n`;
-            if (s3Link) content += `S3 Link: ${s3Link}\n`;
-            content += "\n";
-          });
-        }
-
-        if (hasSessionFiles) {
-          content +=
-            "Files shared earlier in this conversation (still available):\n\n";
-          sessionContextFiles.forEach((file: AttachedFile, index: number) => {
-            const s3Link =
-              file.s3Link ||
-              (file.s3Bucket && file.s3Key
-                ? `s3://${file.s3Bucket}/${file.s3Key}`
-                : "");
-
-            content += `${index + 1}. ${file.fileName} (${formatFileSize(file.fileSize)})\n`;
-            content += `Type: ${file.extension.toUpperCase() || file.fileType}\n`;
-            if (s3Link) content += `S3 Link: ${s3Link}\n`;
-            content += "\n";
-          });
-        }
-
-        content +=
-          "When the user asks about these files, call tools with the exact S3 link:\n" +
-          "- `extractFileFromLink` for raw extracted text\n" +
-          "- `summarizeFileFromLink` for concise summaries\n";
-
-        return {
-          id: `system-files-${Date.now()}`,
-          role: "system" as ChatRole,
-          content,
-        };
-      })();
-
-      const messageContent =
-        trimmedInput || `[${uploadedFileCount} file(s) attached]`;
-
-      setHistory((prev) => [...prev, messageContent]);
+      setHistory((prev) => [...prev, trimmedInput]);
       setHistoryIndex(-1);
 
-      let didSendSucceed = false;
       try {
         let contextMessage = null;
         try {
@@ -2242,9 +1548,7 @@ export const MarkChat = () => {
 
         const originalMessages = messages.filter(
           (message) =>
-            message.role !== "system" ||
-            (!message.id.includes("context") &&
-              !message.id.startsWith("system-files-")),
+            message.role !== "system" || !message.id.includes("context"),
         );
         const messagesWithContext = [...originalMessages];
 
@@ -2269,10 +1573,6 @@ export const MarkChat = () => {
           }
         }
 
-        if (fileContextMessage) {
-          messagesWithContext.push(fileContextMessage);
-        }
-
         if (userRole === "learner") {
           checkForLearnerSpecialActions(trimmedInput);
         } else {
@@ -2282,32 +1582,44 @@ export const MarkChat = () => {
         useMarkChatStore.setState({ messages: messagesWithContext });
         const browserCookies =
           typeof window !== "undefined" ? document.cookie : "";
-        if (currentChatId && user?.userId) {
-          try {
-            await addMessageToChat(
-              currentChatId,
-              "USER",
-              messageContent,
-              fileToolCalls,
-              browserCookies,
-            );
-          } catch (error) {
-            console.error(
-              "MarkChat: addMessageToChat(USER) failed — chat log may be incomplete:",
-              error,
-            );
-            if (fileToolCalls) {
-              toast.error(
-                "Could not send this message because the attached files could not be saved to the chat. Please try again.",
+        if (user?.userId) {
+          let chatId = currentChatId;
+          const isNewChat = !chatId;
+          if (!chatId) {
+            try {
+              const created = await getOrCreateTodayChat(
+                user.userId,
+                getCurrentAssignmentId(),
+                browserCookies,
               );
-              return;
+              chatId = created.id;
+              setCurrentChatId(created.id);
+            } catch (error) {
+              console.error("MarkChat: getOrCreateTodayChat failed:", error);
+            }
+          }
+          if (chatId) {
+            try {
+              await addMessageToChat(
+                chatId,
+                "USER",
+                trimmedInput,
+                browserCookies,
+              );
+              if (isNewChat) {
+                setUserChats(await getUserChats(user.userId));
+              }
+            } catch (error) {
+              console.error(
+                "MarkChat: addMessageToChat(USER) failed — chat log may be incomplete:",
+                error,
+              );
             }
           }
         }
 
-        didSendSucceed = await sendMessage(stream, {
-          userText: messageContent,
-          toolCalls: fileToolCalls,
+        await sendMessage(stream, {
+          userText: trimmedInput,
         });
       } catch (error) {
         toast.error("Failed to send message. Please try again.");
@@ -2318,43 +1630,25 @@ export const MarkChat = () => {
             .getState()
             .messages.filter(
               (message) =>
-                message.role !== "system" ||
-                (!message.id.includes("context") &&
-                  !message.id.startsWith("system-files-")),
+                message.role !== "system" || !message.id.includes("context"),
             );
           useMarkChatStore.setState({ messages: purified });
         }, 500);
       }
 
       setShowSuggestions(false);
-      if (isRecording) {
-        recognitionRef.current?.stop();
-        setIsRecording(false);
-      }
-
-      if (didSendSucceed && uploadedFileCount > 0) {
-        addSessionContextFiles(uploadedFiles);
-        clearAttachedFiles();
-      }
     },
     [
       userInput,
-      attachedFiles,
-      hasPendingUploads,
       context,
       messages,
       userRole,
-      isRecording,
       sendMessage,
-      checkForIssueStatusQuery,
-      handleIssueStatusQuery,
       checkForLearnerSpecialActions,
       checkForAuthorSpecialActions,
       currentChatId,
       user?.userId,
-      sessionContextFiles,
-      addSessionContextFiles,
-      clearAttachedFiles,
+      getCurrentAssignmentId,
     ],
   );
 
@@ -2419,18 +1713,6 @@ export const MarkChat = () => {
   const toggleExpanded = useCallback(() => {
     setIsExpanded(!isExpanded);
   }, [isExpanded]);
-
-  const handleRegradeRequest = useCallback(() => {
-    const regradePrompt = `I'd like to request a regrade for assignment ${
-      learnerContext.assignmentId || "this assignment"
-    }. My attempt ID is ${
-      learnerContext.activeAttemptId || "current attempt"
-    }. I believe my answers were scored incorrectly because...`;
-
-    setUserInput(regradePrompt);
-    setSpecialActions({ show: false, type: null, data: null });
-    textareaRef.current?.focus();
-  }, [learnerContext]);
 
   const handleIssueReport = useCallback(() => {
     try {
@@ -2634,20 +1916,18 @@ Please help me with this.`;
 
   const handleEndChat = useCallback(async () => {
     if (!user?.userId || isInitializing || isEndingChat) return;
-    const assignmentId = getCurrentAssignmentId();
     setIsEndingChat(true);
     try {
-      const chatToEnd =
-        currentChatId ??
-        (await getOrCreateTodayChat(user.userId, assignmentId)).id;
+      if (!currentChatId) {
+        resetChat();
+        toast.success("Started a new chat session");
+        return;
+      }
 
-      await endChat(chatToEnd);
+      await endChat(currentChatId);
 
-      const newChat = await getOrCreateTodayChat(user.userId, assignmentId);
-      setCurrentChatId(newChat.id);
+      setCurrentChatId(null);
       resetChat();
-      clearAttachedFiles();
-      clearSessionContextFiles();
 
       const updatedChats = await getUserChats(user.userId);
       setUserChats(updatedChats);
@@ -2659,16 +1939,7 @@ Please help me with this.`;
     } finally {
       setIsEndingChat(false);
     }
-  }, [
-    isInitializing,
-    isEndingChat,
-    currentChatId,
-    user?.userId,
-    getCurrentAssignmentId,
-    resetChat,
-    clearAttachedFiles,
-    clearSessionContextFiles,
-  ]);
+  }, [isInitializing, isEndingChat, currentChatId, user?.userId, resetChat]);
 
   const getChatTitle = useCallback(() => {
     if (userRole === "author") return "Mark - Assignment Creator";
@@ -2792,7 +2063,7 @@ Please help me with this.`;
           "Why did I lose points on this question?",
           "What concepts did I miss in my answer?",
           "Help me understand this grading criteria",
-          "Request a regrade for this question",
+          "What can I do if my grade seems wrong?",
         ];
       }
       if (learnerContext.isGradedAssignment) {
@@ -2907,19 +2178,7 @@ Please help me with this.`;
     );
   }, [isTyping]);
 
-  const activeFileCount = attachedFiles.filter(
-    (f) => f.uploadStatus !== "error",
-  ).length;
-  const uploadedFileCount = attachedFiles.filter(
-    (f) => f.uploadStatus === "uploaded",
-  ).length;
-  const sessionContextFileCount = sessionContextFiles.length;
-  const hasUploadedFiles = uploadedFileCount > 0;
-  const isSendDisabled =
-    (!userInput.trim() && !hasUploadedFiles) ||
-    isTyping ||
-    isInitializing ||
-    hasPendingUploads;
+  const isSendDisabled = !userInput.trim() || isTyping || isInitializing;
 
   // Chat access was denied for this session — render nothing (the toggle
   // button hides itself off the same store flag).
@@ -2989,42 +2248,10 @@ Please help me with this.`;
                 >
                   <ArrowPathIcon className="w-4 h-4 text-gray-600 dark:text-gray-400" />
                 </button>
-                <button
-                  onClick={() => setShowSettings(!showSettings)}
-                  className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full transition-colors"
-                  title="Settings"
-                >
-                  <CogIcon className="w-4 h-4 text-gray-600 dark:text-gray-400" />
-                </button>
               </div>
-              <button
-                onClick={handleCheckReports}
-                className="p-2 mr-2 rounded-sm transition-colors bg-white dark:bg-gray-800 hover:bg-purple-100 dark:hover:bg-purple-900 border border-gray-300 dark:border-gray-700 shadow-sm"
-                title="Check Reports"
-              >
-                <span className="text-sm font-medium text-purple-700 dark:text-purple-300">
-                  Your Reports
-                </span>
-              </button>
             </div>
 
             <div className="flex-1 flex flex-col overflow-hidden">
-              <AnimatePresence>
-                {showSettings && (
-                  <SettingsPanel
-                    setShowSettings={setShowSettings}
-                    isRecording={isRecording}
-                    toggleVoiceRecognition={toggleVoiceRecognition}
-                    userRole={userRole}
-                    learnerContext={learnerContext}
-                    activeQuestion={activeQuestion}
-                    handleSwitchQuestion={handleSwitchQuestion}
-                    darkMode={darkMode}
-                    setDarkMode={setDarkMode}
-                  />
-                )}
-              </AnimatePresence>
-
               <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50 dark:bg-gray-950 relative">
                 <div className="absolute right-3 bottom-3 flex space-x-2">
                   {userInput.trim() !== "" && (
@@ -3091,7 +2318,6 @@ Please help me with this.`;
                   {specialActions.show && (
                     <SpecialActionUI
                       specialActions={specialActions}
-                      handleRegradeRequest={handleRegradeRequest}
                       handleIssueReport={handleIssueReport}
                       handleCreateQuestion={handleCreateQuestion}
                       handleReportPreview={handleReportPreview}
@@ -3102,19 +2328,7 @@ Please help me with this.`;
                   )}
                 </AnimatePresence>
 
-                <FileAttachmentChips
-                  files={attachedFiles}
-                  onRemove={handleRemoveFile}
-                  isUploading={isUploadingFiles}
-                />
-
-                <div
-                  {...getRootProps()}
-                  className={`flex items-center space-x-2 ${
-                    isDragActive ? "ring-2 ring-purple-500 rounded-xl" : ""
-                  }`}
-                >
-                  <input {...getInputProps()} />
+                <div className="flex items-center space-x-2">
                   <textarea
                     ref={textareaRef}
                     value={userInput}
@@ -3122,52 +2336,12 @@ Please help me with this.`;
                     onKeyDown={handleKeyDown}
                     onFocus={() => setShowSuggestions(true)}
                     placeholder="Ask Mark anything..."
-                    className={`w-full m-0  pl-4 py-3 text-sm border ${
-                      isRecording
-                        ? "border-red-400 dark:border-red-600"
-                        : "dark:border-gray-700"
-                    } rounded-xl bg-white dark:bg-gray-800 resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 min-h-[90px] max-h-[120px]`}
+                    className="w-full m-0  pl-4 py-3 text-sm border dark:border-gray-700 rounded-xl bg-white dark:bg-gray-800 resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 min-h-[90px] max-h-[120px]"
                     style={{ maxHeight: "120px", overflowY: "auto" }}
                     disabled={isInitializing}
                   />
 
                   <div className="relative flex-col flex-1 ">
-                    <motion.button
-                      whileHover={{ scale: 1.1 }}
-                      whileTap={{ scale: 0.9 }}
-                      onClick={toggleVoiceRecognition}
-                      className={`p-1.5 rounded-full transition-colors ${
-                        isRecording
-                          ? "bg-red-500 text-white hover:bg-red-600"
-                          : "bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300"
-                      }`}
-                      title="Voice input"
-                      disabled={isInitializing}
-                    >
-                      <MicrophoneIcon className="w-4 h-4" />
-                    </motion.button>
-                    <motion.button
-                      whileHover={{ scale: 1.1 }}
-                      whileTap={{ scale: 0.9 }}
-                      onClick={open}
-                      className={`relative p-1.5 rounded-full transition-colors ${
-                        activeFileCount > 0
-                          ? "bg-purple-100 dark:bg-purple-900 text-purple-600 dark:text-purple-400"
-                          : "bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300"
-                      }`}
-                      title={`Attach files (up to ${MAX_FILES_PER_MESSAGE})`}
-                      disabled={
-                        isInitializing ||
-                        activeFileCount >= MAX_FILES_PER_MESSAGE
-                      }
-                    >
-                      <PaperClipIcon className="w-4 h-4" />
-                      {activeFileCount > 0 && (
-                        <span className="absolute -top-1 -right-1 bg-purple-600 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center">
-                          {activeFileCount}
-                        </span>
-                      )}
-                    </motion.button>
                     <motion.button
                       whileHover={{ scale: 1.1 }}
                       whileTap={{ scale: 0.9 }}
@@ -3198,24 +2372,6 @@ Please help me with this.`;
                   <span className="text-xs text-gray-400">
                     {getHelperText()}
                   </span>
-                  {(uploadedFileCount > 0 || sessionContextFileCount > 0) && (
-                    <>
-                      {uploadedFileCount > 0 && (
-                        <div className="text-[11px] text-gray-400 mt-1">
-                          {uploadedFileCount} file
-                          {uploadedFileCount === 1 ? "" : "s"} ready to send
-                          now.
-                        </div>
-                      )}
-                      {sessionContextFileCount > 0 && (
-                        <div className="text-[11px] text-gray-400">
-                          {sessionContextFileCount} file
-                          {sessionContextFileCount === 1 ? "" : "s"} already in
-                          chat context.
-                        </div>
-                      )}
-                    </>
-                  )}
                 </div>
               </div>
             </div>
@@ -3230,24 +2386,6 @@ Please help me with this.`;
         currentChatId={currentChatId}
         isLoading={isLoadingChats}
       />
-
-      {showReports && (
-        <div
-          className="fixed inset-0 bg-black/20 backdrop-blur-sm z-50 flex items-center justify-center"
-          onClick={() => setShowReports(false)}
-        >
-          <div
-            className="w-full max-w-6xl m-4"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <UserReportsPanel
-              userId={user?.userId || ""}
-              onClose={() => setShowReports(false)}
-              initialSearchQuery={reportsSearchQuery}
-            />
-          </div>
-        </div>
-      )}
 
       <ReportPreviewModal
         isOpen={reportPreviewModal.isOpen}

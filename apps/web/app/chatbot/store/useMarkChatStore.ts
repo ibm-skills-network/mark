@@ -2,7 +2,6 @@
 
 "use client";
 
-import { searchKnowledgeBase } from "../knowledgebase";
 import * as authorStoreUtils from "../store/authorStoreUtil";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
@@ -17,10 +16,8 @@ export interface ChatMessage {
 }
 
 interface SendMessageOptions {
-  // Lets caller override `userInput` (e.g. file-only message).
+  // Lets caller override `userInput`.
   userText?: string;
-  // Optional metadata for local chat UI (e.g. file chips).
-  toolCalls?: any;
   // Lets callers provide the exact conversation snapshot to send.
   conversation?: ChatMessage[];
 }
@@ -28,26 +25,6 @@ interface SendMessageOptions {
 interface MarkChatUsage {
   functionCalls: number;
   totalMessagesSent: number;
-  kbLookups: number;
-}
-
-export interface AttachedFile {
-  id: string;
-  fileName: string;
-  fileSize: number;
-  fileType: string;
-  extension: string;
-  /** Text extracted locally; not saved to localStorage. */
-  extractedContent?: string;
-  /** Leading snippet from extracted content (not semantic summary). */
-  contentPrefix?: string;
-  uploadStatus: "uploading" | "waiting" | "uploaded" | "error";
-  uploadProgress: number;
-  s3Link?: string;
-  s3Key?: string;
-  s3Bucket?: string;
-  errorMessage?: string;
-  uploadedAt: string;
 }
 
 interface MarkChatState {
@@ -63,21 +40,12 @@ interface MarkChatState {
   setIsTyping: (value: boolean) => void;
   isExecutingClientSide: boolean;
   setIsExecutingClientSide: (value: boolean) => void;
-  attachedFiles: AttachedFile[];
-  sessionContextFiles: AttachedFile[];
-  addAttachedFile: (file: AttachedFile) => void;
-  removeAttachedFile: (fileId: string) => void;
-  updateFileStatus: (fileId: string, status: Partial<AttachedFile>) => void;
-  clearAttachedFiles: () => void;
-  addSessionContextFiles: (files: AttachedFile[]) => void;
-  clearSessionContextFiles: () => void;
   addMessage: (message: ChatMessage) => void;
   sendMessage: (
     useStreaming?: boolean,
     options?: SendMessageOptions,
   ) => Promise<boolean>;
   resetChat: () => void;
-  searchKnowledgeBase: (query: string) => Promise<ChatMessage[]>;
   executeOperations: (operations: any[]) => Promise<void>;
 }
 
@@ -108,7 +76,6 @@ export const useMarkChatStore = create<MarkChatState>()(
       usage: {
         functionCalls: 0,
         totalMessagesSent: 0,
-        kbLookups: 0,
       },
 
       isTyping: false,
@@ -117,39 +84,6 @@ export const useMarkChatStore = create<MarkChatState>()(
       isExecutingClientSide: false,
       setIsExecutingClientSide: (value) =>
         set({ isExecutingClientSide: value }),
-
-      attachedFiles: [],
-      sessionContextFiles: [],
-      addAttachedFile: (file: AttachedFile) =>
-        set((s) => ({
-          attachedFiles: [...s.attachedFiles, file],
-        })),
-      removeAttachedFile: (fileId: string) =>
-        set((s) => ({
-          attachedFiles: s.attachedFiles.filter((f) => f.id !== fileId),
-        })),
-      updateFileStatus: (fileId: string, status: Partial<AttachedFile>) =>
-        set((s) => ({
-          attachedFiles: s.attachedFiles.map((f) =>
-            f.id === fileId ? { ...f, ...status } : f,
-          ),
-        })),
-      clearAttachedFiles: () => set({ attachedFiles: [] }),
-      addSessionContextFiles: (files: AttachedFile[]) =>
-        set((s) => {
-          if (!files.length) return {};
-          const merged = [...s.sessionContextFiles];
-          files.forEach((file) => {
-            const existingIndex = merged.findIndex((f) => f.id === file.id);
-            if (existingIndex === -1) {
-              merged.push(file);
-            } else {
-              merged[existingIndex] = file;
-            }
-          });
-          return { sessionContextFiles: merged };
-        }),
-      clearSessionContextFiles: () => set({ sessionContextFiles: [] }),
 
       resetChat: () =>
         set({
@@ -163,8 +97,6 @@ export const useMarkChatStore = create<MarkChatState>()(
           ],
 
           userInput: "",
-          attachedFiles: [],
-          sessionContextFiles: [],
         }),
 
       executeOperations: async function (operations) {
@@ -258,8 +190,6 @@ export const useMarkChatStore = create<MarkChatState>()(
           id: `user-${Date.now()}`,
           role: "user",
           content: trimmed,
-          // Keep metadata so chat can show user file chips.
-          ...(options?.toolCalls ? { toolCalls: options.toolCalls } : {}),
         };
 
         set({
@@ -270,50 +200,6 @@ export const useMarkChatStore = create<MarkChatState>()(
         });
 
         try {
-          // Strip the UI-only `toolCalls` metadata from user messages — file chips are
-          // local only and should not reach the API. However, file s3Links must reach
-          // the backend so it can grant extractFileFromLink tool access. Reconstruct a
-          // system-files-* message for each user message that carried file attachments
-          // so history reloads and post-refresh sessions restore tool access correctly.
-          const conversationMessages: ChatMessage[] = [];
-          for (const msg of conversation) {
-            // NOTE: do NOT drop `system-context-*` messages here. The backend
-            // (mark-chat.service.getSystemPromptParts) keys on
-            // `role === "system" && id.includes("context")` to build the LLM
-            // system prompt and detect assignment mode/id. Stripping them blinds
-            // the chatbot to the current app/session (assignment, question,
-            // responses, feedback). See useLearnerContext/useAuthorContext.
-            if (
-              msg.role === "user" &&
-              msg.toolCalls?.type === "file_attachments"
-            ) {
-              const files: Array<{
-                filename?: string;
-                size?: number;
-                contentType?: string;
-                extension?: string;
-                s3Link?: string;
-              }> = msg.toolCalls.files ?? [];
-              if (files.length > 0) {
-                let fileContent = "Files attached in this conversation:\n\n";
-                files.forEach((file, index) => {
-                  fileContent += `${index + 1}. ${file.filename ?? "file"}\n`;
-                  if (file.s3Link) fileContent += `S3 Link: ${file.s3Link}\n`;
-                  fileContent += "\n";
-                });
-                conversationMessages.push({
-                  id: `system-files-restored-${msg.id}`,
-                  role: "system",
-                  content: fileContent,
-                });
-              }
-              const { toolCalls: _tc, ...safeMessage } = msg;
-              conversationMessages.push(safeMessage);
-            } else {
-              conversationMessages.push(msg);
-            }
-          }
-
           if (useStreaming) {
             const response = await fetch("/api/markChat/stream", {
               method: "POST",
@@ -321,7 +207,7 @@ export const useMarkChatStore = create<MarkChatState>()(
               body: JSON.stringify({
                 userRole,
                 userText: userMsg.content,
-                conversation: conversationMessages,
+                conversation,
               }),
             });
 
@@ -426,7 +312,7 @@ export const useMarkChatStore = create<MarkChatState>()(
               body: JSON.stringify({
                 userRole,
                 userText: userMsg.content,
-                conversation: conversationMessages,
+                conversation,
               }),
             });
 
@@ -497,32 +383,8 @@ export const useMarkChatStore = create<MarkChatState>()(
             messages: [...s.messages, errorMsg],
             isTyping: false,
           }));
-          // Caller uses this flag to decide whether attachments should be cleared.
           return false;
         }
-      },
-
-      async searchKnowledgeBase(query: string) {
-        const { usage } = get();
-        set({ usage: { ...usage, kbLookups: usage.kbLookups + 1 } });
-
-        const results = searchKnowledgeBase(query);
-
-        if (!results.length) {
-          return [
-            {
-              id: `kb-none-${Date.now()}`,
-              role: "assistant",
-              content: `No specific information found for "${query}". I'll use my general knowledge to help.`,
-            },
-          ];
-        }
-
-        return results.map((item: any) => ({
-          id: `kb-${item.id}-${Date.now()}`,
-          role: "assistant",
-          content: `**${item.title}**\n\n${item.description}`,
-        }));
       },
     }),
     {

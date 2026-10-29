@@ -63,7 +63,7 @@ export interface ExtendedFileContent {
   size?: number;
 }
 
-export type UploadType = "author" | "learner" | "debug" | "chatbot";
+export type UploadType = "author" | "learner" | "debug";
 
 export interface UploadContext {
   path?: string;

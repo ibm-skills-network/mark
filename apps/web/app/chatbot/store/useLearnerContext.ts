@@ -247,14 +247,6 @@ export const useLearnerContext = (): UseLearnerContextInterface => {
           contextContent += "\n";
         });
       }
-
-      contextContent += "REGRADING INFORMATION:\n";
-      contextContent +=
-        "- The learner can request regrading if they believe their assessment was scored incorrectly\n";
-      contextContent +=
-        "- You can help create a regrading request using the requestRegrading tool\n";
-      contextContent +=
-        "- Clearly explain the regrading process to the learner\n\n";
     } else {
       contextContent += "MODE: ASSIGNMENT ASSISTANCE\n";
 
@@ -333,9 +325,10 @@ export const useLearnerContext = (): UseLearnerContextInterface => {
       "- Make sure to collect specific details about the issue\n\n";
 
     contextContent += "REQUIRED BEHAVIOR:\n";
-    contextContent += "1. Answer ONLY questions related to this assignment\n";
     contextContent +=
-      "2. If the learner asks about unrelated topics, politely redirect them to the assignment\n";
+      "1. Answer questions related to this assignment, and questions about using Mark (uploading files, grading, results, attempts)\n";
+    contextContent +=
+      "2. If the learner asks about unrelated topics, politely redirect them to the assignment or to using Mark\n";
     contextContent +=
       "3. Be encouraging, supportive, and clear in your explanations\n";
     contextContent += `4. For ${
@@ -347,7 +340,7 @@ export const useLearnerContext = (): UseLearnerContextInterface => {
     }\n`;
 
     contextContent +=
-      "5. Take regrade requests and issue reports seriously - these are important tools for learners\n";
+      "5. Take issue reports seriously - they are an important tool for learners\n";
     contextContent +=
       "6. When using tools, clearly explain to the learner what you're doing and what will happen next\n";
 

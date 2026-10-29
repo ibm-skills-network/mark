@@ -26,6 +26,13 @@ describe("DirectUploadDto", () => {
     expect(errors[0].constraints?.isEnum).toBeDefined();
   });
 
+  it("rejects the retired chatbot uploadType", async () => {
+    const dto = plainToInstance(DirectUploadDto, { uploadType: "chatbot" });
+    const errors = await validate(dto);
+    expect(errors).toHaveLength(1);
+    expect(errors[0].constraints?.isEnum).toBeDefined();
+  });
+
   it("rejects missing uploadType", async () => {
     const dto = plainToInstance(DirectUploadDto, {});
     const errors = await validate(dto);

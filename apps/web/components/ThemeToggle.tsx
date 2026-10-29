@@ -10,8 +10,7 @@ interface ThemeToggleProps {
 
 /**
  * Quick light/dark switch for the app headers. Flips the resolved theme and
- * persists it via the shared theme module (kept in sync with the chatbot's
- * theme selector).
+ * persists it via the shared theme module.
  */
 export default function ThemeToggle({ className }: ThemeToggleProps) {
   const { isDark, toggle } = useTheme();
