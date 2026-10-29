@@ -6,6 +6,7 @@ import {
   type FetchUrlDeps,
   guardedFetch,
 } from "./fetch-url";
+import { textDocument } from "./formats/tests/office-fixtures";
 import { UnreadableSourceError } from "./materialize";
 
 function response(
@@ -164,6 +165,40 @@ describe("fetchUrlAsParts", () => {
         text: "print('hi')",
       }),
     ]);
+  });
+
+  it("renders a linked Office document like an uploaded one", async () => {
+    const docx = await textDocument(["My essay"]);
+    const url = "https://raw.githubusercontent.com/me/repo/main/report.docx";
+    const fake = deps(
+      { "raw.githubusercontent.com": ["185.199.108.133"] },
+      { [url]: { status: 200, headers: {}, body: docx } },
+    );
+    const renders: string[] = [];
+    const pdf = Buffer.from(
+      "%PDF-1.7\n<< /Type /Page >>\n<< /Type /Pages >>",
+      "latin1",
+    );
+    const parts = await fetchUrlAsParts(
+      "https://github.com/me/repo/blob/main/report.docx",
+      fake,
+      undefined,
+      {
+        renderer: {
+          toPdf(_bytes, extension) {
+            renders.push(extension);
+            return Promise.resolve(pdf);
+          },
+        },
+      },
+    );
+    const name = "https://github.com/me/repo/blob/main/report.docx";
+    expect(renders).toEqual(["docx"]);
+    expect(parts.map((part) => [part.name, part.kind])).toEqual([
+      [`${name} #1`, "text"],
+      [`${name} #2`, "file"],
+    ]);
+    expect(parts[1].verifyAgainst).toEqual([`${name} #1`]);
   });
 
   it("turns an HTML page into readable text without scripts", async () => {

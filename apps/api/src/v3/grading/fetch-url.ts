@@ -20,6 +20,7 @@ import type {
 import { htmlToText } from "./html-text";
 import {
   bytesToParts,
+  type BytesToPartsDeps,
   DEFAULT_MATERIALIZE_LIMITS,
   MaterializeLimitError,
   unreadableCodeOf,
@@ -263,6 +264,7 @@ export async function fetchUrlAsParts(
   rawUrl: string,
   deps: FetchUrlDeps = defaultFetchUrlDeps,
   logger?: GradingLogger,
+  bytesDeps: BytesToPartsDeps = {},
 ): Promise<Part[]> {
   const normalized = normalizeLearnerUrl(rawUrl) || rawUrl.trim();
   const name = partName(normalized);
@@ -313,6 +315,7 @@ export async function fetchUrlAsParts(
     contentType || undefined,
     response.body,
     { ...DEFAULT_MATERIALIZE_LIMITS, maxFileBytes: FETCH_MAX_BYTES },
+    bytesDeps,
   );
   if (unreadableCodeOf(parts)) {
     return refuse({
@@ -322,8 +325,23 @@ export async function fetchUrlAsParts(
       retryable: false,
     });
   }
-  return parts.map((part, index) => ({
+  // Parts are renamed after the link; rendered pages still have to point at
+  // the text part they are checked against.
+  const renamed = new Map(
+    parts.map((part, index) => [
+      part.name,
+      parts.length === 1 ? name : `${name} #${index + 1}`,
+    ]),
+  );
+  return parts.map((part) => ({
     ...part,
-    name: parts.length === 1 ? name : `${name} #${index + 1}`,
+    name: renamed.get(part.name) ?? name,
+    ...(part.verifyAgainst
+      ? {
+          verifyAgainst: part.verifyAgainst.map(
+            (target) => renamed.get(target) ?? target,
+          ),
+        }
+      : {}),
   }));
 }

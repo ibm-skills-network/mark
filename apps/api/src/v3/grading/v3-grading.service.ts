@@ -52,15 +52,18 @@ export class V3GradingService {
     context: GradingLogContext,
   ): Promise<GradingOutcome> {
     const requestLogger = withLogContext(this.logger, { ...context });
+    const renderer = this.renderer
+      ? rendererWithLogger(this.renderer, requestLogger)
+      : undefined;
+    const rendering = renderer ? { renderer } : {};
     return gradeSubmission(question, source, {
       client: this.getClient(),
       logger: this.logger,
       context,
       materializeDeps: {
-        fetchUrl: (url) => fetchUrlAsParts(url, undefined, this.logger),
-        ...(this.renderer
-          ? { renderer: rendererWithLogger(this.renderer, requestLogger) }
-          : {}),
+        fetchUrl: (url) =>
+          fetchUrlAsParts(url, undefined, this.logger, rendering),
+        ...rendering,
       },
     });
   }
