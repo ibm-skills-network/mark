@@ -178,6 +178,16 @@ export function textInsidePdfRect(
  */
 export const MAX_ANNOTATIONS_SCANNED_PER_PAGE = 500;
 
+/** A scheme-less target on a www. or code host, e.g. "github.com/org/repo". */
+const SCHEMELESS_HOST_TARGET =
+  /^(www\.([\da-z]([\da-z-]*[\da-z])?\.)+[a-z]{2,}|(gist\.)?github\.com|gitlab\.com|bitbucket\.org)\//i;
+
+function withDefaultScheme(raw: unknown): unknown {
+  if (typeof raw !== "string") return raw;
+  const trimmed = raw.trim();
+  return SCHEMELESS_HOST_TARGET.test(trimmed) ? `https://${trimmed}` : raw;
+}
+
 /**
  * External links among one page's pdfjs annotations, each labelled with the
  * text drawn inside its rectangle. Anything that is not a well-formed Link
@@ -200,15 +210,19 @@ export function collectPdfAnnotationLinks(
     const annotation = candidate as {
       subtype?: unknown;
       url?: unknown;
+      unsafeUrl?: unknown;
       rect?: unknown;
     };
     if (annotation.subtype !== "Link") continue;
-    // pdfjs only sets `url` for targets it considers safe (`unsafeUrl` holds
-    // the raw value); the collector re-checks the protocol regardless.
-    if (typeof annotation.url !== "string") continue;
+    // pdfjs leaves `url` unset for scheme-less targets; the collector re-checks the protocol.
+    const target =
+      typeof annotation.url === "string"
+        ? annotation.url
+        : withDefaultScheme(annotation.unsafeUrl);
+    if (typeof target !== "string") continue;
     const link = collector.add(
       location,
-      annotation.url,
+      target,
       textInsidePdfRect(textItems, annotation.rect),
     );
     if (link) links.push(link);
