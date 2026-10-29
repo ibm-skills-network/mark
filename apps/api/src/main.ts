@@ -17,18 +17,13 @@ if (process.env.NODE_ENV === "production") {
  * @module main
  */
 import "reflect-metadata";
-import { Logger, ValidationPipe, VersioningType } from "@nestjs/common";
+import { Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { NestFactory } from "@nestjs/core";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
-import cookieParser from "cookie-parser";
-import { json, urlencoded } from "express";
-import helmet from "helmet";
 import { WinstonModule } from "nest-winston";
 import { AppModule } from "./app.module";
-import { AuthModule } from "./auth/auth.module";
-import { RolesGlobalGuard } from "./auth/role/roles.global.guard";
-import { SerializeDatesInterceptor } from "./common/interceptors/serialize-dates.interceptor";
+import { configureHttpApp } from "./bootstrap/configure-http-app";
 import { winstonOptions } from "./logger/config";
 
 function redactDatabaseUrl(url: string | undefined): string {
@@ -72,58 +67,11 @@ async function bootstrap() {
     const configService = app.get(ConfigService);
 
     /**
-     * Configure request body size limits
-     * Increased limits for handling large file uploads or data payloads
+     * Body limits, global prefix, URI versioning, security middleware and the
+     * legacy global pipe, guard and interceptor (v3 routes are exempt from
+     * the legacy interceptors and get their own body limit)
      */
-    app.use(json({ limit: "1000mb" }));
-    app.use(urlencoded({ limit: "1000mb", extended: true }));
-
-    /**
-     * Set global API prefix with exclusions for health endpoints
-     * Health endpoints remain at root for container orchestration compatibility
-     */
-    app.setGlobalPrefix("api", {
-      exclude: [
-        "health",
-        "health/liveness",
-        "health/readiness",
-        "health/integrations",
-      ],
-    });
-
-    /**
-     * Enable URI-based API versioning
-     * Allows multiple API versions to coexist (e.g., /api/v1/, /api/v2/)
-     */
-    app.enableVersioning({
-      type: VersioningType.URI,
-    });
-
-    /**
-     * Security middleware setup
-     * - Helmet: Sets various HTTP headers for security
-     * - Cookie Parser: Parses cookie headers for session management
-     */
-    app.use(helmet());
-    app.use(cookieParser());
-
-    /**
-     * Global validation pipe for request data validation
-     * - whitelist: true - Strips properties not defined in DTOs
-     */
-    app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
-
-    /**
-     * Global authentication/authorization guard
-     * Applies role-based access control to all routes
-     */
-    app.useGlobalGuards(app.select(AuthModule).get(RolesGlobalGuard));
-
-    /**
-     * Global serialization interceptor
-     * Automatically serializes Date objects to ISO strings in API responses
-     */
-    app.useGlobalInterceptors(new SerializeDatesInterceptor());
+    configureHttpApp(app);
 
     /**
      * Swagger API documentation setup

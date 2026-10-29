@@ -5,12 +5,19 @@ import {
   Injectable,
   NestInterceptor,
 } from "@nestjs/common";
+import { Reflector } from "@nestjs/core";
 import { Observable } from "rxjs";
 import { map } from "rxjs/operators";
+import { isV3Route } from "../v3-scope";
 
 @Injectable()
 export class SerializeDatesInterceptor implements NestInterceptor {
+  constructor(private readonly reflector: Reflector = new Reflector()) {}
+
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
+    if (isV3Route(this.reflector, context)) {
+      return next.handle();
+    }
     return next.handle().pipe(map((data) => this.serializeDates(data)));
   }
 

@@ -22,6 +22,7 @@ import { winstonOptions } from "./logger/config";
 import { LoggerMiddleware } from "./logger/logger.middleware";
 import { MessagingModule } from "./messaging/messaging.module";
 import { routes } from "./routes";
+import { V3Module } from "./v3/v3.module";
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { routes } from "./routes";
     CommonModule,
     ApiModule,
     ScheduledTasksModule,
+    V3Module,
     RouterModule.register(routes),
     MessagingModule,
     AuthModule,

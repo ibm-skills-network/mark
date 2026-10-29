@@ -10,6 +10,7 @@ import { Observable } from "rxjs";
 import { map } from "rxjs/operators";
 import { decodeValue as decodeTransportValue } from "../../helpers/data-transformer";
 import { TRANSFORM_FIELDS } from "../../helpers/transform-config";
+import { isV3Route } from "../v3-scope";
 
 export interface TransformOptions {
   fields?: string[];
@@ -81,6 +82,10 @@ export class DataTransformInterceptor implements NestInterceptor {
   constructor(private reflector: Reflector) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
+    if (isV3Route(this.reflector, context)) {
+      return next.handle();
+    }
+
     const options = this.getTransformOptions(context);
 
     if (!options) {
