@@ -931,10 +931,10 @@
   resolved "https://registry.yarnpkg.com/@csstools/css-tokenizer/-/css-tokenizer-4.0.1.tgz#e07075c22009bfa71ac6d6d1b090cf713d6d835c"
   integrity sha512-bPlN9S9O1A0euCpEWE4qnvB5YDuyYVsUTrxSgmAM1Is0j4tICHoVyOVAXfWMP/kS9ZrjvyIXWV2PmomiAXXqOw==
 
-"@cypress/request@3.0.10":
-  version "3.0.10"
-  resolved "https://registry.yarnpkg.com/@cypress/request/-/request-3.0.10.tgz#e09c695e8460a82acafe6cfaf089cf2ca06dc054"
-  integrity sha512-hauBrOdvu08vOsagkZ/Aju5XuiZx6ldsLfByg1htFeldhex+PeMrYauANzFsMJeAA0+dyPLbDoX2OYuvVoLDkQ==
+"@cypress/request@4.0.0":
+  version "4.0.0"
+  resolved "https://registry.yarnpkg.com/@cypress/request/-/request-4.0.0.tgz#2bc3a10a7d50f338dc644dc5fd14a60107c6f3e2"
+  integrity sha512-wGTQfwDMMMiz/muFw4YbCLwTh0uZsXKK+6zWBzftADpitSi6iM62C8GzEhNcng2srUiGPksOriQkA8zakW2R0g==
   dependencies:
     aws-sign2 "~0.7.0"
     aws4 "^1.8.0"
@@ -953,7 +953,6 @@
     safe-buffer "^5.1.2"
     tough-cookie "^5.0.0"
     tunnel-agent "^0.6.0"
-    uuid "^8.3.2"
 
 "@dabh/diagnostics@^2.0.8":
   version "2.0.9"
@@ -15447,7 +15446,7 @@ utils-merge@^1.0.1:
   resolved "https://registry.yarnpkg.com/utils-merge/-/utils-merge-1.0.1.tgz#9f95710f50a267947b2ccc124741c1028427e713"
   integrity sha512-pMZTvIkT1d+TFGvDOqodOclx0QWkkgi6Tdoa8gC8ffGAAqz9pzPTZWAybbsHHoED/ztMtkv/VoYTYyShUn81hA==
 
-uuid@^11.1.1, uuid@^13.0.0, uuid@^8.3.2:
+uuid@^11.1.1, uuid@^13.0.0:
   version "11.1.1"
   resolved "https://registry.yarnpkg.com/uuid/-/uuid-11.1.1.tgz#f6d81d2e1c65d00762e5e29b16c5d2d995e208ad"
   integrity sha512-vIYxrBCC/N/K+Js3qSN88go7kIfNPssr/hHCesKCQNAjmgvYS2oqr69kIufEG+O4+PfezOH4EbIeHCfFov8ZgQ==
