@@ -58,6 +58,16 @@ export const rubricCriterionSchema = z.object({
 });
 export type RubricCriterion = z.infer<typeof rubricCriterionSchema>;
 
+/**
+ * What the question builds on: the assignment's instructions (the author's)
+ * and the learner's own answers to the questions it depends on.
+ */
+export const gradingContextSchema = z.object({
+  assignmentInstructions: z.string(),
+  priorAnswers: z.array(z.object({ question: z.string(), answer: z.string() })),
+});
+export type GradingQuestionContext = z.infer<typeof gradingContextSchema>;
+
 export const gradingQuestionSchema = z.object({
   questionId: z.number().int(),
   questionType: z.string().min(1),
@@ -65,6 +75,7 @@ export const gradingQuestionSchema = z.object({
   rubric: z.object({ criteria: z.array(rubricCriterionSchema).min(1) }),
   totalPoints: z.number().finite().min(0),
   effort: gradingEffortSchema,
+  context: gradingContextSchema.optional(),
 });
 export type GradingQuestion = z.infer<typeof gradingQuestionSchema>;
 

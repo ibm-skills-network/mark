@@ -1,12 +1,20 @@
 import { QuestionType } from "@prisma/client";
 import type { QuestionDto } from "src/api/assignment/dto/update.questions.request.dto";
 import { parseJsonField } from "src/api/attempt/common/utils/grading-question-source.util";
+import type { GradingContext } from "src/api/attempt/common/interfaces/grading-context.interface";
 import type {
   GradingEffort,
   GradingQuestion,
+  GradingQuestionContext,
   RubricCriterion,
 } from "../v3/grading/contracts";
 import { htmlToMarkdown, looksLikeHtml } from "../v3/grading/html-text";
+import {
+  abridgeText,
+  MAX_PRIOR_ANSWERS,
+  MAX_TOKENS_ASSIGNMENT_INSTRUCTIONS,
+  MAX_TOKENS_PER_PRIOR_ANSWER,
+} from "../v3/grading/limits";
 import type {
   SubmissionFile,
   SubmissionSource,
@@ -95,9 +103,42 @@ export function rubricFromLegacy(question: QuestionDto): RubricCriterion[] {
   ];
 }
 
+/**
+ * The assignment instructions and the learner's earlier answers legacy
+ * grading gives the model, bounded; undefined when there are neither.
+ */
+export function contextFromLegacy(
+  gradingContext: Pick<
+    GradingContext,
+    "assignmentInstructions" | "questionAnswerContext"
+  >,
+): GradingQuestionContext | undefined {
+  const assignmentInstructions = abridgeText(
+    plain(gradingContext.assignmentInstructions ?? ""),
+    MAX_TOKENS_ASSIGNMENT_INSTRUCTIONS,
+  );
+  const priorAnswers = (gradingContext.questionAnswerContext ?? [])
+    .slice(0, MAX_PRIOR_ANSWERS)
+    .map((item) => ({
+      question: abridgeText(
+        plain(item.question ?? ""),
+        MAX_TOKENS_PER_PRIOR_ANSWER,
+      ),
+      answer: abridgeText(
+        plain(item.answer ?? ""),
+        MAX_TOKENS_PER_PRIOR_ANSWER,
+      ),
+    }))
+    .filter((item) => item.answer.length > 0);
+  if (assignmentInstructions.length === 0 && priorAnswers.length === 0)
+    return undefined;
+  return { assignmentInstructions, priorAnswers };
+}
+
 export function toGradingQuestion(
   question: QuestionDto,
   effort: GradingEffort,
+  context?: GradingQuestionContext,
 ): GradingQuestion {
   return {
     questionId: question.id,
@@ -106,6 +147,7 @@ export function toGradingQuestion(
     rubric: { criteria: rubricFromLegacy(question) },
     totalPoints: question.totalPoints,
     effort,
+    ...(context ? { context } : {}),
   };
 }
 

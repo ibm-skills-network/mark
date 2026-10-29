@@ -305,6 +305,59 @@ describe("GradingBridgeService", () => {
     );
   });
 
+  it("live: passes the assignment instructions and earlier answers, bounded", async () => {
+    grader.grade.mockResolvedValue(failed({}));
+    await bridge
+      .gradeLive(
+        question,
+        request("42"),
+        {
+          assignmentId: 12,
+          attemptId: 345,
+          assignmentInstructions: "<p>Use the <b>sales</b> data.</p>",
+          questionAnswerContext: [
+            {
+              question: "<p>Link it</p>",
+              answer: "https://github.com/me/sales",
+            },
+            { question: "Essay", answer: "w".repeat(100_000) },
+          ],
+        } as never,
+        mode("live"),
+      )
+      .catch(() => undefined);
+
+    const [gradingQuestion] = grader.grade.mock.calls[0] as [
+      {
+        context?: {
+          assignmentInstructions: string;
+          priorAnswers: Array<{ question: string; answer: string }>;
+        };
+      },
+    ];
+    expect(gradingQuestion.context?.assignmentInstructions).toBe(
+      "Use the **sales** data.",
+    );
+    expect(gradingQuestion.context?.priorAnswers[0]).toEqual({
+      question: "Link it",
+      answer: "https://github.com/me/sales",
+    });
+    expect(gradingQuestion.context?.priorAnswers[1].answer.length).toBeLessThan(
+      20_000,
+    );
+  });
+
+  it("live: sends no context when the assignment has none", async () => {
+    grader.grade.mockResolvedValue(failed({}));
+    await bridge
+      .gradeLive(question, request("42"), context, mode("live"))
+      .catch(() => undefined);
+    const [gradingQuestion] = grader.grade.mock.calls[0] as [
+      { context?: unknown },
+    ];
+    expect(gradingQuestion.context).toBeUndefined();
+  });
+
   it("live: builds the input from the legacy question, stored as legacy stores it", async () => {
     grader.grade.mockResolvedValue({
       status: "graded",

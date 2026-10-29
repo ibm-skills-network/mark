@@ -22,7 +22,11 @@ import { MaterializeLimitError } from "../v3/grading/materialize";
 import { GradingModeService, type ResolvedMode } from "../v3/grading/mode";
 import { V3GradingService } from "../v3/grading/v3-grading.service";
 import { toLegacyResponse } from "./from-v3-result";
-import { toGradingQuestion, toSubmissionSource } from "./to-v3-input";
+import {
+  contextFromLegacy,
+  toGradingQuestion,
+  toSubmissionSource,
+} from "./to-v3-input";
 
 /** A v3 grading failure in live mode; goes down the legacy failure path. */
 export class V3GradingFailedError extends Error {
@@ -219,7 +223,11 @@ export class GradingBridgeService {
       mode: "live",
       questionType: question.type,
     };
-    const gradingQuestion = toGradingQuestion(question, mode.effort);
+    const gradingQuestion = toGradingQuestion(
+      question,
+      mode.effort,
+      contextFromLegacy(gradingContext),
+    );
     const outcome = await this.grader.grade(
       gradingQuestion,
       toSubmissionSource(question.type, learnerResponse, this.loadStoredFile),
@@ -269,7 +277,11 @@ export class GradingBridgeService {
     this.shadowInFlight += 1;
     const started = Date.now();
     try {
-      const gradingQuestion = toGradingQuestion(question, mode.effort);
+      const gradingQuestion = toGradingQuestion(
+        question,
+        mode.effort,
+        contextFromLegacy(gradingContext),
+      );
       const outcome = await this.grader.grade(
         gradingQuestion,
         toSubmissionSource(
