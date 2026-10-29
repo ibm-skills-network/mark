@@ -12,12 +12,10 @@ export const MAX_TOKENS_PER_NATIVE_FILE = 160_000;
 /** Stays under the provider's long-context price step (272k input). */
 export const MAX_TOKENS_PER_SUBMISSION = 200_000;
 /**
- * The context a question builds on, abridged with a marker: at most 28k
- * tokens in all, inside the headroom the submission budget leaves.
+ * Assignment instructions, abridged with a marker, inside the headroom the
+ * submission budget leaves.
  */
 export const MAX_TOKENS_ASSIGNMENT_INSTRUCTIONS = 8000;
-export const MAX_TOKENS_PER_PRIOR_ANSWER = 2000;
-export const MAX_PRIOR_ANSWERS = 10;
 /** Raw bytes for one file before conversion; over this it is not loaded. */
 export const MAX_FILE_BYTES = 20 * 1024 * 1024;
 

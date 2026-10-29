@@ -59,12 +59,13 @@ export const rubricCriterionSchema = z.object({
 export type RubricCriterion = z.infer<typeof rubricCriterionSchema>;
 
 /**
- * What the question builds on: the assignment's instructions (the author's)
- * and the learner's own answers to the questions it depends on.
+ * What the question builds on: the assignment's instructions (the author's).
+ * The learner's earlier answers are left out: for an upload or link they are
+ * a stored-file reference (with the learner's id in the key), and on staging
+ * they lowered grades, the model quoting them as if they were submission parts.
  */
 export const gradingContextSchema = z.object({
   assignmentInstructions: z.string(),
-  priorAnswers: z.array(z.object({ question: z.string(), answer: z.string() })),
 });
 export type GradingQuestionContext = z.infer<typeof gradingContextSchema>;
 

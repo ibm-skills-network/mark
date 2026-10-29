@@ -305,7 +305,7 @@ describe("GradingBridgeService", () => {
     );
   });
 
-  it("live: passes the assignment instructions and earlier answers, bounded", async () => {
+  it("live: passes the assignment instructions but not the learner's earlier answers", async () => {
     grader.grade.mockResolvedValue(failed({}));
     await bridge
       .gradeLive(
@@ -317,10 +317,10 @@ describe("GradingBridgeService", () => {
           assignmentInstructions: "<p>Use the <b>sales</b> data.</p>",
           questionAnswerContext: [
             {
-              question: "<p>Link it</p>",
-              answer: "https://github.com/me/sales",
+              question: "Upload part 1",
+              answer:
+                '[{"filename":"part1.xlsx","key":"3786/learner@example.com/10889/part1.xlsx"}]',
             },
-            { question: "Essay", answer: "w".repeat(100_000) },
           ],
         } as never,
         mode("live"),
@@ -328,22 +328,13 @@ describe("GradingBridgeService", () => {
       .catch(() => undefined);
 
     const [gradingQuestion] = grader.grade.mock.calls[0] as [
-      {
-        context?: {
-          assignmentInstructions: string;
-          priorAnswers: Array<{ question: string; answer: string }>;
-        };
-      },
+      { context?: Record<string, unknown> },
     ];
-    expect(gradingQuestion.context?.assignmentInstructions).toBe(
-      "Use the **sales** data.",
-    );
-    expect(gradingQuestion.context?.priorAnswers[0]).toEqual({
-      question: "Link it",
-      answer: "https://github.com/me/sales",
+    expect(gradingQuestion.context).toEqual({
+      assignmentInstructions: "Use the **sales** data.",
     });
-    expect(gradingQuestion.context?.priorAnswers[1].answer.length).toBeLessThan(
-      20_000,
+    expect(JSON.stringify(gradingQuestion)).not.toContain(
+      "learner@example.com",
     );
   });
 
