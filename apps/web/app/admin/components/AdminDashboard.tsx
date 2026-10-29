@@ -4,6 +4,7 @@ import { useState } from "react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { FeedbackTable } from "./FeedbackTable";
 import { ReportsTable } from "./ReportsTable";
+import { EmailDeliveryPanel } from "./EmailDeliveryPanel";
 import { AssignmentAnalyticsTable } from "./AssignmentAnalyticsTable";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -430,6 +431,9 @@ function AdminDashboardContent({
         </div>
       </div>
 
+      {isAdmin && sessionToken && (
+        <EmailDeliveryPanel sessionToken={sessionToken} />
+      )}
       {loadingStats ? (
         <div className="flex justify-center items-center h-64">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>

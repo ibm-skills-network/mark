@@ -1138,6 +1138,54 @@ model EmailSuppression {
   updatedAt DateTime               @updatedAt
 }
 
+/// Retained when an admin lifts a suppression; late reports before this time
+/// must not undo that decision.
+model EmailSuppressionRelease {
+  email      String   @id
+  releasedAt DateTime
+  releasedBy String
+}
+
+/// IBM metrics have no event ID. id is a fingerprint of the source row.
+model EmailBounceEvent {
+  id           String   @id
+  source       String
+  email        String
+  domain       String
+  reason       String
+  occurredAt   DateTime
+  ingestedAt   DateTime @default(now())
+
+  @@index([source, occurredAt])
+  @@index([source, email, occurredAt])
+}
+
+/// Temporary delivery circuit breaker. recoveredAt means normal sending has
+/// resumed after observation, not that IBM confirmed delivery.
+model EmailDeliveryHold {
+  email           String    @id
+  source          String
+  stage           Int
+  reason          String
+  holdUntil       DateTime
+  lastFailureAt   DateTime
+  probeToken      String?
+  probeStartedAt  DateTime?
+  probeAcceptedAt DateTime?
+  recoveredAt     DateTime?
+
+  @@index([source, recoveredAt])
+}
+
+model EmailBouncePollState {
+  source          String    @id
+  leaseToken      String?
+  leaseUntil      DateTime?
+  lastSuccessAt   DateTime?
+  lastError       String?
+  lastSenderAlertAt DateTime?
+}
+
 /// Quiz session tokens a browser saved so it can resume an earlier launch
 model SavedSession {
   storeId      String /// GUID held in the browser's saved-session cookie

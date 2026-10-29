@@ -22,12 +22,13 @@ import { EmailSuppressionService } from "src/auth/services/email-suppression.ser
 import {
   CreateEmailSuppressionDto,
   ListEmailSuppressionsQueryDto,
+  ReleaseEmailHoldDto,
 } from "../dto/email-suppression.dto";
 
 @ApiTags("Admin Email Suppressions")
 // Addresses Mark will not email. Permanent bounces seen at send time are
-// added automatically; bounce and complaint notices that arrive later are
-// entered here. AdminGuard covers the whole controller and lives under
+// added automatically, including invalid mailboxes from IBM bounce polling.
+// AdminGuard covers the whole controller and lives under
 // "admin-dashboard/..." for the same gateway routing as AttemptAdminController.
 @UseGuards(AdminGuard)
 @ApiBearerAuth()
@@ -43,6 +44,38 @@ export class EmailSuppressionController {
   private readonly logger = new Logger(EmailSuppressionController.name);
 
   constructor(private readonly suppressions: EmailSuppressionService) {}
+
+  @Get("bounce-health")
+  @ApiOperation({ summary: "Bounce poll status and domain warnings (ADMIN)" })
+  bounceHealth() {
+    return this.suppressions.bounceHealth();
+  }
+
+  @Get("temporary-holds")
+  @ApiOperation({ summary: "List automatic temporary email holds (ADMIN)" })
+  temporaryHolds(@Query() query: ListEmailSuppressionsQueryDto) {
+    return this.suppressions.listTemporaryHolds(
+      query.page ?? 1,
+      query.limit ?? 25,
+      query.search,
+    );
+  }
+
+  @Post("temporary-holds/release")
+  @UseGuards(ThrottlerGuard)
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @ApiOperation({ summary: "Override a temporary email hold (ADMIN)" })
+  async releaseTemporaryHold(
+    @Body() body: ReleaseEmailHoldDto,
+    @Req() request: UserSessionRequest,
+  ) {
+    const released = await this.suppressions.releaseTemporaryHold(
+      body.email,
+      request.userSession?.userId ?? "unknown",
+    );
+    if (!released) throw new NotFoundException("Temporary hold not found");
+    return { released: true };
+  }
 
   @Get()
   @ApiOperation({ summary: "List suppressed email addresses (ADMIN)" })

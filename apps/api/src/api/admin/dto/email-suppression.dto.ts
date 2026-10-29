@@ -31,6 +31,12 @@ export class CreateEmailSuppressionDto {
   note?: string;
 }
 
+export class ReleaseEmailHoldDto {
+  @IsEmail()
+  @MaxLength(254)
+  email!: string;
+}
+
 export class ListEmailSuppressionsQueryDto {
   @IsOptional()
   @Type(() => Number)
