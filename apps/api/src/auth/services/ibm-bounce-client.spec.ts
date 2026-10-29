@@ -23,7 +23,7 @@ describe("IBM bounce contract", () => {
   const get = axios.get as jest.Mock;
   beforeEach(() => {
     jest.clearAllMocks();
-    process.env.EMAIL_BOUNCE_API_KEY = "test-key";
+    process.env.EMAIL_BOUNCE_API_KEY = "test-key"; // pragma: allowlist secret
     process.env.EMAIL_BOUNCE_API_URL =
       "https://us-south.event-notifications.cloud.ibm.com/event-notifications";
   });

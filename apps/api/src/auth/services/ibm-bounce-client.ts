@@ -13,7 +13,7 @@ export class IbmBounceClient {
     end: Date,
     offset: number,
   ): Promise<{ events: BounceEvent[]; total: number }> {
-    const apiKey = process.env.EMAIL_BOUNCE_API_KEY;
+    const apiKey = process.env.EMAIL_BOUNCE_API_KEY; // pragma: allowlist secret
     const endpoint = process.env.EMAIL_BOUNCE_API_URL;
     if (!apiKey || !endpoint)
       throw new Error("Bounce API credentials or endpoint missing");
@@ -28,7 +28,9 @@ export class IbmBounceClient {
     ) {
       throw new Error("Invalid IBM bounce API endpoint");
     }
-    this.tokenManager ??= new IamTokenManager({ apikey: apiKey });
+    this.tokenManager ??= new IamTokenManager({
+      apikey: apiKey, // pragma: allowlist secret
+    });
     const token: unknown = await this.tokenManager.getToken();
     if (typeof token !== "string" || !token)
       throw new Error("IBM IAM did not return a token");
