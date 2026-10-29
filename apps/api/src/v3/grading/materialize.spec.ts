@@ -294,6 +294,84 @@ describe("materialize: limits", () => {
     expect(text).toContain("4999,");
   });
 
+  it("lists a sparse sheet's cells instead of expanding the empty grid", async () => {
+    const sheet = XLSX.utils.aoa_to_sheet(
+      Array.from({ length: 100 }, (_, index) => [`v${index}`]),
+    );
+    sheet.XFD1 = { t: "s", v: "far" };
+    sheet["!ref"] = "A1:XFD100";
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, sheet, "Data");
+    const buffer = XLSX.write(workbook, {
+      type: "buffer",
+      bookType: "xlsx",
+    }) as Buffer;
+
+    const { parts } = await ok(
+      materialize({ files: [file("sparse.xlsx", buffer)] }),
+    );
+    const text = textOf(parts, "sparse.xlsx › Data");
+    expect(text).toContain("XFD1,far");
+    expect(text).toContain("A100,v99");
+    expect(text).not.toContain(",,,,");
+    expect(text.length).toBeLessThan(5000);
+  });
+
+  it("stops reading a sheet once its text is far past the per-file cap", async () => {
+    const long = "x".repeat(1000);
+    const sheet = XLSX.utils.aoa_to_sheet(
+      Array.from({ length: 2000 }, (_, index) => [index, long, long, long]),
+    );
+    for (let row = 1; row <= 2000; row += 1) {
+      sheet[`E${row}`] = { t: "s", v: long, f: `"${long}"` };
+    }
+    sheet["!ref"] = "A1:E2000";
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, sheet, "Big");
+    const buffer = XLSX.write(workbook, {
+      type: "buffer",
+      bookType: "xlsx",
+    }) as Buffer;
+
+    const { parts } = await ok(
+      materialize(
+        { files: [file("big.xlsx", buffer)] },
+        {},
+        { ...DEFAULT_MATERIALIZE_LIMITS, maxTokensPerFile: 2000 },
+      ),
+    );
+    expect(textOf(parts, "big.xlsx › Big")).toMatch(
+      /\[sheet cut: over \d+ characters/,
+    );
+    expect(textOf(parts, "big.xlsx › Big (formulas)")).toMatch(
+      /\[formulas cut: over \d+ characters/,
+    );
+  });
+
+  it("cuts a single wide row of long cells while building it", async () => {
+    const long = "y".repeat(5000);
+    const sheet = XLSX.utils.aoa_to_sheet([
+      Array.from({ length: 2000 }, () => long),
+    ]);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, sheet, "Wide");
+    const buffer = XLSX.write(workbook, {
+      type: "buffer",
+      bookType: "xlsx",
+    }) as Buffer;
+
+    const { parts } = await ok(
+      materialize(
+        { files: [file("wide.xlsx", buffer)] },
+        {},
+        { ...DEFAULT_MATERIALIZE_LIMITS, maxTokensPerFile: 2000 },
+      ),
+    );
+    expect(textOf(parts, "wide.xlsx › Wide")).toMatch(
+      /\[sheet cut: over \d+ characters/,
+    );
+  });
+
   it("abridges long prose with start, end and an omission marker", async () => {
     const body = `START ${"lorem ipsum ".repeat(30_000)} END`;
     const { parts } = await ok(

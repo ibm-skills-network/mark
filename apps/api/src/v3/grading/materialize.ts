@@ -367,7 +367,78 @@ function cellText(cell: XLSX.CellObject): string {
 
 interface SheetText {
   csv: string;
+  /** "grid": CSV by row and column letter; "cells": one cell per line. */
+  layout: "grid" | "cells";
   formulas: string[];
+}
+
+/**
+ * A sheet's text is cut while it is built, well past the per-file cap
+ * (which abridges it afterwards), so a small workbook can't expand into
+ * gigabytes: a few cells spread across thousands of columns, or one long
+ * shared string or shared formula repeated in every cell.
+ */
+function sheetCharCap(limits: MaterializeLimits): number {
+  return limits.maxTokensPerFile * 16;
+}
+
+/** A grid less than a quarter full is listed cell by cell instead. */
+const SPARSE_GRID_FACTOR = 4;
+const SPARSE_GRID_MIN_CELLS = 1000;
+
+/** Lines up to `cap` characters in total, then one marker line. */
+function cappedLines(
+  lines: Iterable<string>,
+  cap: number,
+  what: "sheet" | "formulas",
+): string[] {
+  const kept: string[] = [];
+  let length = 0;
+  for (const line of lines) {
+    length += line.length + 1;
+    if (length > cap) {
+      kept.push(`[${what} cut: over ${cap} characters; the rest was not read]`);
+      break;
+    }
+    kept.push(line);
+  }
+  return kept;
+}
+
+type SheetRows = Map<number, Map<number, string>>;
+
+function* cellLines(rows: SheetRows, rowIndexes: number[]): Generator<string> {
+  yield "cell,value";
+  for (const rowIndex of rowIndexes) {
+    const row = rows.get(rowIndex) ?? new Map<number, string>();
+    for (const col of [...row.keys()].sort((a, b) => a - b)) {
+      const address = XLSX.utils.encode_cell({ r: rowIndex, c: col });
+      yield `${address},${csvField(row.get(col) ?? "")}`;
+    }
+  }
+}
+
+function* gridLines(
+  rows: SheetRows,
+  rowIndexes: number[],
+  minCol: number,
+  maxCol: number,
+  cap: number,
+): Generator<string> {
+  const columns: number[] = [];
+  for (let col = minCol; col <= maxCol; col += 1) columns.push(col);
+  yield ["row", ...columns.map((col) => XLSX.utils.encode_col(col))].join(",");
+  for (const rowIndex of rowIndexes) {
+    const row = rows.get(rowIndex) ?? new Map<number, string>();
+    // Built field by field: one wide row of long cells is enough to blow
+    // past the cap before the line is ever measured.
+    let line = String(rowIndex + 1);
+    for (const col of columns) {
+      if (line.length > cap) break;
+      line += `,${csvField(row.get(col) ?? "")}`;
+    }
+    yield line;
+  }
 }
 
 function sheetToText(
@@ -375,7 +446,7 @@ function sheetToText(
   sheetLabel: string,
   limits: MaterializeLimits,
 ): SheetText {
-  const rows = new Map<number, Map<number, string>>();
+  const rows: SheetRows = new Map();
   const formulas: string[] = [];
   let minCol = Number.POSITIVE_INFINITY;
   let maxCol = -1;
@@ -408,23 +479,33 @@ function sheetToText(
     if (cell.f) formulas.push(`${key}: =${cell.f}`);
   }
 
-  if (rows.size === 0) return { csv: "(empty sheet)", formulas };
+  const cap = sheetCharCap(limits);
+  const cappedFormulas = cappedLines(formulas, cap, "formulas");
+  if (rows.size === 0)
+    return { csv: "(empty sheet)", layout: "grid", formulas: cappedFormulas };
 
-  const columns: number[] = [];
-  for (let col = minCol; col <= maxCol; col += 1) columns.push(col);
-  const lines = [
-    ["row", ...columns.map((col) => XLSX.utils.encode_col(col))].join(","),
-  ];
-  for (const rowIndex of [...rows.keys()].sort((a, b) => a - b)) {
-    const row = rows.get(rowIndex) ?? new Map<number, string>();
-    lines.push(
-      [
-        String(rowIndex + 1),
-        ...columns.map((col) => csvField(row.get(col) ?? "")),
-      ].join(","),
-    );
+  const rowIndexes = [...rows.keys()].sort((a, b) => a - b);
+  const gridCells = rowIndexes.length * (maxCol - minCol + 1);
+  if (
+    gridCells > SPARSE_GRID_MIN_CELLS &&
+    gridCells > cellCount * SPARSE_GRID_FACTOR
+  ) {
+    return {
+      csv: cappedLines(cellLines(rows, rowIndexes), cap, "sheet").join("\n"),
+      layout: "cells",
+      formulas: cappedFormulas,
+    };
   }
-  return { csv: lines.join("\n"), formulas };
+
+  return {
+    csv: cappedLines(
+      gridLines(rows, rowIndexes, minCol, maxCol, cap),
+      cap,
+      "sheet",
+    ).join("\n"),
+    layout: "grid",
+    formulas: cappedFormulas,
+  };
 }
 
 async function spreadsheetToParts(
@@ -462,7 +543,11 @@ async function spreadsheetToParts(
     parts.push(
       textPart(
         label,
-        `Sheet "${sheetName}"${hiddenNote} of ${name}. Values as CSV; the first column is the row number, the header is the column letter.\n${sheet.csv}`,
+        `Sheet "${sheetName}"${hiddenNote} of ${name}. ${
+          sheet.layout === "cells"
+            ? "Mostly empty, so each filled cell is listed as cell address and value."
+            : "Values as CSV; the first column is the row number, the header is the column letter."
+        }\n${sheet.csv}`,
         limits,
         { mimeType: "text/csv", tablePreambleLines: 1 },
       ),
