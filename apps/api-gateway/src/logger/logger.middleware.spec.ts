@@ -25,6 +25,7 @@ describe("LoggerMiddleware", () => {
     mockRequest = {
       method: "GET",
       originalUrl: "/api/test",
+      headers: {},
       get: jest.fn(),
     };
 
@@ -59,11 +60,38 @@ describe("LoggerMiddleware", () => {
       ["a header-splitting value", "abc\r\nSet-Cookie: authentication=evil"],
       ["an oversized value", "a".repeat(500)],
       ["nothing", undefined],
-    ])("does not echo %s", (_label, value) => {
+    ])(
+      "replaces %s with a fresh id that is echoed and forwarded downstream",
+      (_label, value) => {
+        mockRequest.headers = value === undefined ? {} : { "x-request-id": value };
+        (mockRequest.get as jest.Mock).mockImplementation((header: string) =>
+          header === "x-request-id" ? value : undefined,
+        );
+        mockResponse.setHeader = jest.fn();
+
+        middleware.use(
+          mockRequest as Request,
+          mockResponse as Response,
+          mockNext,
+        );
+
+        const forwarded = mockRequest.headers?.["x-request-id"];
+        expect(forwarded).toMatch(
+          /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/,
+        );
+        expect(mockResponse.setHeader).toHaveBeenCalledWith(
+          "x-request-id",
+          forwarded,
+        );
+        expect(mockNext).toHaveBeenCalledTimes(1);
+      },
+    );
+
+    it("drops an unsafe akamai-grn so downstream services use the same id", () => {
+      mockRequest.headers = { "akamai-grn": "abc\r\nX-Evil: 1" };
       (mockRequest.get as jest.Mock).mockImplementation((header: string) =>
-        header === "x-request-id" ? value : undefined,
+        header === "akamai-grn" ? "abc\r\nX-Evil: 1" : undefined,
       );
-      mockResponse.setHeader = jest.fn();
 
       middleware.use(
         mockRequest as Request,
@@ -71,8 +99,27 @@ describe("LoggerMiddleware", () => {
         mockNext,
       );
 
-      expect(mockResponse.setHeader).not.toHaveBeenCalled();
-      expect(mockNext).toHaveBeenCalledTimes(1);
+      expect(mockRequest.headers["akamai-grn"]).toBeUndefined();
+      expect(mockRequest.headers["x-request-id"]).toMatch(/^[\da-f-]{36}$/);
+    });
+
+    it("forwards a safe incoming id unchanged", () => {
+      mockRequest.headers = { "x-request-id": "client-id-1" };
+      (mockRequest.get as jest.Mock).mockImplementation((header: string) =>
+        header === "x-request-id" ? "client-id-1" : undefined,
+      );
+
+      middleware.use(
+        mockRequest as Request,
+        mockResponse as Response,
+        mockNext,
+      );
+
+      expect(mockRequest.headers["x-request-id"]).toBe("client-id-1");
+      expect(mockResponse.setHeader).toHaveBeenCalledWith(
+        "x-request-id",
+        "client-id-1",
+      );
     });
 
     it("should call next function immediately", () => {
@@ -591,12 +638,14 @@ describe("LoggerMiddleware URL redaction", () => {
     mockRequest = {
       method: "GET",
       originalUrl: "/api/test",
+      headers: {},
       get: jest.fn().mockReturnValue(null),
     };
 
     mockResponse = new EventEmitter() as any;
     mockResponse.statusCode = 200;
     mockResponse.get = jest.fn().mockReturnValue(null);
+    mockResponse.setHeader = jest.fn();
     setWritableEnded(mockResponse, true);
 
     mockNext = jest.fn();
