@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { Inject, Injectable, NestMiddleware } from "@nestjs/common";
 import { NextFunction, Request, Response } from "express";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
@@ -16,13 +17,20 @@ export class LoggerMiddleware implements NestMiddleware {
   use(request: Request, response: Response, next: NextFunction) {
     const start = process.hrtime();
 
-    const requestId = request.get("akamai-grn") ?? request.get("x-request-id");
-
-    // The id arrives in a request header, so it is only reflected when it is
-    // plainly an id: anything else could split the response headers.
-    if (requestId && SAFE_REQUEST_ID.test(requestId)) {
-      response.setHeader("x-request-id", requestId);
+    // The id arrives in a request header, so it is only kept when it is
+    // plainly an id: anything else could split the response headers. A
+    // missing or unsafe id is replaced here and forwarded, so the client and
+    // every downstream service report the same one.
+    const akamaiGrn = request.get("akamai-grn");
+    if (typeof akamaiGrn === "string" && !SAFE_REQUEST_ID.test(akamaiGrn)) {
+      delete request.headers["akamai-grn"];
     }
+    const requestId =
+      [akamaiGrn, request.get("x-request-id")].find(
+        (id): id is string => typeof id === "string" && SAFE_REQUEST_ID.test(id),
+      ) ?? randomUUID();
+    request.headers["x-request-id"] = requestId;
+    response.setHeader("x-request-id", requestId);
 
     // Query parameters that carry a credential or a single-use grant are
     // replaced so they cannot end up in the access log.
