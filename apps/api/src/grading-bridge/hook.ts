@@ -120,6 +120,19 @@ export class GradingBridgeService {
       });
       return { ...resolved, mode: "off" };
     }
+    // v3 doesn't take the learner's earlier answers (see contracts.ts), so a
+    // question that builds on them stays on legacy, which does.
+    if (
+      resolved.mode !== "off" &&
+      (question.gradingContextQuestionIds?.length ?? 0) > 0
+    ) {
+      this.logger.info("grading.mode.needs_earlier_answers", {
+        questionId: question.id,
+        assignmentId,
+        dependsOn: question.gradingContextQuestionIds.length,
+      });
+      return { ...resolved, mode: "off" };
+    }
     return resolved;
   }
 

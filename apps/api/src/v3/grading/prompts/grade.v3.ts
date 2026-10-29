@@ -28,7 +28,17 @@ What to write:
 - verificationReason: that one-sentence reason when needsVerification is true; null when it is false.
 - feedback: one or two sentences for the learner on this criterion: what was done well or what is missing, and how to improve. Address the learner as "you".
 - overallFeedback: a short paragraph for the learner on the whole submission.
-- Write feedback in the same language as the question.`;
+- {{FEEDBACK_LANGUAGE}}`;
+
+/** The instructions with the feedback language filled in. */
+export function gradeInstructions(feedbackLanguage?: string): string {
+  return GRADE_INSTRUCTIONS.replace(
+    "{{FEEDBACK_LANGUAGE}}",
+    feedbackLanguage
+      ? `Write all feedback in ${feedbackLanguage}.`
+      : "Write feedback in the same language as the question.",
+  );
+}
 
 function renderLevels(criterion: RubricCriterion): string {
   if (!criterion.levels || criterion.levels.length === 0) return "";
@@ -92,10 +102,7 @@ function partContents(part: Part): PromptContent[] {
 }
 
 export function buildGradePrompt(input: GradingInput): PromptMessage[] {
-  const language = input.feedbackLanguage
-    ? `\n\nWrite all feedback in ${input.feedbackLanguage}.`
-    : "";
-  const questionAndRubric = `${renderInstructions(input)}# Question\n${input.questionText}\n\n# Rubric (total ${input.totalPoints} points)\n${renderRubric(input.rubric.criteria)}${language}`;
+  const questionAndRubric = `${renderInstructions(input)}# Question\n${input.questionText}\n\n# Rubric (total ${input.totalPoints} points)\n${renderRubric(input.rubric.criteria)}`;
   const submissionIntro =
     input.parts.length === 0
       ? "# Submission\nThe learner submitted nothing that could be read."
@@ -103,7 +110,9 @@ export function buildGradePrompt(input: GradingInput): PromptMessage[] {
   return [
     {
       role: "developer",
-      content: [{ type: "text", text: GRADE_INSTRUCTIONS }],
+      content: [
+        { type: "text", text: gradeInstructions(input.feedbackLanguage) },
+      ],
     },
     {
       role: "user",

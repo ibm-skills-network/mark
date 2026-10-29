@@ -529,11 +529,20 @@ describe("prompt and request", () => {
     expect(user).not.toContain("Assignment instructions");
   });
 
-  it("names the feedback language when one is set", () => {
-    const user = JSON.stringify(
-      buildGradePrompt({ ...input, feedbackLanguage: "Spanish" })[1],
-    );
-    expect(user).toContain("Write all feedback in Spanish");
+  it("sets the feedback language in the developer instructions", () => {
+    const messages = buildGradePrompt({
+      ...input,
+      feedbackLanguage: "Spanish",
+    });
+    const developer = JSON.stringify(messages[0]);
+    expect(developer).toContain("Write all feedback in Spanish.");
+    expect(developer).not.toContain("same language as the question");
+    expect(JSON.stringify(messages[1])).not.toContain("Spanish");
+  });
+
+  it("falls back to the question's language when none is set", () => {
+    const developer = JSON.stringify(buildGradePrompt(input)[0]);
+    expect(developer).toContain("same language as the question");
   });
 
   it("keeps a learner from closing the part delimiter", () => {

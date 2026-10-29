@@ -289,6 +289,35 @@ describe("GradingBridgeService", () => {
     expect(modes.resolve).not.toHaveBeenCalled();
   });
 
+  it.each(["live", "shadow"] as const)(
+    "keeps a question that builds on earlier answers on legacy (%s)",
+    async (configured) => {
+      modes.resolve.mockResolvedValue(mode(configured));
+      const dependent = {
+        ...question,
+        gradingContextQuestionIds: [76],
+      } as unknown as QuestionDto;
+      await expect(
+        bridge.resolveMode(dependent, 12, UserRole.LEARNER),
+      ).resolves.toEqual(expect.objectContaining({ mode: "off" }));
+      expect(childLogger.info).toHaveBeenCalledWith(
+        "grading.mode.needs_earlier_answers",
+        expect.objectContaining({ questionId: 77, assignmentId: 12 }),
+      );
+    },
+  );
+
+  it("routes a question with no earlier-answer dependencies as configured", async () => {
+    modes.resolve.mockResolvedValue(mode("live"));
+    const standalone = {
+      ...question,
+      gradingContextQuestionIds: [],
+    } as unknown as QuestionDto;
+    await expect(
+      bridge.resolveMode(standalone, 12, UserRole.LEARNER),
+    ).resolves.toEqual(expect.objectContaining({ mode: "live" }));
+  });
+
   it("keeps media response types on legacy and logs it", async () => {
     modes.resolve.mockResolvedValue(mode("live"));
     const media = {
