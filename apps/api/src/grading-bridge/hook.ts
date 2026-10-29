@@ -227,6 +227,7 @@ export class GradingBridgeService {
       question,
       mode.effort,
       contextFromLegacy(gradingContext),
+      gradingContext.language,
     );
     const outcome = await this.grader.grade(
       gradingQuestion,
@@ -281,6 +282,7 @@ export class GradingBridgeService {
         question,
         mode.effort,
         contextFromLegacy(gradingContext),
+        gradingContext.language,
       );
       const outcome = await this.grader.grade(
         gradingQuestion,

@@ -564,6 +564,28 @@ describe("prompt and request", () => {
     expect(text.match(/<\/submission_part>/g)).toHaveLength(1);
   });
 
+  it("names the feedback language when one is set", () => {
+    const user = JSON.stringify(
+      buildGradePrompt({ ...input, feedbackLanguage: "Spanish" })[1],
+    );
+    expect(user).toContain("Write all feedback in Spanish");
+  });
+
+  it("tells the model an earlier question's requirements do not apply", () => {
+    const user = JSON.stringify(
+      buildGradePrompt({
+        ...input,
+        context: {
+          assignmentInstructions: "",
+          priorAnswers: [{ question: "Q1", answer: "A1" }],
+        },
+      })[1],
+    );
+    expect(user).toMatch(
+      /requirements of earlier questions are not part of this question/i,
+    );
+  });
+
   it("keeps a learner from closing the part delimiter", () => {
     const messages = buildGradePrompt({
       ...input,

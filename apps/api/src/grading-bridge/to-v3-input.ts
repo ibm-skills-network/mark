@@ -135,10 +135,31 @@ export function contextFromLegacy(
   return { assignmentInstructions, priorAnswers };
 }
 
+const LANGUAGE_TAG = /^[a-z]{2,3}(-[\dA-Za-z]{2,8})*$/;
+const LANGUAGE_NAMES = new Intl.DisplayNames(["en"], {
+  type: "language",
+  fallback: "none",
+});
+
+/**
+ * The attempt's language code (sent by the browser) as an English language
+ * name for the prompt; English, as legacy defaults, when absent or unknown.
+ */
+export function feedbackLanguageName(code: string | undefined): string {
+  if (!code || !LANGUAGE_TAG.test(code)) return "English";
+  try {
+    return LANGUAGE_NAMES.of(code) ?? "English";
+  } catch {
+    // A well-formed tag Intl still rejects: grade in the default language.
+    return "English";
+  }
+}
+
 export function toGradingQuestion(
   question: QuestionDto,
   effort: GradingEffort,
   context?: GradingQuestionContext,
+  language?: string,
 ): GradingQuestion {
   return {
     questionId: question.id,
@@ -148,6 +169,7 @@ export function toGradingQuestion(
     totalPoints: question.totalPoints,
     effort,
     ...(context ? { context } : {}),
+    feedbackLanguage: feedbackLanguageName(language),
   };
 }
 

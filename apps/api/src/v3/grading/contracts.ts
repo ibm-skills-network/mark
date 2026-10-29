@@ -76,6 +76,8 @@ export const gradingQuestionSchema = z.object({
   totalPoints: z.number().finite().min(0),
   effort: gradingEffortSchema,
   context: gradingContextSchema.optional(),
+  /** Language name for the feedback, e.g. "English"; the question's when unset. */
+  feedbackLanguage: z.string().min(1).max(60).optional(),
 });
 export type GradingQuestion = z.infer<typeof gradingQuestionSchema>;
 
