@@ -323,7 +323,7 @@ export const useLearnerContext = (): UseLearnerContextInterface => {
       } else {
         contextContent += "\nNO QUESTION LOADED:\n";
         contextContent +=
-          "The question text is not loaded on this page, usually because the learner is on the assignment overview. This is normal, so do not say the question is missing or report it as a problem. Explain that the question appears inside an attempt or on its results page, and ask the learner to paste the part they need help with.\n";
+          "The question text has not loaded on this page. Do not say the question is missing or report it as a problem. Explain that the question appears inside an attempt or on its results page, and ask the learner to paste the part they need help with.\n";
       }
     }
 

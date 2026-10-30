@@ -1,9 +1,11 @@
 "use client";
 
 import Image from "next/image";
+import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import MarkFace from "@/public/MarkFace.svg";
 import { useChatbot } from "@/hooks/useChatbot";
+import { isLearnerOverviewPath } from "@/lib/learner-routes";
 
 const AUTHOR_LABELS = [
   "Mark Assistant",
@@ -33,6 +35,7 @@ interface Props {
 export function MarkChatToggleButton({ role, className = "" }: Props) {
   const toggle = useChatbot((s) => s.toggle);
   const isUnavailable = useChatbot((s) => s.isUnavailable);
+  const pathname = usePathname();
   const labels = role === "author" ? AUTHOR_LABELS : LEARNER_LABELS;
   const [label, setLabel] = useState<string>(labels[0]);
 
@@ -41,8 +44,8 @@ export function MarkChatToggleButton({ role, className = "" }: Props) {
   }, [role]);
 
   // Chat access was denied for this session; offering the button would only
-  // open a panel that can never load.
-  if (isUnavailable) {
+  // open a panel that can never load. The learner overview has no chat panel.
+  if (isUnavailable || isLearnerOverviewPath(pathname)) {
     return null;
   }
 

@@ -15,6 +15,7 @@ import {
   type ApiServerErrorDetail,
 } from "@/lib/api-events";
 import { getAiStatus } from "@/lib/ai-status";
+import { isLearnerOverviewPath } from "@/lib/learner-routes";
 import { installRequestLog } from "@/lib/request-log";
 
 export default function LayoutContent({ children }: { children: ReactNode }) {
@@ -22,11 +23,14 @@ export default function LayoutContent({ children }: { children: ReactNode }) {
   const { isDark } = useTheme();
   const pathname = usePathname();
   const [chatDisabled, setChatDisabled] = useState(false);
-  // Hide the chat widget on admin routes (as before) or when the AI chat
-  // component is switched off. The widget hiding is a UX hint only — the
-  // backend independently returns an "unavailable" message if chat is used.
+  // Hide the chat widget on admin routes (as before), on the learner overview
+  // (which has no question for it to discuss), or when the AI chat component is
+  // switched off. The widget hiding is a UX hint only — the backend
+  // independently returns an "unavailable" message if chat is used.
   const hideMarkChat =
-    (pathname?.startsWith("/admin") ?? false) || chatDisabled;
+    (pathname?.startsWith("/admin") ?? false) ||
+    isLearnerOverviewPath(pathname) ||
+    chatDisabled;
   const [apiError, setApiError] = useState<ApiServerErrorDetail | null>(null);
 
   // Bug reports carry how this tab's recent API calls ended; the recorder
