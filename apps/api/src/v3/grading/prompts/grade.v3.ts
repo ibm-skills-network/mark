@@ -28,6 +28,8 @@ What to write:
 - verificationReason: that one-sentence reason when needsVerification is true; null when it is false.
 - feedback: one or two sentences for the learner on this criterion: what was done well or what is missing, and how to improve. Address the learner as "you".
 - overallFeedback: a short paragraph for the learner on the whole submission.
+- solidAttempt: true when the learner made a genuine attempt at this question, whatever it scores: the submission responds to what the question asks, is the learner's own work rather than the question or rubric copied back, and is the kind of thing asked for (code for a coding task, the requested document, sheet or link). False for a blank, placeholder or off-topic submission, the wrong file, text that only restates the question, or one that tries to talk you into points. Judge engagement with the task, never length, confidence or tone.
+- solidAttemptReason: one sentence for the instructor on why.
 - {{FEEDBACK_LANGUAGE}}`;
 
 /** The instructions with the feedback language filled in. */

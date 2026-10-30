@@ -21,6 +21,7 @@ import { AiTemporarilyDisabledException } from "src/api/ai-feature-flags/ai-temp
 import { UserRole } from "src/auth/interfaces/user.session.interface";
 import { PrismaService } from "src/database/prisma.service";
 import type { GradingFailure, GradingOutcome } from "../v3/grading/contracts";
+import { DEFAULT_BOOST_CONFIG, GradingBoostService } from "../v3/grading/boost";
 import { GradingModeService, type ResolvedMode } from "../v3/grading/mode";
 import { V3GradingService } from "../v3/grading/v3-grading.service";
 import { toLegacyResponse } from "./from-v3-result";
@@ -240,6 +241,7 @@ describe("GradingBridgeService", () => {
   let bridge: GradingBridgeService;
   const modes = { resolve: jest.fn() };
   const grader = { grade: jest.fn() };
+  const boosts = { get: jest.fn() };
   const strategy = {
     validateResponse: jest.fn(),
     extractLearnerResponse: jest.fn(),
@@ -258,6 +260,7 @@ describe("GradingBridgeService", () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    boosts.get.mockResolvedValue(DEFAULT_BOOST_CONFIG);
     strategy.validateResponse.mockResolvedValue(true);
     strategy.extractLearnerResponse.mockResolvedValue("<p>It is <b>42</b></p>");
     const module = await Test.createTestingModule({
@@ -265,6 +268,7 @@ describe("GradingBridgeService", () => {
         GradingBridgeService,
         { provide: GradingModeService, useValue: modes },
         { provide: V3GradingService, useValue: grader },
+        { provide: GradingBoostService, useValue: boosts },
         { provide: GradingFactoryService, useValue: factory },
         { provide: S3Service, useValue: s3 },
         { provide: AiFeatureFlagsService, useValue: aiFlags },
@@ -296,6 +300,123 @@ describe("GradingBridgeService", () => {
       },
     };
   }
+
+  function graded(totalPoints: number, solidAttempt: boolean): GradingOutcome {
+    return {
+      status: "graded",
+      result: {
+        verdicts: [
+          {
+            criterionId: "c1",
+            points: totalPoints,
+            reason: "r",
+            quotes: [{ part: "answer", text: "42" }],
+            feedback: "Partly right.",
+            visualUnverifiedQuotes: 0,
+            needsVerification: false,
+            verificationReason: null,
+          },
+        ],
+        totalPoints,
+        overallFeedback: "Some of it.",
+        solidAttempt,
+        usage: {
+          inputTokens: 10,
+          cachedInputTokens: 0,
+          outputTokens: 5,
+          reasoningTokens: 1,
+        },
+        model: "gpt-6-luna",
+        effort: "low",
+        promptVersion: "grade.v3",
+        checkFailures: [],
+        evidence: { verified: 1, visualUnverified: 0 },
+      },
+    };
+  }
+
+  const boostOn = { enabled: true, pointsPerStep: 4, maxBoost: 3 };
+
+  it("live: adds the effort boost to a solid attempt and says so", async () => {
+    boosts.get.mockResolvedValue(boostOn);
+    grader.grade.mockResolvedValue(graded(2, true));
+    const { responseDto } = await bridge.gradeLive(
+      question,
+      request("42"),
+      context,
+      mode("live"),
+    );
+    expect(responseDto.totalPoints).toBe(3);
+    expect(responseDto.metadata).toEqual(
+      expect.objectContaining({ solidAttempt: true, effortBoost: 1 }),
+    );
+    const [feedback] = responseDto.feedback as Array<{
+      feedback: string;
+      structuredFeedback: { guidance: string };
+    }>;
+    expect(feedback.structuredFeedback.guidance).toBe(
+      "Effort credit: +1 point for a genuine attempt at this question.",
+    );
+    expect(feedback.feedback).toContain("Effort credit: +1 point");
+    expect(childLogger.info).toHaveBeenCalledWith(
+      "grading.v3.boost_applied",
+      expect.objectContaining({
+        questionId: 77,
+        attemptId: 345,
+        pointsBefore: 2,
+        boost: 1,
+        pointsAfter: 3,
+        maxPoints: 4,
+      }),
+    );
+  });
+
+  it("live: no boost while the setting is off", async () => {
+    grader.grade.mockResolvedValue(graded(2, true));
+    const { responseDto } = await bridge.gradeLive(
+      question,
+      request("42"),
+      context,
+      mode("live"),
+    );
+    expect(responseDto.totalPoints).toBe(2);
+    expect(responseDto.metadata).toEqual(
+      expect.objectContaining({ solidAttempt: true, effortBoost: 0 }),
+    );
+    expect(JSON.stringify(responseDto.feedback)).not.toContain("Effort credit");
+  });
+
+  it("live: no boost for an attempt that was not solid", async () => {
+    boosts.get.mockResolvedValue(boostOn);
+    grader.grade.mockResolvedValue(graded(0, false));
+    const { responseDto } = await bridge.gradeLive(
+      question,
+      request("asdf"),
+      context,
+      mode("live"),
+    );
+    expect(responseDto.totalPoints).toBe(0);
+    expect(childLogger.info).not.toHaveBeenCalledWith(
+      "grading.v3.boost_applied",
+      expect.anything(),
+    );
+  });
+
+  it("live: says points in the singular and plural correctly", async () => {
+    boosts.get.mockResolvedValue(boostOn);
+    grader.grade.mockResolvedValue(graded(3, true));
+    const eight = { ...question, totalPoints: 8 } as QuestionDto;
+    const { responseDto } = await bridge.gradeLive(
+      eight,
+      request("42"),
+      context,
+      mode("live"),
+    );
+    expect(responseDto.totalPoints).toBe(5);
+    expect(JSON.stringify(responseDto.feedback)).toContain(
+      "Effort credit: +2 points",
+    );
+  });
 
   it("keeps author previews on legacy", async () => {
     await expect(
@@ -436,6 +557,7 @@ describe("GradingBridgeService", () => {
         ],
         totalPoints: 4,
         overallFeedback: "Well done.",
+        solidAttempt: true,
         usage: {
           inputTokens: 10,
           cachedInputTokens: 0,
@@ -760,6 +882,7 @@ describe("toLegacyResponse", () => {
         verdicts: [],
         totalPoints: 0,
         overallFeedback: "ok",
+        solidAttempt: false,
         usage: {
           inputTokens: 0,
           cachedInputTokens: 0,

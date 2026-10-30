@@ -95,6 +95,8 @@ const good: ModelGradeOutput = {
     },
   ],
   overallFeedback: "Good.",
+  solidAttempt: true,
+  solidAttemptReason: "Answers the question with its own working.",
 };
 
 describe("gradeWithV3", () => {
@@ -551,6 +553,50 @@ describe("prompt and request", () => {
       "output was not saved",
     );
   });
+
+  it("defines a solid attempt by engagement with the task, not length or tone", () => {
+    const flat = GRADE_INSTRUCTIONS.replaceAll(/\s+/g, " ");
+    expect(flat).toContain(
+      "solidAttempt: true when the learner made a genuine attempt at this question, whatever it scores:",
+    );
+    expect(flat).toContain(
+      "Judge engagement with the task, never length, confidence or tone.",
+    );
+  });
+
+  it("asks for solidAttempt and its reason at the top level, strict-schema style", async () => {
+    const client = new FakeClient([good]);
+    await gradeWithV3(input, { client, logger: logger() });
+    const schema = client.requests[0].jsonSchema as {
+      required: string[];
+      properties: Record<string, unknown>;
+    };
+    expect(schema.required).toEqual(
+      expect.arrayContaining(["solidAttempt", "solidAttemptReason"]),
+    );
+    expect(schema.properties.solidAttempt).toEqual({ type: "boolean" });
+  });
+
+  it.each([true, false])(
+    "returns solidAttempt=%s and logs it without the reason",
+    async (solidAttempt) => {
+      const log = logger();
+      const outcome = await gradeWithV3(input, {
+        client: new FakeClient([{ ...good, solidAttempt }]),
+        logger: log,
+      });
+      expect(outcome.status).toBe("graded");
+      if (outcome.status !== "graded") return;
+      expect(outcome.result.solidAttempt).toBe(solidAttempt);
+      expect(log.info).toHaveBeenCalledWith(
+        "grading.v3.graded",
+        expect.objectContaining({ solidAttempt }),
+      );
+      expect(JSON.stringify(log.info.mock.calls)).not.toContain(
+        "its own working",
+      );
+    },
+  );
 
   it("orders instructions, question, rubric, then the submission last", () => {
     const messages = buildGradePrompt(input);

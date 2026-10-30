@@ -371,6 +371,7 @@ export async function gradeWithV3(
         needsVerificationCount: checked.verdicts.filter(
           (verdict) => verdict.needsVerification,
         ).length,
+        solidAttempt: parsed.output.solidAttempt,
         durationMs: now() - started,
       });
       return {
@@ -379,6 +380,7 @@ export async function gradeWithV3(
           verdicts: checked.verdicts,
           totalPoints,
           overallFeedback: parsed.output.overallFeedback,
+          solidAttempt: parsed.output.solidAttempt,
           usage,
           model: model ?? "unknown",
           effort,

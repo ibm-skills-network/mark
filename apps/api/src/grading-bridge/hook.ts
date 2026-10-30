@@ -18,6 +18,7 @@ import { UserRole } from "src/auth/interfaces/user.session.interface";
 import { Logger } from "winston";
 import type { GradingFailure, UnreadableSource } from "../v3/grading/contracts";
 import type { GradingLogContext } from "../v3/grading/grade-question";
+import { applyEffortBoost, GradingBoostService } from "../v3/grading/boost";
 import { MaterializeLimitError } from "../v3/grading/materialize";
 import { GradingModeService, type ResolvedMode } from "../v3/grading/mode";
 import { V3GradingService } from "../v3/grading/v3-grading.service";
@@ -107,6 +108,7 @@ export class GradingBridgeService {
   constructor(
     private readonly modes: GradingModeService,
     private readonly grader: V3GradingService,
+    private readonly boosts: GradingBoostService,
     private readonly gradingFactory: GradingFactoryService,
     private readonly s3Service: S3Service,
     private readonly aiFlags: AiFeatureFlagsService,
@@ -264,9 +266,29 @@ export class GradingBridgeService {
     if (outcome.status === "failed") {
       throw this.toError(outcome.failure, context);
     }
+    const { points, boost } = applyEffortBoost(
+      outcome.result.totalPoints,
+      gradingQuestion.totalPoints,
+      outcome.result.solidAttempt,
+      await this.boosts.get(),
+    );
+    if (boost > 0) {
+      this.logger.info("grading.v3.boost_applied", {
+        ...context,
+        pointsBefore: outcome.result.totalPoints,
+        boost,
+        pointsAfter: points,
+        maxPoints: gradingQuestion.totalPoints,
+      });
+    }
     return {
       learnerResponse,
-      responseDto: toLegacyResponse(outcome.result, gradingQuestion, mode),
+      responseDto: toLegacyResponse(
+        { ...outcome.result, totalPoints: points },
+        gradingQuestion,
+        mode,
+        boost,
+      ),
     };
   }
 
