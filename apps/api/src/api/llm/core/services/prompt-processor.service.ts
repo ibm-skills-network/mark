@@ -19,7 +19,10 @@ import {
   LlmResponse,
 } from "../interfaces/llm-provider.interface";
 import { IPromptProcessor } from "../interfaces/prompt-processor.interface";
-import { IUsageTracker } from "../interfaces/user-tracking.interface";
+import {
+  IUsageTracker,
+  UsageDetail,
+} from "../interfaces/user-tracking.interface";
 import { logAiInvocation } from "../utils/ai-invocation-log.util";
 import {
   extractJsonPayload,
@@ -34,6 +37,13 @@ import {
   promptCacheApplies,
 } from "../utils/prompt-cache.util";
 import { LlmRouter } from "./llm-router.service";
+import { StructuredOutputParseError } from "./structured-output.util";
+
+function cachedDetail(cachedInput?: number): UsageDetail | undefined {
+  return cachedInput === undefined
+    ? undefined
+    : { cachedInputTokens: cachedInput };
+}
 
 @Injectable()
 export class PromptProcessorService implements IPromptProcessor {
@@ -150,10 +160,13 @@ export class PromptProcessorService implements IPromptProcessor {
     // generation produces on code-heavy submissions.
     if (typeof llm.invokeStructured === "function") {
       const input = await this.formatPromptInput(prompt);
-      const { parsed, tokenUsage } = await llm.invokeStructured<T>(
-        [this.buildMessageFor(llm, input, options)],
+      const { parsed, tokenUsage } = await this.invokeStructuredTracked<T>(
+        llm,
+        input,
         schema,
         options,
+        assignmentId,
+        usageType,
       );
       logAiInvocation(this.logger, {
         modelKey: llm.key,
@@ -174,6 +187,7 @@ export class PromptProcessorService implements IPromptProcessor {
         tokenUsage.input,
         tokenUsage.output,
         llm.key,
+        cachedDetail(tokenUsage.cachedInput),
       );
       return parsed;
     }
@@ -208,10 +222,13 @@ export class PromptProcessorService implements IPromptProcessor {
 
     if (typeof llm.invokeStructured === "function") {
       const input = await this.formatPromptInput(prompt);
-      const { parsed, tokenUsage } = await llm.invokeStructured<T>(
-        [this.buildMessageFor(llm, input, options)],
+      const { parsed, tokenUsage } = await this.invokeStructuredTracked<T>(
+        llm,
+        input,
         schema,
         options,
+        assignmentId,
+        usageType,
       );
       logAiInvocation(this.logger, {
         modelKey: llm.key,
@@ -232,6 +249,7 @@ export class PromptProcessorService implements IPromptProcessor {
         tokenUsage.input,
         tokenUsage.output,
         llm.key,
+        cachedDetail(tokenUsage.cachedInput),
       );
       return parsed;
     }
@@ -394,6 +412,7 @@ export class PromptProcessorService implements IPromptProcessor {
       result.tokenUsage?.input ?? 0,
       result.tokenUsage?.output ?? 0,
       llm.key,
+      cachedDetail(result.tokenUsage?.cachedInput),
     );
 
     return response;
@@ -489,6 +508,7 @@ export class PromptProcessorService implements IPromptProcessor {
         result.tokenUsage?.input ?? 0,
         result.tokenUsage?.output ?? 0,
         llm.key,
+        cachedDetail(result.tokenUsage?.cachedInput),
       );
 
       return response;
@@ -593,12 +613,43 @@ export class PromptProcessorService implements IPromptProcessor {
       .trim();
   }
 
+  /** A call billed but rejected by the schema still counts toward usage. */
+  private async invokeStructuredTracked<T>(
+    llm: ILlmProvider,
+    input: string,
+    schema: ZodTypeAny,
+    options: LlmRequestOptions | undefined,
+    assignmentId: number,
+    usageType: AIUsageType,
+  ) {
+    try {
+      return await llm.invokeStructured<T>(
+        [this.buildMessageFor(llm, input, options)],
+        schema,
+        options,
+      );
+    } catch (error) {
+      if (error instanceof StructuredOutputParseError) {
+        await this.trackUsageSafely(
+          assignmentId,
+          usageType,
+          error.tokenUsage.input,
+          error.tokenUsage.output,
+          llm.key,
+          { ...cachedDetail(error.tokenUsage.cachedInput), failed: true },
+        );
+      }
+      throw error;
+    }
+  }
+
   private async trackUsageSafely(
     assignmentId: number,
     usageType: AIUsageType,
     tokensIn: number,
     tokensOut: number,
     modelKey?: string,
+    detail?: UsageDetail,
   ): Promise<void> {
     try {
       await this.usageTracker.trackUsage(
@@ -607,6 +658,7 @@ export class PromptProcessorService implements IPromptProcessor {
         tokensIn,
         tokensOut,
         modelKey,
+        detail,
       );
     } catch (error) {
       this.logger.error(

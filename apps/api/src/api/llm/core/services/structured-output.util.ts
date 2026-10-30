@@ -181,6 +181,22 @@ function getWidenedSchema(schema: ZodTypeAny): ZodTypeAny {
   return widened;
 }
 
+/** The model answered and was billed, but its output did not match the schema. */
+export class StructuredOutputParseError extends Error {
+  constructor(
+    readonly tokenUsage: {
+      input: number;
+      output: number;
+      cachedInput?: number;
+    },
+  ) {
+    super(
+      "Structured output parsing produced no result (model output did not match the schema)",
+    );
+    this.name = "StructuredOutputParseError";
+  }
+}
+
 /**
  * Shared native-structured-output invocation for every ChatOpenAI-based
  * provider. The model fills the schema fields and the SDK serializes the JSON,
@@ -236,9 +252,12 @@ export async function invokeStructuredChatModel<T>(
     // parsed=null instead of throwing. Surface that as an error so callers
     // hit their retry/fallback paths instead of crashing on a null grade.
     if (result.parsed === null || result.parsed === undefined) {
-      throw new Error(
-        "Structured output parsing produced no result (model output did not match the schema)",
-      );
+      const usage = result.raw?.usage_metadata;
+      throw new StructuredOutputParseError({
+        input: usage?.input_tokens ?? inputTokens,
+        output: usage?.output_tokens ?? 0,
+        cachedInput: usage?.input_token_details?.cache_read,
+      });
     }
 
     const parsed = normalizeWidenedOutput(schema, result.parsed) as T;

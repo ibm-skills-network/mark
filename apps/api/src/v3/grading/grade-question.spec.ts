@@ -7,6 +7,7 @@ import { estimatePartsTokens } from "./materialize";
 import {
   type GradingModelClient,
   type GradingModelRequest,
+  GradingModelOutputError,
   GradingModelOutputLimitError,
   GradingModelUnavailableError,
   OpenAiGradingModelClient,
@@ -223,6 +224,16 @@ describe("gradeWithV3", () => {
       "none",
     ]);
     expect(outcome.status === "graded" && outcome.result.effort).toBe("none");
+  });
+
+  it("keeps the model and usage of a call refused after it was billed", async () => {
+    const client = new FakeClient([
+      new GradingModelOutputError("model refused to grade", usage, "gpt-x"),
+    ]);
+    const outcome = await gradeWithV3(input, { client, logger: logger() });
+    if (outcome.status !== "failed") throw new Error("expected failed");
+    expect(outcome.failure.usage).toEqual(usage);
+    expect(outcome.failure.model).toBe("gpt-x");
   });
 
   it("fails as output_limit when the retry is cut off too", async () => {

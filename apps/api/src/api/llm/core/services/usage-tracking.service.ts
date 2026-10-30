@@ -3,7 +3,10 @@ import { AIUsageType } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { PrismaService } from "src/database/prisma.service";
 import { Logger } from "winston";
-import { IUsageTracker } from "../interfaces/user-tracking.interface";
+import {
+  IUsageTracker,
+  UsageDetail,
+} from "../interfaces/user-tracking.interface";
 import { toAiUsageCounterBigInt } from "../utils/ai-usage-counter.util";
 
 @Injectable()
@@ -18,17 +21,28 @@ export class UsageTrackerService implements IUsageTracker {
   }
 
   /**
-   * Track LLM usage for a specific assignment and usage type
-   * Stores token counts and increments usage count
+   * Track LLM usage: the daily ledger first, so spend is recorded even if the
+   * assignment is gone, then the assignment's running totals.
    */
   async trackUsage(
-    assignmentId: number,
+    assignmentId: number | null,
     usageType: AIUsageType,
     tokensIn: number,
     tokensOut: number,
     modelKey?: string,
+    detail: UsageDetail = {},
   ): Promise<void> {
     try {
+      await this.recordDaily(
+        assignmentId,
+        usageType,
+        tokensIn,
+        tokensOut,
+        modelKey,
+        detail,
+      );
+      if (assignmentId === null) return;
+
       const assignmentIdToDatabase = Number(assignmentId);
       const tokensInToStore = toAiUsageCounterBigInt(tokensIn, "tokensIn");
       const tokensOutToStore = toAiUsageCounterBigInt(tokensOut, "tokensOut");
@@ -83,6 +97,54 @@ export class UsageTrackerService implements IUsageTracker {
       throw new HttpException(
         "Failed to track AI usage",
         HttpStatus.INTERNAL_SERVER_ERROR,
+      );
+    }
+  }
+
+  /** One row per UTC day, type, model and assignment; counters only grow. */
+  private async recordDaily(
+    assignmentId: number | null,
+    usageType: AIUsageType,
+    tokensIn: number,
+    tokensOut: number,
+    modelKey: string | undefined,
+    detail: UsageDetail,
+  ): Promise<void> {
+    try {
+      const now = new Date();
+      const key = {
+        day: new Date(
+          Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+        ),
+        usageType,
+        modelKey: modelKey ?? "unknown",
+        assignmentId: assignmentId ?? 0,
+      };
+      const counters = {
+        inputTokens: toAiUsageCounterBigInt(tokensIn, "tokensIn"),
+        cachedInputTokens: toAiUsageCounterBigInt(
+          detail.cachedInputTokens ?? 0,
+          "cachedInputTokens",
+        ),
+        outputTokens: toAiUsageCounterBigInt(tokensOut, "tokensOut"),
+        calls: BigInt(1),
+        failedCalls: BigInt(detail.failed ? 1 : 0),
+      };
+      await this.prisma.aIUsageDaily.upsert({
+        where: { day_usageType_modelKey_assignmentId: key },
+        create: { ...key, ...counters },
+        update: {
+          inputTokens: { increment: counters.inputTokens },
+          cachedInputTokens: { increment: counters.cachedInputTokens },
+          outputTokens: { increment: counters.outputTokens },
+          calls: { increment: counters.calls },
+          failedCalls: { increment: counters.failedCalls },
+        },
+      });
+    } catch (error) {
+      // Never costs the caller its response or the assignment's totals.
+      this.logger.error(
+        `Failed to record daily AI usage: ${(error as Error).message}`,
       );
     }
   }

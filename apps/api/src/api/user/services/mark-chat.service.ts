@@ -12,6 +12,7 @@ import {
 import {
   CoreMessage,
   generateText,
+  type LanguageModelUsage,
   stepCountIs,
   streamText,
   tool,
@@ -23,13 +24,14 @@ import { AiFeatureFlagsService } from "src/api/ai-feature-flags/ai-feature-flags
 import { FileContentExtractionService } from "src/api/attempt/services/file-content-extraction";
 import { FileProcessingBudgetService } from "src/api/files/services/file-processing-budget.service";
 import { S3Service } from "src/api/files/services/s3.service";
+import type { IUsageTracker } from "src/api/llm/core/interfaces/user-tracking.interface";
 import { logAiInvocation } from "src/api/llm/core/utils/ai-invocation-log.util";
-import { DEFAULT_LLM_MODEL } from "src/api/llm/llm.constants";
+import { DEFAULT_LLM_MODEL, USAGE_TRACKER } from "src/api/llm/llm.constants";
 import {
   UserRole,
   UserSession,
 } from "src/auth/interfaces/user.session.interface";
-import { ChatRole, Prisma } from "@prisma/client";
+import { AIUsageType, ChatRole, Prisma } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
 import { z } from "zod";
@@ -152,6 +154,7 @@ export class MarkChatService {
     private readonly chatRepository: ChatRepository,
     private readonly processingBudget: FileProcessingBudgetService,
     private readonly aiFlags: AiFeatureFlagsService,
+    @Inject(USAGE_TRACKER) private readonly usageTracker: IUsageTracker,
     @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
   ) {
     this.logger = parentLogger.child({ context: MarkChatService.name });
@@ -419,11 +422,15 @@ export class MarkChatService {
       return { reply: CHAT_DISABLED_MESSAGE, functionCalled: false };
     }
 
-    const { systemPrompt, systemContextMessages, assignmentInfo } =
-      this.getSystemPromptParts(userRole, conversation, userSession, {
-        chatId,
-        mode: "respond",
-      });
+    const {
+      systemPrompt,
+      systemContextMessages,
+      assignmentInfo,
+      assignmentId,
+    } = this.getSystemPromptParts(userRole, conversation, userSession, {
+      chatId,
+      mode: "respond",
+    });
 
     const conversationHistoryBudget = this.getConversationHistoryBudgetTokens({
       systemPrompt,
@@ -466,6 +473,7 @@ export class MarkChatService {
       toolChoice: "auto",
       stopWhen: stepCountIs(MAX_TOOL_STEPS),
       maxOutputTokens,
+      onStepFinish: this.recordStepUsage(assignmentId, chatModel),
     });
 
     const functionResults = collectToolResultsAcrossSteps(result.steps).map(
@@ -531,11 +539,15 @@ export class MarkChatService {
       return;
     }
 
-    const { systemPrompt, systemContextMessages, assignmentInfo } =
-      this.getSystemPromptParts(userRole, conversation, userSession, {
-        chatId,
-        mode: "stream",
-      });
+    const {
+      systemPrompt,
+      systemContextMessages,
+      assignmentInfo,
+      assignmentId,
+    } = this.getSystemPromptParts(userRole, conversation, userSession, {
+      chatId,
+      mode: "stream",
+    });
 
     const conversationHistoryBudget = this.getConversationHistoryBudgetTokens({
       systemPrompt,
@@ -578,7 +590,7 @@ export class MarkChatService {
       toolChoice: "auto",
       stopWhen: stepCountIs(MAX_TOOL_STEPS),
       maxOutputTokens,
-      onStepFinish: undefined,
+      onStepFinish: this.recordStepUsage(assignmentId, chatModel),
     });
 
     if (!result || !result.textStream) {
@@ -667,6 +679,29 @@ export class MarkChatService {
     } finally {
       response.end();
     }
+  }
+
+  /** One step is one billed model call; a reply with tools takes several. */
+  private recordStepUsage(assignmentId: number | undefined, model: string) {
+    return async ({ usage }: { usage: LanguageModelUsage }): Promise<void> => {
+      try {
+        await this.usageTracker.trackUsage(
+          assignmentId ?? null,
+          AIUsageType.CHAT_ASSISTANT,
+          usage.inputTokens ?? 0,
+          usage.outputTokens ?? 0,
+          model,
+          { cachedInputTokens: usage.cachedInputTokens },
+        );
+      } catch (error) {
+        // The learner still gets the reply.
+        this.logger.error("chat.usage_track_failed", {
+          assignmentId,
+          error: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined,
+        });
+      }
+    };
   }
 
   private buildToolOnlyFallback(
@@ -805,7 +840,12 @@ export class MarkChatService {
       assignmentId,
     });
 
-    return { systemPrompt, systemContextMessages, assignmentInfo };
+    return {
+      systemPrompt,
+      systemContextMessages,
+      assignmentInfo,
+      assignmentId,
+    };
   }
 
   private extractAssignmentIdFromContext(content?: string): number | undefined {

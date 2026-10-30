@@ -9,6 +9,8 @@ import { isMediaResponseType } from "src/api/attempt/common/utils/grading-questi
 import { AiFeatureFlagsService } from "src/api/ai-feature-flags/ai-feature-flags.service";
 import { GradingFactoryService } from "src/api/attempt/services/grading-factory.service";
 import { S3Service } from "src/api/files/services/s3.service";
+import type { IUsageTracker } from "src/api/llm/core/interfaces/user-tracking.interface";
+import { USAGE_TRACKER } from "src/api/llm/llm.constants";
 import { OversizedSubmissionError } from "src/api/llm/features/grading/errors/oversized-submission.error";
 import {
   RetryableProcessingError,
@@ -16,7 +18,11 @@ import {
 } from "src/api/llm/features/grading/errors/source-processing.error";
 import { UserRole } from "src/auth/interfaces/user.session.interface";
 import { Logger } from "winston";
-import type { GradingFailure, UnreadableSource } from "../v3/grading/contracts";
+import type {
+  GradingFailure,
+  GradingOutcome,
+  UnreadableSource,
+} from "../v3/grading/contracts";
 import type { GradingLogContext } from "../v3/grading/grade-question";
 import { applyEffortBoost, GradingBoostService } from "../v3/grading/boost";
 import { MaterializeLimitError } from "../v3/grading/materialize";
@@ -112,6 +118,7 @@ export class GradingBridgeService {
     private readonly gradingFactory: GradingFactoryService,
     private readonly s3Service: S3Service,
     private readonly aiFlags: AiFeatureFlagsService,
+    @Inject(USAGE_TRACKER) private readonly usageTracker: IUsageTracker,
     @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
   ) {
     this.logger = parentLogger.child({ context: GradingBridgeService.name });
@@ -233,6 +240,33 @@ export class GradingBridgeService {
     return new V3GradingFailedError(failure.code);
   }
 
+  /** Includes retries and failed grades, since those calls were billed. */
+  private async recordUsage(
+    outcome: GradingOutcome,
+    context: GradingLogContext,
+  ): Promise<void> {
+    const graded = outcome.status === "graded";
+    const { usage, model } = graded ? outcome.result : outcome.failure;
+    if (usage.inputTokens === 0 && usage.outputTokens === 0) return;
+    try {
+      await this.usageTracker.trackUsage(
+        context.assignmentId ?? null,
+        AIUsageType.ASSIGNMENT_GRADING,
+        usage.inputTokens,
+        usage.outputTokens,
+        model,
+        { cachedInputTokens: usage.cachedInputTokens, failed: !graded },
+      );
+    } catch (error) {
+      // The grade stands; a usage write never changes it.
+      this.logger.error("grading.v3.usage_track_failed", {
+        ...context,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+    }
+  }
+
   async gradeLive(
     question: QuestionDto,
     requestDto: CreateQuestionResponseAttemptRequestDto,
@@ -263,6 +297,7 @@ export class GradingBridgeService {
       toSubmissionSource(question.type, learnerResponse, this.loadStoredFile),
       context,
     );
+    await this.recordUsage(outcome, context);
     if (outcome.status === "failed") {
       throw this.toError(outcome.failure, context);
     }
@@ -342,6 +377,7 @@ export class GradingBridgeService {
         ),
         context,
       );
+      await this.recordUsage(outcome, context);
       const legacyPoints = legacy.responseDto.totalPoints ?? null;
       const v3Points =
         outcome.status === "graded" ? outcome.result.totalPoints : null;

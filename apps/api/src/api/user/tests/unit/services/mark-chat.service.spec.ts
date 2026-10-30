@@ -12,6 +12,8 @@ import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { ChatRepository } from "../../../repositories/chat.repository";
 import { ChatService } from "../../../services/chat.service";
 import { MarkChatService } from "../../../services/mark-chat.service";
+import { USAGE_TRACKER } from "src/api/llm/llm.constants";
+import { AIUsageType } from "@prisma/client";
 
 const generateTextMock = jest.fn();
 const streamTextMock = jest.fn();
@@ -100,6 +102,8 @@ describe("MarkChatService role resolution", () => {
     },
   });
 
+  let usageTracker: { trackUsage: jest.Mock };
+
   beforeEach(async () => {
     generateTextMock.mockReset();
     streamTextMock.mockReset();
@@ -120,6 +124,7 @@ describe("MarkChatService role resolution", () => {
     logger.child.mockReturnValue(logger);
 
     chatRepository = { addMessage: jest.fn().mockResolvedValue({ id: "m-1" }) };
+    usageTracker = { trackUsage: jest.fn().mockResolvedValue(undefined) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -135,6 +140,7 @@ describe("MarkChatService role resolution", () => {
           },
         },
         { provide: ChatRepository, useValue: chatRepository },
+        { provide: USAGE_TRACKER, useValue: usageTracker },
         { provide: FileProcessingBudgetService, useValue: {} },
         {
           provide: AiFeatureFlagsService,
@@ -169,6 +175,58 @@ describe("MarkChatService role resolution", () => {
     for (const learnerTool of LEARNER_ONLY_TOOLS) {
       expect(toolNames).toContain(learnerTool);
     }
+  });
+
+  describe("usage audit", () => {
+    const usage = {
+      inputTokens: 300,
+      cachedInputTokens: 120,
+      outputTokens: 40,
+    };
+    type StepFinish = { onStepFinish: (step: { usage: unknown }) => unknown };
+
+    it("records every model call of a reply, not only the last", async () => {
+      await service.respond("chat-1", body("learner"), learnerSession);
+      const { onStepFinish } = lastGenerateCall() as unknown as StepFinish;
+      await onStepFinish({ usage });
+      await onStepFinish({ usage: { ...usage, inputTokens: 500 } });
+
+      expect(usageTracker.trackUsage).toHaveBeenCalledTimes(2);
+      expect(usageTracker.trackUsage).toHaveBeenLastCalledWith(
+        learnerSession.assignmentId,
+        AIUsageType.CHAT_ASSISTANT,
+        500,
+        40,
+        expect.any(String),
+        { cachedInputTokens: 120 },
+      );
+    });
+
+    it("records streamed replies too", async () => {
+      await service.respondStream(
+        "chat-1",
+        body("learner"),
+        learnerSession,
+        makeResponse(),
+      );
+      const { onStepFinish } = lastStreamCall() as unknown as StepFinish;
+      await onStepFinish({ usage });
+      expect(usageTracker.trackUsage).toHaveBeenCalledWith(
+        learnerSession.assignmentId,
+        AIUsageType.CHAT_ASSISTANT,
+        300,
+        40,
+        expect.any(String),
+        { cachedInputTokens: 120 },
+      );
+    });
+
+    it("never lets a failed usage write break the reply", async () => {
+      usageTracker.trackUsage.mockRejectedValue(new Error("db down"));
+      await service.respond("chat-1", body("learner"), learnerSession);
+      const { onStepFinish } = lastGenerateCall() as unknown as StepFinish;
+      await expect(onStepFinish({ usage })).resolves.toBeUndefined();
+    });
   });
 
   it("serves a learner session the learner prompt even when the body claims author", async () => {

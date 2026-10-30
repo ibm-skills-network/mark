@@ -39,6 +39,7 @@ import {
 } from "./materialize";
 import {
   type GradingModelClient,
+  GradingModelOutputError,
   GradingModelOutputLimitError,
   GradingModelUnavailableError,
   type PromptMessage,
@@ -285,10 +286,14 @@ export async function gradeWithV3(
         reasoningSummary.push(...(response.reasoningSummary ?? []));
       }
     } catch (error) {
+      // An unusable answer was still billed.
+      if (error instanceof GradingModelOutputError) {
+        usage = addUsage(usage, error.usage);
+        model = error.model ?? model;
+      }
       // A cut-off answer is a runaway, not the submission: one more try with
       // less reasoning, then legacy grades the question.
       if (error instanceof GradingModelOutputLimitError) {
-        usage = addUsage(usage, error.usage);
         deps.logger.warn("grading.v3.output_limit", {
           ...context,
           attempt,
