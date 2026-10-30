@@ -1212,6 +1212,23 @@ model GradingModeConfig {
   @@unique([questionType, assignmentId])
 }
 
+/// Every billed model call, summed by UTC day: the table to total spend from.
+/// No foreign key, so totals survive an assignment being deleted.
+model AIUsageDaily {
+  id                Int         @id @default(autoincrement())
+  day               DateTime    @db.Date
+  usageType         AIUsageType
+  modelKey          String
+  assignmentId      Int /// 0 when the call had no assignment
+  inputTokens       BigInt      @default(0) /// includes cachedInputTokens
+  cachedInputTokens BigInt      @default(0)
+  outputTokens      BigInt      @default(0) /// includes reasoning
+  calls             BigInt      @default(0)
+  failedCalls       BigInt      @default(0) /// billed, but the output was unusable
+
+  @@unique([day, usageType, modelKey, assignmentId])
+}
+
 /// Extra points for a genuine attempt that missed criteria (v3 grading).
 /// One row, id 1; no row means off.
 model GradingBoostConfig {

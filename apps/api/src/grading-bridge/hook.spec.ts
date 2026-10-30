@@ -1,6 +1,6 @@
 import { BadRequestException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
-import { QuestionType } from "@prisma/client";
+import { AIUsageType, QuestionType } from "@prisma/client";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import type { CreateQuestionResponseAttemptRequestDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.request.dto";
 import { CreateQuestionResponseAttemptResponseDto } from "src/api/assignment/attempt/dto/question-response/create.question.response.attempt.response.dto";
@@ -11,6 +11,7 @@ import { GradingFactoryService } from "src/api/attempt/services/grading-factory.
 import { GradingRateLimiterService } from "src/api/attempt/services/grading-rate-limiter.service";
 import { QuestionResponseService } from "src/api/attempt/services/question-response/question-response.service";
 import { S3Service } from "src/api/files/services/s3.service";
+import { USAGE_TRACKER } from "src/api/llm/llm.constants";
 import { OversizedSubmissionError } from "src/api/llm/features/grading/errors/oversized-submission.error";
 import {
   RetryableProcessingError,
@@ -242,6 +243,7 @@ describe("GradingBridgeService", () => {
   const modes = { resolve: jest.fn() };
   const grader = { grade: jest.fn() };
   const boosts = { get: jest.fn() };
+  const usageTracker = { trackUsage: jest.fn() };
   const strategy = {
     validateResponse: jest.fn(),
     extractLearnerResponse: jest.fn(),
@@ -269,6 +271,7 @@ describe("GradingBridgeService", () => {
         { provide: GradingModeService, useValue: modes },
         { provide: V3GradingService, useValue: grader },
         { provide: GradingBoostService, useValue: boosts },
+        { provide: USAGE_TRACKER, useValue: usageTracker },
         { provide: GradingFactoryService, useValue: factory },
         { provide: S3Service, useValue: s3 },
         { provide: AiFeatureFlagsService, useValue: aiFlags },
@@ -336,6 +339,88 @@ describe("GradingBridgeService", () => {
   }
 
   const boostOn = { enabled: true, pointsPerStep: 4, maxBoost: 3 };
+
+  describe("usage audit", () => {
+    const billed = {
+      inputTokens: 200,
+      cachedInputTokens: 80,
+      outputTokens: 40,
+      reasoningTokens: 5,
+    };
+
+    beforeEach(() => usageTracker.trackUsage.mockResolvedValue(undefined));
+
+    it("records a graded question's tokens, cached share and model", async () => {
+      const outcome = graded(2, true);
+      if (outcome.status === "graded") outcome.result.usage = billed;
+      grader.grade.mockResolvedValue(outcome);
+      await bridge.gradeLive(question, request("42"), context, mode("live"));
+      expect(usageTracker.trackUsage).toHaveBeenCalledWith(
+        12,
+        AIUsageType.ASSIGNMENT_GRADING,
+        200,
+        40,
+        "gpt-6-luna",
+        { cachedInputTokens: 80, failed: false },
+      );
+    });
+
+    it("records the billed tokens of a grade that failed", async () => {
+      grader.grade.mockResolvedValue(
+        failed({ usage: billed, model: "gpt-6-luna" }),
+      );
+      await expect(
+        bridge.gradeLive(question, request("42"), context, mode("live")),
+      ).rejects.toBeInstanceOf(V3GradingFailedError);
+      expect(usageTracker.trackUsage).toHaveBeenCalledWith(
+        12,
+        AIUsageType.ASSIGNMENT_GRADING,
+        200,
+        40,
+        "gpt-6-luna",
+        { cachedInputTokens: 80, failed: true },
+      );
+    });
+
+    it("records nothing when no tokens were billed", async () => {
+      grader.grade.mockResolvedValue(failed({}));
+      await expect(
+        bridge.gradeLive(question, request("42"), context, mode("live")),
+      ).rejects.toBeInstanceOf(V3GradingFailedError);
+      expect(usageTracker.trackUsage).not.toHaveBeenCalled();
+    });
+
+    it("never lets a failed usage write change the grade", async () => {
+      usageTracker.trackUsage.mockRejectedValue(new Error("db down"));
+      const outcome = graded(2, true);
+      if (outcome.status === "graded") outcome.result.usage = billed;
+      grader.grade.mockResolvedValue(outcome);
+      const { responseDto } = await bridge.gradeLive(
+        question,
+        request("42"),
+        context,
+        mode("live"),
+      );
+      expect(responseDto.totalPoints).toBe(2);
+      expect(childLogger.error).toHaveBeenCalledWith(
+        "grading.v3.usage_track_failed",
+        expect.objectContaining({ error: "db down", assignmentId: 12 }),
+      );
+    });
+
+    it("records shadow grades too", async () => {
+      const outcome = graded(2, true);
+      if (outcome.status === "graded") outcome.result.usage = billed;
+      grader.grade.mockResolvedValue(outcome);
+      await bridge.runShadow(
+        question,
+        { learnerResponse: "42", responseDto: { totalPoints: 1 } } as never,
+        context,
+        mode("shadow"),
+      );
+      expect(usageTracker.trackUsage).toHaveBeenCalledTimes(1);
+    });
+  });
 
   it("live: adds the effort boost to a solid attempt and says so", async () => {
     boosts.get.mockResolvedValue(boostOn);

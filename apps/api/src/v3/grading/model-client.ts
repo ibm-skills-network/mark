@@ -5,7 +5,7 @@ import type {
   ResponseInputContent,
   ResponseInputItem,
 } from "openai/resources/responses/responses";
-import type { GradingUsage, ModelEffort } from "./contracts";
+import { type GradingUsage, type ModelEffort, ZERO_USAGE } from "./contracts";
 
 export type PromptContent =
   | { type: "text"; text: string }
@@ -58,7 +58,12 @@ export class GradingModelUnavailableError extends Error {
 
 /** The model answered with something unusable (refusal, incomplete, no text). */
 export class GradingModelOutputError extends Error {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    /** What the unusable answer was billed, when the response said. */
+    readonly usage: GradingUsage = ZERO_USAGE,
+    readonly model?: string,
+  ) {
     super(message);
     this.name = "GradingModelOutputError";
   }
@@ -66,8 +71,8 @@ export class GradingModelOutputError extends Error {
 
 /** The answer was cut off at the output token cap, usually by long reasoning. */
 export class GradingModelOutputLimitError extends GradingModelOutputError {
-  constructor(readonly usage: GradingUsage) {
-    super("response not completed: max_output_tokens");
+  constructor(usage: GradingUsage, model?: string) {
+    super("response not completed: max_output_tokens", usage, model);
     this.name = "GradingModelOutputLimitError";
   }
 }
@@ -207,19 +212,34 @@ export class OpenAiGradingModelClient implements GradingModelClient {
     if (response.status && response.status !== "completed") {
       const reason = response.incomplete_details?.reason ?? response.status;
       if (reason === "max_output_tokens") {
-        throw new GradingModelOutputLimitError(toUsage(response.usage));
+        throw new GradingModelOutputLimitError(
+          toUsage(response.usage),
+          response.model ?? this.model,
+        );
       }
-      throw new GradingModelOutputError(`response not completed: ${reason}`);
+      throw new GradingModelOutputError(
+        `response not completed: ${reason}`,
+        toUsage(response.usage),
+        response.model ?? this.model,
+      );
     }
     const refusal = response.output
       .flatMap((item) => (item.type === "message" ? item.content : []))
       .find((content) => content.type === "refusal");
     if (refusal) {
-      throw new GradingModelOutputError("model refused to grade");
+      throw new GradingModelOutputError(
+        "model refused to grade",
+        toUsage(response.usage),
+        response.model ?? this.model,
+      );
     }
     const outputText = response.output_text;
     if (!outputText) {
-      throw new GradingModelOutputError("model returned no text");
+      throw new GradingModelOutputError(
+        "model returned no text",
+        toUsage(response.usage),
+        response.model ?? this.model,
+      );
     }
     const reasoningSummary = request.reasoningSummary
       ? response.output

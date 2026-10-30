@@ -2,6 +2,7 @@ import { PromptTemplate } from "@langchain/core/prompts";
 import { AIUsageType } from "@prisma/client";
 import { z } from "zod";
 import { PromptProcessorService } from "./prompt-processor.service";
+import { StructuredOutputParseError } from "./structured-output.util";
 
 describe("PromptProcessorService", () => {
   const logger = {
@@ -60,6 +61,7 @@ describe("PromptProcessorService", () => {
       17,
       31,
       "gpt-4o-mini",
+      undefined,
     );
     expect(logger.error).toHaveBeenCalledWith(
       expect.stringContaining(
@@ -186,6 +188,33 @@ describe("PromptProcessorService.processStructuredPromptForFeature", () => {
       10,
       5,
       "gpt-4o-mini",
+      { cachedInputTokens: 7 },
+    );
+  });
+
+  it("records a billed call whose output failed the schema, then rethrows", async () => {
+    const failure = new StructuredOutputParseError({ input: 9, output: 8 });
+    router.getForFeatureWithFallback.mockResolvedValue({
+      key: "gpt-4o-mini",
+      invoke: jest.fn(),
+      invokeStructured: jest.fn().mockRejectedValue(failure),
+    });
+    await expect(
+      makeService().processStructuredPromptForFeature(
+        PromptTemplate.fromTemplate("grade this"),
+        77,
+        AIUsageType.ASSIGNMENT_GRADING,
+        "text_grading",
+        schema,
+      ),
+    ).rejects.toBe(failure);
+    expect(usageTracker.trackUsage).toHaveBeenCalledWith(
+      77,
+      AIUsageType.ASSIGNMENT_GRADING,
+      9,
+      8,
+      "gpt-4o-mini",
+      { failed: true },
     );
   });
 
@@ -217,6 +246,7 @@ describe("PromptProcessorService.processStructuredPromptForFeature", () => {
       3,
       4,
       "text-only-model",
+      undefined,
     );
   });
 
