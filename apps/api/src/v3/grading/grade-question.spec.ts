@@ -422,6 +422,9 @@ describe("prompt and request", () => {
     expect(flat).toContain(
       "Set needsVerification to true only when you cannot decide this criterion from what you were given and running code or computing over the data would decide it — for example a total or accuracy figure that can't be checked from an abridged sheet, or 'the code runs' with no saved output. Give the reason in one sentence. Otherwise false.",
     );
+    expect(flat).toContain(
+      "Names a rubric gives for code identifiers — variables, functions, dictionary or template context keys, JSON or API fields — are examples unless the rubric says that exact name is required: the same value or behaviour under another name or field meets the criterion.",
+    );
     expect(flat).not.toContain("save the file as report.pdf");
   });
 
