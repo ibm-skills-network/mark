@@ -40,6 +40,10 @@ export interface UseLearnerContextInterface {
   setActiveQuestionNumber: (questionNumber: number) => void;
 }
 
+/** Reloaded pages restore answer drafts only; content arrives with the attempt. */
+const hasQuestionContent = (question: any): boolean =>
+  typeof question?.question === "string" && question.question.trim() !== "";
+
 /**
  * A hook that provides comprehensive assignment context for the Mark chatbot when in learner mode
  */
@@ -116,13 +120,8 @@ export const useLearnerContext = (): UseLearnerContextInterface => {
 
   useEffect(() => {
     if (questions && activeQuestionNumber) {
-      const questionIndex = activeQuestionNumber - 1;
-
-      if (questions[questionIndex]) {
-        setCurrentQuestion(questions[questionIndex]);
-      } else if (questions.length > 0) {
-        setCurrentQuestion(questions[0]);
-      }
+      const question = questions[activeQuestionNumber - 1] ?? questions[0];
+      setCurrentQuestion(hasQuestionContent(question) ? question : null);
     }
   }, [questions, activeQuestionNumber]);
 
@@ -321,6 +320,10 @@ export const useLearnerContext = (): UseLearnerContextInterface => {
             .map((f: any) => f.filename)
             .join(", ")}\n`;
         }
+      } else {
+        contextContent += "\nNO QUESTION LOADED:\n";
+        contextContent +=
+          "The question text is not loaded on this page, usually because the learner is on the assignment overview. This is normal, so do not say the question is missing or report it as a problem. Explain that the question appears inside an attempt or on its results page, and ask the learner to paste the part they need help with.\n";
       }
     }
 
@@ -390,7 +393,11 @@ export const useLearnerContext = (): UseLearnerContextInterface => {
     assignmentId: assignmentId || assignmentDetails?.id,
     attemptsRemaining: calculateAttemptsRemaining(),
     setActiveQuestionNumber: (questionNumber: number) => {
-      if (questionNumber > 0 && questionNumber <= questions.length) {
+      if (
+        questionNumber > 0 &&
+        questionNumber <= questions.length &&
+        hasQuestionContent(questions[questionNumber - 1])
+      ) {
         setCurrentQuestion(questions[questionNumber - 1]);
       }
     },
