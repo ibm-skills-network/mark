@@ -3,6 +3,10 @@ import { z } from "zod";
 export const GRADING_EFFORTS = ["low", "medium", "high"] as const;
 export const gradingEffortSchema = z.enum(GRADING_EFFORTS);
 export type GradingEffort = z.infer<typeof gradingEffortSchema>;
+/** What a model call can use: the configurable efforts plus no reasoning. */
+export const MODEL_EFFORTS = ["none", "low", "medium", "high"] as const;
+export const modelEffortSchema = z.enum(MODEL_EFFORTS);
+export type ModelEffort = z.infer<typeof modelEffortSchema>;
 
 export const PART_KINDS = ["text", "file", "image"] as const;
 
@@ -198,7 +202,7 @@ export const gradingResultSchema = z.object({
   overallFeedback: z.string(),
   usage: usageSchema,
   model: z.string(),
-  effort: gradingEffortSchema,
+  effort: modelEffortSchema,
   promptVersion: z.string(),
   checkFailures: z.array(checkFailureSchema),
   evidence: evidenceCountsSchema,
@@ -213,6 +217,7 @@ export const GRADING_FAILURE_CODES = [
   "grading.v3.source_unreadable",
   "grading.v3.model_unavailable",
   "grading.v3.model_error",
+  "grading.v3.output_limit",
   "grading.v3.check_failed",
 ] as const;
 export type GradingFailureCode = (typeof GRADING_FAILURE_CODES)[number];
@@ -247,7 +252,7 @@ export interface GradingFailure {
   checkFailures: CheckFailure[];
   usage: GradingUsage;
   model: string | undefined;
-  effort: GradingEffort;
+  effort: ModelEffort;
   promptVersion: string;
   estimatedTokens?: number;
   tokenBudget?: number;

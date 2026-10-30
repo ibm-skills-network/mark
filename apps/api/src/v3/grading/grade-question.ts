@@ -9,7 +9,7 @@ import {
   type CheckFailure,
   type GradingDebug,
   gradingInputSchema,
-  type GradingEffort,
+  type ModelEffort,
   type GradingFailure,
   type GradingFailureCode,
   type GradingInput,
@@ -39,6 +39,7 @@ import {
 } from "./materialize";
 import {
   type GradingModelClient,
+  GradingModelOutputLimitError,
   GradingModelUnavailableError,
   type PromptMessage,
 } from "./model-client";
@@ -49,6 +50,13 @@ import {
 } from "./prompts/grade.v3";
 
 /** Ids for logs only; never learner content. */
+/** One step less reasoning, but never below what the model accepts. */
+function retryEffort(effort: ModelEffort, lowest: ModelEffort): ModelEffort {
+  if (effort === "high") return "medium";
+  if (effort === "medium") return "low";
+  return lowest;
+}
+
 export interface GradingLogContext {
   questionId?: number;
   assignmentId?: number;
@@ -156,7 +164,7 @@ export async function gradeWithV3(
   const now = deps.now ?? (() => Date.now());
   const started = now();
   const context = deps.context ?? {};
-  const effort: GradingEffort = input.effort;
+  let effort: ModelEffort = input.effort;
   let usage: GradingUsage = ZERO_USAGE;
   let model: string | undefined;
   const reasoningSummary: string[] = [];
@@ -277,6 +285,22 @@ export async function gradeWithV3(
         reasoningSummary.push(...(response.reasoningSummary ?? []));
       }
     } catch (error) {
+      // A cut-off answer is a runaway, not the submission: one more try with
+      // less reasoning, then legacy grades the question.
+      if (error instanceof GradingModelOutputLimitError) {
+        usage = addUsage(usage, error.usage);
+        deps.logger.warn("grading.v3.output_limit", {
+          ...context,
+          attempt,
+          effort,
+          usage: error.usage,
+        });
+        if (attempt === 1) {
+          effort = retryEffort(effort, deps.client.lowestEffort ?? "low");
+          continue;
+        }
+        return fail("grading.v3.output_limit", error.message);
+      }
       deps.logger.error("grading.v3.model_call_failed", {
         ...context,
         attempt,

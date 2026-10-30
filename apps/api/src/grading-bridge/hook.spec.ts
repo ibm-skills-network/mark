@@ -25,7 +25,11 @@ import { GradingModeService, type ResolvedMode } from "../v3/grading/mode";
 import { V3GradingService } from "../v3/grading/v3-grading.service";
 import { toLegacyResponse } from "./from-v3-result";
 import { toGradingQuestion } from "./to-v3-input";
-import { GradingBridgeService, V3GradingFailedError } from "./hook";
+import {
+  GradingBridgeService,
+  V3GradingFailedError,
+  V3LegacyFallbackError,
+} from "./hook";
 
 type GradeResult = {
   learnerResponse: unknown;
@@ -188,6 +192,17 @@ describe("gradeQuestionNoSave with the v3 bridge", () => {
     );
     await expect(grade()).rejects.toBeInstanceOf(BadRequestException);
     expect(strategy.gradeResponse).not.toHaveBeenCalled();
+  });
+
+  it("live: an answer cut off at the output limit is graded by legacy instead", async () => {
+    await build(true);
+    bridge.resolveMode.mockResolvedValue(mode("live"));
+    bridge.gradeLive.mockRejectedValue(
+      new V3LegacyFallbackError("grading.v3.output_limit"),
+    );
+    const result = await grade();
+    expect(result.responseDto).toBe(legacyDto);
+    expect(strategy.gradeResponse).toHaveBeenCalledTimes(1);
   });
 
   it("live: a retryable v3 failure keeps its class for the job retry logic", async () => {
@@ -631,6 +646,11 @@ describe("GradingBridgeService", () => {
     const error = await liveText().catch((caught: unknown) => caught);
     expect(error).toBeInstanceOf(V3GradingFailedError);
     expect(error).not.toBeInstanceOf(OversizedSubmissionError);
+  });
+
+  it("live: an output-limit failure asks for legacy grading", async () => {
+    grader.grade.mockResolvedValue(failed({ code: "grading.v3.output_limit" }));
+    await expect(liveText()).rejects.toBeInstanceOf(V3LegacyFallbackError);
   });
 
   it("live: the AI grading kill-switch stops v3 before any model work", async () => {
