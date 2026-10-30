@@ -211,6 +211,41 @@ describe("VariantRepository", () => {
     });
   });
 
+  describe("variant content formatting", () => {
+    const savedContent = async (variantContent: string, id = 101) => {
+      prismaService.questionVariant.update.mockResolvedValue(
+        createMockQuestionVariant({ id }),
+      );
+      await variantRepository.update(id, {
+        ...createMockVariantDto({ id, variantContent }),
+        questionId: 1,
+      });
+      const [[call]] = prismaService.questionVariant.update.mock.calls;
+      return call.data.variantContent as string;
+    };
+
+    it("keeps formatting tags so paragraphs, bold and code survive a publish", async () => {
+      const html =
+        "<p>What is the <strong>total</strong> in USD?</p><p>Hint: use <code>sum()</code>.</p>";
+
+      await expect(savedContent(html)).resolves.toBe(html);
+    });
+
+    it("drops images and tables, which are re-added from the parent question on read", async () => {
+      await expect(
+        savedContent(
+          '<p>Read the chart.</p><img src="a.png"><table><tr><td>1</td></tr></table>',
+        ),
+      ).resolves.toBe("<p>Read the chart.</p>");
+    });
+
+    it("stores a placeholder when only media and empty tags remain", async () => {
+      await expect(
+        savedContent('<p><img src="a.png"></p>', 7),
+      ).resolves.toMatch(/^Media-only variant \S+-7$/);
+    });
+  });
+
   describe("markAsDeleted", () => {
     it("should mark variants as deleted", async () => {
       const variantIds = [101, 102];
