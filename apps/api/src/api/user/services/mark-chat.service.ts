@@ -4,7 +4,6 @@
 import { openai } from "@ai-sdk/openai";
 import {
   BadRequestException,
-  ForbiddenException,
   HttpException,
   Inject,
   Injectable,
@@ -20,9 +19,6 @@ import {
 import { Response } from "express";
 import { AiFeatureComponent } from "src/api/ai-feature-flags/ai-feature-flags.constants";
 import { AiFeatureFlagsService } from "src/api/ai-feature-flags/ai-feature-flags.service";
-import { FileContentExtractionService } from "src/api/attempt/services/file-content-extraction";
-import { FileProcessingBudgetService } from "src/api/files/services/file-processing-budget.service";
-import { S3Service } from "src/api/files/services/s3.service";
 import { logAiInvocation } from "src/api/llm/core/utils/ai-invocation-log.util";
 import { DEFAULT_LLM_MODEL } from "src/api/llm/llm.constants";
 import {
@@ -38,7 +34,7 @@ import {
   collectToolResultsAcrossSteps,
   partitionClientExecutions,
 } from "./chat-tool-results";
-import { ChatService } from "./chat.service";
+import { LEARNER_HELP_GUIDE } from "./mark-chat-knowledge";
 
 type MarkChatRole = "system" | "user" | "assistant";
 
@@ -80,45 +76,10 @@ const MESSAGE_TOKEN_OVERHEAD = 12;
 const CHARS_PER_TOKEN_ESTIMATE = 4;
 const CONTEXT_WINDOW_WARNING =
   "⚠️ Some older chat context was trimmed to fit the model limit. If you need earlier details, start a new chat.";
-const MIN_FILE_EXTRACT_CHARS = 500;
-const DEFAULT_FILE_EXTRACT_CHARS = 20 * 1000;
-const MAX_FILE_EXTRACT_CHARS_HARD_CAP = 500 * 1000;
-const MAX_FILE_BYTES = 10 * 1024 * 1024;
+const TOOL_ONLY_FALLBACK_MESSAGE =
+  "I looked up the details. Tell me what you would like help with.";
+const MIN_TRUNCATE_CHARS = 500;
 const MAX_TOOL_STEPS = 5;
-const FILE_SECTION_HEADERS = [
-  "files already available in this chat session:",
-  "files available in this chat:",
-  "new files attached for this message:",
-  "full content for selected files:",
-];
-
-function startsFileSection(line: string): boolean {
-  const lower = line.toLowerCase();
-  return FILE_SECTION_HEADERS.some((header) => lower.startsWith(header));
-}
-
-function isFileMetadataLine(line: string): boolean {
-  const lower = line.toLowerCase();
-  return (
-    /^\d+\.\s+.+\((\d+(\.\d+)?)\s*(b|kb|mb|gb|bytes?)\)$/i.test(line) ||
-    lower.startsWith("type:") ||
-    lower.startsWith("s3 link:") ||
-    lower.startsWith("bucket:") ||
-    lower.startsWith("key:") ||
-    lower.startsWith("summary:") ||
-    lower.startsWith("<file_summary>") ||
-    lower.startsWith("</file_summary>")
-  );
-}
-
-function isFileHintLine(line: string): boolean {
-  const lower = line.toLowerCase();
-  return (
-    lower.startsWith("when the user asks about these files") ||
-    lower.includes("extractfilefromlink") ||
-    lower.includes("summarizefilefromlink")
-  );
-}
 
 function withErrorHandling<TArguments extends any[], TResult>(
   function_: (...arguments_: TArguments) => Promise<TResult>,
@@ -146,11 +107,7 @@ export class MarkChatService {
   private readonly logger: Logger;
 
   constructor(
-    private readonly s3Service: S3Service,
-    private readonly fileContentExtractionService: FileContentExtractionService,
-    private readonly chatService: ChatService,
     private readonly chatRepository: ChatRepository,
-    private readonly processingBudget: FileProcessingBudgetService,
     private readonly aiFlags: AiFeatureFlagsService,
     @Inject(WINSTON_MODULE_PROVIDER) parentLogger: Logger,
   ) {
@@ -243,7 +200,7 @@ export class MarkChatService {
   ): string {
     if (!content) return "";
     const maxChars = Math.max(
-      MIN_FILE_EXTRACT_CHARS,
+      MIN_TRUNCATE_CHARS,
       tokenBudget * CHARS_PER_TOKEN_ESTIMATE,
     );
     if (content.length <= maxChars) {
@@ -295,33 +252,6 @@ export class MarkChatService {
     }
 
     return { messages: selected.reverse(), contextTrimmed };
-  }
-
-  private getMaxFileExtractChars(): number {
-    const modelBasedFallback = Math.max(
-      DEFAULT_FILE_EXTRACT_CHARS,
-      Math.floor(
-        (this.getModelContextTokenLimit() - this.getResponseTokenLimit()) *
-          CHARS_PER_TOKEN_ESTIMATE *
-          0.75,
-      ),
-    );
-
-    return this.readIntFromEnv(
-      "MARK_CHAT_MAX_FILE_EXTRACT_CHARS",
-      modelBasedFallback,
-      MIN_FILE_EXTRACT_CHARS,
-      MAX_FILE_EXTRACT_CHARS_HARD_CAP,
-    );
-  }
-
-  private getDefaultFileExtractChars(maxAllowedChars: number): number {
-    return this.readIntFromEnv(
-      "MARK_CHAT_DEFAULT_FILE_EXTRACT_CHARS",
-      Math.min(DEFAULT_FILE_EXTRACT_CHARS, maxAllowedChars),
-      MIN_FILE_EXTRACT_CHARS,
-      maxAllowedChars,
-    );
   }
 
   /**
@@ -438,18 +368,10 @@ export class MarkChatService {
     const formattedMessages = formattedConversation.messages;
     const chatModel = this.getChatModel();
     const maxOutputTokens = this.getResponseTokenLimit();
-    const allowedLinks = await this.chatService.getAuthorizedChatFileLinks(
-      chatId,
-      userSession,
-    );
-    const roleTools =
+    const tools =
       userRole === "author"
         ? this.authorTools()
-        : this.learnerTools(userSession, assignmentInfo);
-    const tools: ToolSet = {
-      ...roleTools,
-      ...this.fileTools(allowedLinks),
-    };
+        : this.learnerTools(assignmentInfo);
 
     const result = await generateText({
       model: openai(chatModel),
@@ -550,18 +472,10 @@ export class MarkChatService {
     const formattedMessages = formattedConversation.messages;
     const chatModel = this.getChatModel();
     const maxOutputTokens = this.getResponseTokenLimit();
-    const allowedLinks = await this.chatService.getAuthorizedChatFileLinks(
-      chatId,
-      userSession,
-    );
-    const roleTools =
+    const tools =
       userRole === "author"
         ? this.authorTools()
-        : this.learnerTools(userSession, assignmentInfo);
-    const tools: ToolSet = {
-      ...roleTools,
-      ...this.fileTools(allowedLinks),
-    };
+        : this.learnerTools(assignmentInfo);
 
     const result = streamText({
       model: openai(chatModel),
@@ -623,7 +537,7 @@ export class MarkChatService {
         partitionClientExecutions(collectToolResultsAcrossSteps(steps));
 
       if (!fullContent.trim() && nonClientToolOutputs.length > 0) {
-        const fallback = this.buildToolOnlyFallback(nonClientToolOutputs);
+        const fallback = TOOL_ONLY_FALLBACK_MESSAGE;
         fullContent += fallback;
         writeChunk(fallback);
       }
@@ -667,63 +581,6 @@ export class MarkChatService {
     } finally {
       response.end();
     }
-  }
-
-  private buildToolOnlyFallback(
-    toolOutputs: Array<{ toolName?: string; rawResult: string }>,
-  ): string {
-    const rows: string[] = [];
-
-    for (const output of toolOutputs) {
-      if (output.toolName === "summarizeFileFromLink") {
-        const withoutLinks = output.rawResult
-          .split("\n")
-          .filter((line) => !line.trim().toLowerCase().startsWith("link:"))
-          .join("\n")
-          .trim();
-
-        const fileMatch = withoutLinks.match(/file summary:\s*(.+)/i);
-        const fileName = fileMatch?.[1]?.trim();
-        const shortBody = withoutLinks
-          .replace(/file summary:\s*.+/i, "")
-          .replace(/summary:\s*/i, "")
-          .trim()
-          .slice(0, 260)
-          .trim();
-
-        if (fileName && shortBody) {
-          rows.push(
-            `- ${fileName}: ${shortBody}${shortBody.endsWith("...") ? "" : "..."}`,
-          );
-          continue;
-        }
-      }
-
-      if (output.toolName === "extractFileFromLink") {
-        const fileMatch = output.rawResult.match(/file:\s*(.+)/i);
-        const fileName = fileMatch?.[1]?.trim() || "file";
-        const contentMatch = output.rawResult.match(
-          /<file_content>\s*([\S\s]*?)\s*<\/file_content>/i,
-        );
-        const content = contentMatch?.[1]
-          ?.replace(/\s+/g, " ")
-          .trim()
-          .slice(0, 220);
-
-        if (content) {
-          rows.push(
-            `- ${fileName}: ${content}${content.endsWith("...") ? "" : "..."}`,
-          );
-          continue;
-        }
-      }
-    }
-
-    if (rows.length > 0) {
-      return `Here’s what I found:\n${rows.join("\n")}`;
-    }
-
-    return "I checked the attached files. Ask me for a summary, comparison, or specific file details.";
   }
 
   private formatMessages(
@@ -955,18 +812,15 @@ The assignment has been submitted. You can:
 1. Help explain feedback and grades
 2. Clarify why answers were marked wrong
 3. Provide learning guidance for improvement
-4. Support regrading requests if appropriate
 `
     : ""
 }
 
 TOOL USAGE:
-- Use searchKnowledgeBase for platform help
+- Use the PLATFORM HELP guide below for questions about uploads, grading, results and attempts
 - Use reportIssue ONLY for technical issues after troubleshooting
 - Use getQuestionDetails for question information
 - Use getAssignmentRubric for grading criteria
-- Use submitFeedbackQuestion for feedback concerns
-- Use requestRegrading for regrade requests
 - Use provideFeedback for sharing general feedback about learning experience
 - Use submitSuggestion for platform improvement ideas
 - Use submitInquiry for general questions or inquiries
@@ -979,23 +833,16 @@ RESPONSE STYLE:
 - Use clear, simple language
 - Break down complex explanations
 - Use emojis sparingly to add warmth
-- Always end with a question or next step to keep engagement`,
+- Always end with a question or next step to keep engagement
+
+${LEARNER_HELP_GUIDE}`,
     };
 
-    const fileToolGuidance = `
+    const prefillGuidance = `
 
-FILE LINK WORKFLOW:
-- When chat context includes S3 links (format: s3://bucket/key), use tools to inspect files.
-- Use \`extractFileFromLink\` when you need exact file content before answering.
-- Use \`summarizeFileFromLink\` when the user asks for a quick overview.
-- Never claim file details unless they came from a tool result in this chat.
-- Keep file answers concise and user-friendly (no raw dumps).
-- Do not expose S3 links, bucket names, or keys.
-- For multi-file summaries, use this format: \`- <file name>: <one short sentence>\`.
-- Prefer the user-facing file names from chat context and avoid internal storage names.
-- For report/feedback/suggestion/inquiry form prefills, use only the user’s latest request. Do not include unrelated file lists.`;
+For report/feedback/suggestion/inquiry form prefills, use only the user’s latest request.`;
 
-    return (systemPrompts[userRole] || "") + fileToolGuidance;
+    return (systemPrompts[userRole] || "") + prefillGuidance;
   }
 
   /**
@@ -1013,49 +860,6 @@ FILE LINK WORKFLOW:
       params: formParameters,
       note: "A pre-filled form was opened in the chat window, but NOTHING has been submitted yet. Ask the user to review the form and press Submit to file it. Do not claim the report, feedback, suggestion, or inquiry was already submitted.",
     });
-  }
-
-  private sanitizePrefillDescription(description: string): string {
-    const normalized = (description || "").trim();
-    if (!normalized) return "";
-
-    const lines = normalized.split(/\r?\n/);
-    const cleanedLines: string[] = [];
-    let skippingFileSection = false;
-
-    for (const rawLine of lines) {
-      const line = rawLine.trim();
-
-      if (startsFileSection(line)) {
-        skippingFileSection = true;
-        continue;
-      }
-
-      if (skippingFileSection) {
-        if (!line || isFileMetadataLine(line) || isFileHintLine(line)) {
-          continue;
-        }
-        if (/^\d+\.\s+/.test(line)) {
-          continue;
-        }
-        skippingFileSection = false;
-      }
-
-      if (
-        cleanedLines.length === 0 &&
-        (isFileMetadataLine(line) || isFileHintLine(line))
-      ) {
-        continue;
-      }
-
-      const lastLine = cleanedLines.at(-1);
-      if (line || (cleanedLines.length > 0 && lastLine !== "")) {
-        cleanedLines.push(line);
-      }
-    }
-
-    const cleaned = cleanedLines.join("\n").trim();
-    return cleaned || normalized;
   }
 
   private toToolSet(
@@ -1317,18 +1121,6 @@ FILE LINK WORKFLOW:
             params: parameters,
           }),
       },
-      searchKnowledgeBase: {
-        description:
-          "Search the knowledge base for information about the platform or features",
-        inputSchema: z.object({
-          query: z
-            .string()
-            .describe("The search query to find relevant information"),
-        }),
-        execute: withErrorHandling(async ({ query }: { query: string }) => {
-          return this.searchKnowledgeBase(query);
-        }),
-      },
       reportIssue: {
         description:
           "Open a pre-filled issue-report form for a technical issue or bug with the platform. The issue is only reported once the user reviews and submits the form. Extract the user's issue description and use it to prefill the form.",
@@ -1363,11 +1155,9 @@ FILE LINK WORKFLOW:
           assignmentId?: number;
           severity?: string;
         }) => {
-          const sanitizedDescription =
-            this.sanitizePrefillDescription(description);
           return this.showReportPreviewResult({
             issueType,
-            description: sanitizedDescription,
+            description: description.trim(),
             assignmentId,
             severity: severity || "info",
             userRole: "author",
@@ -1409,12 +1199,10 @@ FILE LINK WORKFLOW:
           assignmentId?: number;
           rating?: number;
         }) => {
-          const sanitizedDescription =
-            this.sanitizePrefillDescription(description);
           return this.showReportPreviewResult({
             type: "feedback",
             issueType: "FEEDBACK",
-            description: sanitizedDescription,
+            description: description.trim(),
             assignmentId,
             rating,
             userRole: "author",
@@ -1448,12 +1236,10 @@ FILE LINK WORKFLOW:
           description: string;
           assignmentId?: number;
         }) => {
-          const sanitizedDescription =
-            this.sanitizePrefillDescription(description);
           return this.showReportPreviewResult({
             type: "suggestion",
             issueType: "SUGGESTION",
-            description: sanitizedDescription,
+            description: description.trim(),
             assignmentId,
             userRole: "author",
             category: "Author Suggestion",
@@ -1486,12 +1272,10 @@ FILE LINK WORKFLOW:
           description: string;
           assignmentId?: number;
         }) => {
-          const sanitizedDescription =
-            this.sanitizePrefillDescription(description);
           return this.showReportPreviewResult({
             type: "inquiry",
             issueType: "OTHER",
-            description: sanitizedDescription,
+            description: description.trim(),
             assignmentId,
             userRole: "author",
             category: "Author Inquiry",
@@ -1501,27 +1285,8 @@ FILE LINK WORKFLOW:
     });
   }
 
-  private learnerTools(
-    userSession: UserSession,
-    assignmentInfo?: MarkChatMessage,
-  ): ToolSet {
-    const assignmentIdFromContext = this.extractAssignmentIdFromContext(
-      assignmentInfo?.content,
-    );
-
+  private learnerTools(assignmentInfo?: MarkChatMessage): ToolSet {
     return this.toToolSet({
-      searchKnowledgeBase: {
-        description:
-          "Search the knowledge base for information about the platform or features",
-        inputSchema: z.object({
-          query: z
-            .string()
-            .describe("The search query to find relevant information"),
-        }),
-        execute: withErrorHandling(async ({ query }: { query: string }) => {
-          return this.searchKnowledgeBase(query);
-        }),
-      },
       reportIssue: {
         description:
           "Open a pre-filled issue-report form for a technical issue or bug with the platform. The issue is only reported once the user reviews and submits the form. Extract the user's issue description and use it to prefill the form.",
@@ -1556,12 +1321,10 @@ FILE LINK WORKFLOW:
           assignmentId?: number;
           severity?: string;
         }) => {
-          const sanitizedDescription =
-            this.sanitizePrefillDescription(description);
           return this.showReportPreviewResult({
             type: "report",
             issueType,
-            description: sanitizedDescription,
+            description: description.trim(),
             assignmentId,
             severity: severity || "info",
             userRole: "learner",
@@ -1603,12 +1366,10 @@ FILE LINK WORKFLOW:
           assignmentId?: number;
           rating?: number;
         }) => {
-          const sanitizedDescription =
-            this.sanitizePrefillDescription(description);
           return this.showReportPreviewResult({
             type: "feedback",
             issueType: "FEEDBACK",
-            description: sanitizedDescription,
+            description: description.trim(),
             assignmentId,
             rating,
             userRole: "learner",
@@ -1642,12 +1403,10 @@ FILE LINK WORKFLOW:
           description: string;
           assignmentId?: number;
         }) => {
-          const sanitizedDescription =
-            this.sanitizePrefillDescription(description);
           return this.showReportPreviewResult({
             type: "suggestion",
             issueType: "SUGGESTION",
-            description: sanitizedDescription,
+            description: description.trim(),
             assignmentId,
             userRole: "learner",
             category: "Learner Suggestion",
@@ -1680,12 +1439,10 @@ FILE LINK WORKFLOW:
           description: string;
           assignmentId?: number;
         }) => {
-          const sanitizedDescription =
-            this.sanitizePrefillDescription(description);
           return this.showReportPreviewResult({
             type: "inquiry",
             issueType: "OTHER",
-            description: sanitizedDescription,
+            description: description.trim(),
             assignmentId,
             userRole: "learner",
             category: "Learner Inquiry",
@@ -1723,376 +1480,7 @@ FILE LINK WORKFLOW:
           },
         ),
       },
-      submitFeedbackQuestion: {
-        description:
-          "Submit a question about feedback that requires instructor attention",
-        inputSchema: z.object({
-          questionId: z
-            .number()
-            .describe("The ID of the question being asked about"),
-          feedbackQuery: z
-            .string()
-            .describe("The specific question or concern about the feedback"),
-        }),
-        execute: withErrorHandling(
-          async ({
-            questionId,
-            feedbackQuery,
-          }: {
-            questionId: number;
-            feedbackQuery: string;
-          }) => {
-            return `Your feedback question for question ${questionId} has been recorded: "${feedbackQuery}". An instructor will review it soon.`;
-          },
-        ),
-      },
-      requestRegrading: {
-        description: "Submit a formal request for regrading an assignment",
-        inputSchema: z.object({
-          assignmentId: z
-            .number()
-            .describe("The ID of the assignment to be regraded")
-            .optional(),
-          attemptId: z
-            .number()
-            .describe("The ID of the attempt to be regraded")
-            .optional(),
-          reason: z.string().describe("The reason for requesting regrading"),
-        }),
-        execute: withErrorHandling(
-          async ({
-            assignmentId,
-            reason,
-          }: {
-            assignmentId?: number;
-            reason: string;
-          }) => {
-            // The session owns the assignment a regrade can name; the
-            // model-supplied and conversation-supplied ids are fallbacks for
-            // sessions that carry no assignment.
-            const resolvedAssignmentId =
-              userSession.assignmentId ||
-              assignmentId ||
-              assignmentIdFromContext ||
-              0;
-            const requestId = `RG-${Date.now().toString(36).toUpperCase()}`;
-            return `Your request for regrading of assignment ${resolvedAssignmentId} has been submitted with the following reason: "${reason}". The instructor will review your request and respond as soon as possible. For reference, your request ID is ${requestId}.`;
-          },
-        ),
-      },
     });
-  }
-
-  private fileTools(allowedLinks: Set<string>): ToolSet {
-    const maxFileExtractChars = this.getMaxFileExtractChars();
-
-    return this.toToolSet({
-      extractFileFromLink: {
-        description:
-          "Extract readable text from an S3 link in the format s3://bucket/key. Use this when the user asks about file details.",
-        inputSchema: z.object({
-          link: z
-            .string()
-            .describe("S3 link from chat context, e.g. s3://bucket/key"),
-          maxChars: z
-            .number()
-            .min(MIN_FILE_EXTRACT_CHARS)
-            .max(maxFileExtractChars)
-            .optional()
-            .describe("Maximum characters to return"),
-        }),
-        execute: withErrorHandling(
-          async ({ link, maxChars }: { link: string; maxChars?: number }) => {
-            if (!allowedLinks.has(link)) {
-              throw new ForbiddenException("File not attached to this chat.");
-            }
-            const safeMaxChars = this.normalizeMaxChars(
-              maxChars,
-              maxFileExtractChars,
-            );
-            const extracted = await this.extractFileTextFromLink(
-              link,
-              safeMaxChars,
-            );
-            return [
-              `File: ${extracted.filename}`,
-              `Link: ${link}`,
-              `Characters returned: ${extracted.content.length}`,
-              "",
-              "<file_content>",
-              extracted.content,
-              "</file_content>",
-            ].join("\n");
-          },
-        ),
-      },
-      summarizeFileFromLink: {
-        description:
-          "Summarize a file from an S3 link in the format s3://bucket/key.",
-        inputSchema: z.object({
-          link: z
-            .string()
-            .describe("S3 link from chat context, e.g. s3://bucket/key"),
-          maxChars: z
-            .number()
-            .min(MIN_FILE_EXTRACT_CHARS)
-            .max(maxFileExtractChars)
-            .optional()
-            .describe("Maximum characters to read before summarizing"),
-        }),
-        execute: withErrorHandling(
-          async ({ link, maxChars }: { link: string; maxChars?: number }) => {
-            if (!allowedLinks.has(link)) {
-              throw new ForbiddenException("File not attached to this chat.");
-            }
-            const safeMaxChars = this.normalizeMaxChars(
-              maxChars,
-              maxFileExtractChars,
-            );
-            const extracted = await this.extractFileTextFromLink(
-              link,
-              safeMaxChars,
-            );
-            const summary = this.buildContentSummary(extracted.content);
-            return [
-              `File summary: ${extracted.filename}`,
-              `Link: ${link}`,
-              summary,
-            ].join("\n");
-          },
-        ),
-      },
-    });
-  }
-
-  private normalizeMaxChars(
-    maxChars: number | undefined,
-    maxAllowedChars: number,
-  ): number {
-    const defaultChars = this.getDefaultFileExtractChars(maxAllowedChars);
-
-    if (!maxChars || !Number.isFinite(maxChars)) {
-      return defaultChars;
-    }
-    return Math.min(
-      maxAllowedChars,
-      Math.max(MIN_FILE_EXTRACT_CHARS, Math.floor(maxChars)),
-    );
-  }
-
-  private parseS3Link(link: string): { bucket: string; key: string } {
-    if (!link || !link.startsWith("s3://")) {
-      throw new BadRequestException("Only s3:// links are supported.");
-    }
-
-    const withoutScheme = link.slice("s3://".length);
-    const firstSlashIndex = withoutScheme.indexOf("/");
-    if (firstSlashIndex <= 0 || firstSlashIndex === withoutScheme.length - 1) {
-      throw new BadRequestException("Invalid S3 link format.");
-    }
-
-    const bucket = withoutScheme.slice(0, firstSlashIndex).trim();
-    const rawKey = withoutScheme.slice(firstSlashIndex + 1);
-    let key: string;
-    try {
-      key = decodeURIComponent(rawKey);
-    } catch {
-      key = rawKey;
-    }
-
-    if (!bucket || !key) {
-      throw new BadRequestException("Invalid S3 link format.");
-    }
-
-    return { bucket, key };
-  }
-
-  private async extractFileTextFromLink(
-    link: string,
-    maxChars: number,
-  ): Promise<{ filename: string; content: string }> {
-    const { bucket, key } = this.parseS3Link(link);
-    const filename = this.toDisplayFileName(key);
-
-    const response = await this.s3Service.getObject({
-      Bucket: bucket,
-      Key: key,
-    });
-
-    const fileSize = Number(response.ContentLength ?? 0);
-    if (fileSize > MAX_FILE_BYTES) {
-      if (
-        response.Body &&
-        typeof (response.Body as { destroy?: () => void }).destroy ===
-          "function"
-      ) {
-        (response.Body as { destroy: () => void }).destroy();
-      }
-      throw new BadRequestException(
-        `File is too large to extract (${fileSize} bytes). Max allowed is ${MAX_FILE_BYTES} bytes.`,
-      );
-    }
-
-    const reservation = Math.max(fileSize, 1);
-    await this.processingBudget.acquire(reservation);
-    try {
-      const contentType =
-        typeof response.ContentType === "string"
-          ? response.ContentType
-          : undefined;
-
-      let fileBuffer: Buffer;
-      if (response.Body instanceof Buffer) {
-        fileBuffer = response.Body;
-      } else if (response.Body) {
-        const chunks: Uint8Array[] = [];
-        const stream = response.Body as NodeJS.ReadableStream;
-        fileBuffer = await new Promise<Buffer>((resolve, reject) => {
-          stream.on("data", (chunk) =>
-            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)),
-          );
-          stream.on("end", () => resolve(Buffer.concat(chunks)));
-          stream.on("error", reject);
-        });
-      } else {
-        throw new BadRequestException(`Could not retrieve file: ${key}`);
-      }
-
-      const [extractedFile] =
-        await this.fileContentExtractionService.extractContentFromFiles(
-          [
-            {
-              filename,
-              content: "",
-              fileType: contentType,
-              bucket,
-              key,
-              buffer: fileBuffer,
-            },
-          ],
-          {
-            useStructuredExtraction: false,
-            useVisionForPDFs: false,
-          },
-        );
-
-      const normalized = (
-        extractedFile?.extractedText ||
-        extractedFile?.content ||
-        ""
-      )
-        .replaceAll("\0", "")
-        .trim();
-      if (!normalized) {
-        return { filename, content: "No readable text content found." };
-      }
-
-      return {
-        filename,
-        content:
-          normalized.length > maxChars
-            ? normalized.slice(0, maxChars) + "\n...[truncated]"
-            : normalized,
-      };
-    } finally {
-      this.processingBudget.release(reservation);
-    }
-  }
-
-  private toDisplayFileName(key: string): string {
-    const keyTail = key.split("/").pop() || key;
-    let decodedTail: string;
-    try {
-      decodedTail = decodeURIComponent(keyTail);
-    } catch {
-      decodedTail = keyTail;
-    }
-    const randomPrefixMatch = decodedTail.match(
-      /^[\da-z]{10,}-(.+\.[\da-z]{1,10})$/i,
-    );
-
-    if (randomPrefixMatch?.[1]) {
-      return randomPrefixMatch[1];
-    }
-
-    return decodedTail;
-  }
-
-  private buildContentSummary(content: string): string {
-    const normalized = content.split(/\s+/).join(" ").trim();
-    if (!normalized) return "Summary: No readable text found.";
-
-    const words = normalized.split(" ").filter(Boolean);
-    const sentenceCandidates = content
-      .split(/\n+/)
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0)
-      .slice(0, 8);
-    const highlights = sentenceCandidates
-      .map((line, index) => `${index + 1}. ${line}`)
-      .join("\n");
-
-    const shortSummary =
-      normalized.length > 1000 ? normalized.slice(0, 1000) + "..." : normalized;
-
-    return [
-      `Summary:`,
-      `- Approx words: ${words.length}`,
-      `- Key excerpts:`,
-      highlights || "1. (No clear excerpts found)",
-      "",
-      `Short overview:`,
-      shortSummary,
-    ].join("\n");
-  }
-
-  private searchKnowledgeBase(query: string): string {
-    const knowledgeItems = [
-      {
-        id: "kb-1",
-        title: "Multiple Choice Questions",
-        description:
-          "Multiple choice questions allow learners to select one correct answer from several options. They're great for testing recall and recognition.",
-      },
-      {
-        id: "kb-2",
-        title: "Assignment Feedback",
-        description:
-          "Feedback is provided automatically for assignments based on the rubric and AI evaluation of the learner's responses.",
-      },
-      {
-        id: "kb-3",
-        title: "Practice vs. Graded Assignments",
-        description:
-          "Practice assignments allow unlimited attempts and provide detailed feedback. Graded assignments may have limited attempts and contribute to a final grade.",
-      },
-      {
-        id: "kb-4",
-        title: "Regrading Process",
-        description:
-          "You can request regrading if you believe your submission was incorrectly assessed. Instructors will review your request and adjust scores if appropriate.",
-      },
-      {
-        id: "kb-5",
-        title: "Technical Issues",
-        description:
-          "If you encounter technical issues with the platform, you can report them through Mark. Include the specific steps to reproduce the issue and any error messages you see.",
-      },
-    ];
-
-    const results = knowledgeItems.filter(
-      (item) =>
-        item.title.toLowerCase().includes(query.toLowerCase()) ||
-        item.description.toLowerCase().includes(query.toLowerCase()),
-    );
-
-    if (results.length === 0) {
-      return "I couldn't find specific information about that in our knowledge base, but I'll try to help based on my general knowledge.";
-    }
-
-    return results
-      .map((item) => `**${item.title}**\n${item.description}`)
-      .join("\n\n");
   }
 
   private getQuestionDetailsFromContext(

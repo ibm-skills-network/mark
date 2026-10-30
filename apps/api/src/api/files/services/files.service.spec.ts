@@ -192,70 +192,19 @@ describe("FilesService", () => {
     ).rejects.toThrow(BadRequestException);
   });
 
-  it("chatbot upload routes to the learner bucket with a server-controlled prefix", async () => {
-    const s3 = mockS3Service as unknown as {
-      getBucketName: jest.Mock;
-      getSignedUrl: jest.Mock;
-    };
-    s3.getBucketName.mockReturnValue("learner-bucket");
-    s3.getSignedUrl.mockResolvedValue("https://signed-upload-url");
-
-    const result = await service.generateUploadUrl(
-      {
-        fileName: "chat-file.pdf",
-        fileType: "application/pdf",
-        fileSize: 2048,
-        uploadType: UploadType.CHATBOT,
-      },
-      "user-456",
-      UserRole.LEARNER,
-    );
-
-    expect(result.bucket).toBe("learner-bucket");
-    expect(result.key).toMatch(/^chatbot\/user-456\/.+-chat-file\.pdf$/);
-    expect(s3.getBucketName).toHaveBeenCalledWith(UploadType.CHATBOT);
-  });
-
-  it("rejects chatbot uploads with unsupported MIME types", async () => {
-    const s3 = mockS3Service as unknown as {
-      getBucketName: jest.Mock;
-    };
-    s3.getBucketName.mockReturnValue("learner-bucket");
-
+  it("rejects the retired chatbot upload type", async () => {
     await expect(
       service.generateUploadUrl(
         {
-          fileName: "payload.exe",
-          fileType: "application/x-msdownload",
+          fileName: "chat-file.pdf",
+          fileType: "application/pdf",
           fileSize: 2048,
-          uploadType: UploadType.CHATBOT,
+          uploadType: "chatbot" as UploadType,
         },
         "user-456",
         UserRole.LEARNER,
       ),
-    ).rejects.toThrow("Unsupported file extension for chatbot upload.");
-  });
-
-  it("rejects chatbot uploads when MIME type and extension do not match", async () => {
-    const s3 = mockS3Service as unknown as {
-      getBucketName: jest.Mock;
-    };
-    s3.getBucketName.mockReturnValue("learner-bucket");
-
-    await expect(
-      service.generateUploadUrl(
-        {
-          fileName: "notes.pdf",
-          fileType: "text/plain",
-          fileSize: 2048,
-          uploadType: UploadType.CHATBOT,
-        },
-        "user-456",
-        UserRole.LEARNER,
-      ),
-    ).rejects.toThrow(
-      "File extension does not match the provided MIME type for chatbot upload.",
-    );
+    ).rejects.toThrow(ForbiddenException);
   });
 
   it("generates public read URLs from the public bucket", async () => {
@@ -799,7 +748,6 @@ describe("FilesService", () => {
     it.each([
       ["learner", "42/learner@example.com/7/a.pdf"],
       ["learner-prod", "42/learner@example.com/7/a.pdf"],
-      ["chatbot", "chatbot/learner@example.com/a.png"],
     ])("lets a learner delete their own %s upload", (uploadType, key) => {
       expect(() =>
         service.assertDeleteAllowed(uploadType, key, learner),
@@ -816,9 +764,9 @@ describe("FilesService", () => {
       ["an author file", "author", "authors/someone/a.pdf"],
       ["a debug file", "debug", "debug/1/a.log"],
       [
-        "another user's chat file",
+        "their own retired chat file",
         "chatbot",
-        "chatbot/other@example.com/a.png",
+        "chatbot/learner@example.com/a.png",
       ],
     ])("404s a learner deleting %s", (_label, uploadType, key) => {
       expect(() =>
@@ -826,7 +774,7 @@ describe("FilesService", () => {
       ).toThrow(NotFoundException);
     });
 
-    it("keeps authors to their own author files and their own chat files", () => {
+    it("keeps authors to their own author files", () => {
       const author = { ...learner, role: UserRole.AUTHOR };
       expect(() =>
         service.assertDeleteAllowed(

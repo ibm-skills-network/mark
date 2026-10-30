@@ -76,6 +76,7 @@ export class ChatRepository {
     return this.prisma.chat.findMany({
       where: {
         userId,
+        messages: { some: {} },
       },
       orderBy: {
         lastActiveAt: "desc",

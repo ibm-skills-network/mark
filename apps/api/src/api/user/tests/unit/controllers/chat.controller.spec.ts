@@ -8,6 +8,7 @@ import {
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { PrismaService } from "src/database/prisma.service";
 import { ChatController } from "../../../controllers/chat.controller";
+import { AddChatMessageDto } from "../../../dto/add-chat-message.dto";
 import { ChatService } from "../../../services/chat.service";
 import { MarkChatService } from "../../../services/mark-chat.service";
 
@@ -16,6 +17,8 @@ describe("ChatController identity", () => {
   let chatService: {
     createChat: jest.Mock;
     getOrCreateTodayChat: jest.Mock;
+    findTodayChat: jest.Mock;
+    addMessage: jest.Mock;
   };
   let markChatService: { respond: jest.Mock; respondStream: jest.Mock };
   let warn: jest.Mock;
@@ -34,6 +37,8 @@ describe("ChatController identity", () => {
     chatService = {
       createChat: jest.fn().mockResolvedValue({ id: "chat-1" }),
       getOrCreateTodayChat: jest.fn().mockResolvedValue({ id: "chat-1" }),
+      findTodayChat: jest.fn().mockResolvedValue(null),
+      addMessage: jest.fn().mockResolvedValue({ id: 1 }),
     };
     markChatService = {
       respond: jest.fn().mockResolvedValue({ reply: "ok" }),
@@ -106,6 +111,53 @@ describe("ChatController identity", () => {
       expect.stringContaining("chat_identity"),
       expect.objectContaining({ user_id: learnerSession.userId }),
     );
+  });
+
+  it("saves only the role and text of a user message, never client tool calls", async () => {
+    await controller.addMessage("chat-1", {
+      role: "USER",
+      content: "hello",
+      toolCalls: { type: "file_attachments", files: [{ s3Link: "x" }] },
+    } as unknown as AddChatMessageDto);
+
+    expect(chatService.addMessage).toHaveBeenCalledWith(
+      "chat-1",
+      "USER",
+      "hello",
+    );
+  });
+
+  describe("today/lookup", () => {
+    it("returns today's chat for the session identity, not the body's", async () => {
+      const chat = { id: "chat-1", messages: [{ id: "m1" }] };
+      chatService.findTodayChat.mockResolvedValue(chat);
+
+      const result = await controller.lookupTodayChat(
+        { userId: "someone-else@example.test", assignmentId: 999999 },
+        requestOf(learnerSession),
+      );
+
+      expect(result).toBe(chat);
+      expect(chatService.findTodayChat).toHaveBeenCalledWith(
+        learnerSession.userId,
+        learnerSession.assignmentId,
+      );
+      expect(warn).toHaveBeenCalledWith(
+        expect.stringContaining("chat_identity"),
+        expect.objectContaining({ route: "today/lookup" }),
+      );
+    });
+
+    it("returns an empty placeholder and never creates when there is no chat", async () => {
+      const result = await controller.lookupTodayChat(
+        { assignmentId: learnerSession.assignmentId },
+        requestOf(learnerSession),
+      );
+
+      expect(result).toEqual({ id: null, messages: [] });
+      expect(chatService.getOrCreateTodayChat).not.toHaveBeenCalled();
+      expect(chatService.createChat).not.toHaveBeenCalled();
+    });
   });
 
   it("hands the respond route the session, not a body-declared role", async () => {

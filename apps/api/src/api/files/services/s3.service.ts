@@ -252,7 +252,6 @@ export class S3Service {
     learner: "IBM_COS_LEARNER_BUCKET",
     "learner-prod": "IBM_COS_LEARNER_BUCKET_PROD",
     debug: "IBM_COS_DEBUG_BUCKET",
-    chatbot: "IBM_COS_LEARNER_BUCKET",
   };
 
   getBucketName(uploadType: string): string {

@@ -1,24 +1,10 @@
-import {
-  BadRequestException,
-  ForbiddenException,
-  Injectable,
-} from "@nestjs/common";
+import { BadRequestException, Injectable } from "@nestjs/common";
 import { Chat, ChatMessage, ChatRole } from "@prisma/client";
-import { JsonValue } from "@prisma/client/runtime/library";
-import { S3Service } from "src/api/files/services/s3.service";
-import { UserSession } from "src/auth/interfaces/user.session.interface";
 import { ChatRepository } from "../repositories/chat.repository";
-import {
-  hasFileAttachmentToolCalls,
-  normalizeChatFileAttachmentToolCalls,
-} from "./chat-file-attachments";
 
 @Injectable()
 export class ChatService {
-  constructor(
-    private readonly chatRepository: ChatRepository,
-    private readonly s3Service: S3Service,
-  ) {}
+  constructor(private readonly chatRepository: ChatRepository) {}
 
   /**
    * Create a new chat session
@@ -28,6 +14,16 @@ export class ChatService {
     const title = `Chat Session - ${today}`;
 
     return this.chatRepository.createChat(userId, assignmentId, title);
+  }
+
+  /**
+   * Get user's active chat for today without creating one
+   */
+  async findTodayChat(
+    userId: string,
+    assignmentId?: number,
+  ): Promise<(Chat & { messages: ChatMessage[] }) | null> {
+    return this.chatRepository.findActiveChatForToday(userId, assignmentId);
   }
 
   /**
@@ -70,8 +66,6 @@ export class ChatService {
     chatId: string,
     role: ChatRole,
     content: string,
-    toolCalls?: JsonValue,
-    userSession?: UserSession,
   ): Promise<ChatMessage> {
     if (role !== ChatRole.USER) {
       throw new BadRequestException(
@@ -79,83 +73,7 @@ export class ChatService {
       );
     }
 
-    let sanitizedToolCalls = toolCalls;
-    if (role === ChatRole.USER) {
-      if (hasFileAttachmentToolCalls(toolCalls)) {
-        if (!userSession?.userId) {
-          throw new ForbiddenException(
-            "Missing user session for file attachments",
-          );
-        }
-
-        const normalizedToolCalls = normalizeChatFileAttachmentToolCalls(
-          toolCalls,
-          this.s3Service,
-          [userSession.userId],
-        );
-        const submittedFiles = Array.isArray(
-          (toolCalls as { files?: unknown[] })?.files,
-        )
-          ? (toolCalls as { files: unknown[] }).files.length
-          : 0;
-
-        if (
-          !normalizedToolCalls ||
-          normalizedToolCalls.files.length !== submittedFiles
-        ) {
-          throw new ForbiddenException(
-            "Invalid chat file attachment metadata.",
-          );
-        }
-
-        sanitizedToolCalls = normalizedToolCalls as unknown as JsonValue;
-      } else {
-        sanitizedToolCalls = undefined;
-      }
-    }
-
-    return this.chatRepository.addMessage(
-      chatId,
-      role,
-      content,
-      sanitizedToolCalls,
-    );
-  }
-
-  async getAuthorizedChatFileLinks(
-    chatId: string,
-    userSession: UserSession,
-  ): Promise<Set<string>> {
-    const chat = await this.chatRepository.findChatById(chatId, true);
-    if (!chat?.messages?.length) {
-      return new Set<string>();
-    }
-
-    const allowedUserIds = [
-      ...new Set([chat.userId, userSession.userId].filter(Boolean)),
-    ];
-    const links = new Set<string>();
-
-    for (const message of chat.messages) {
-      if (message.role !== ChatRole.USER) {
-        continue;
-      }
-
-      const normalizedToolCalls = normalizeChatFileAttachmentToolCalls(
-        message.toolCalls as JsonValue | undefined,
-        this.s3Service,
-        allowedUserIds,
-      );
-      if (!normalizedToolCalls) {
-        continue;
-      }
-
-      for (const file of normalizedToolCalls.files) {
-        links.add(file.s3Link);
-      }
-    }
-
-    return links;
+    return this.chatRepository.addMessage(chatId, role, content);
   }
 
   /**

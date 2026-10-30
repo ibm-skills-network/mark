@@ -48,53 +48,6 @@ export interface FileManagementScope {
   prefix: string;
 }
 
-const CHATBOT_ALLOWED_FILE_TYPES: Record<string, string[]> = {
-  "text/plain": [
-    ".txt",
-    ".md",
-    ".py",
-    ".js",
-    ".ts",
-    ".tsx",
-    ".css",
-    ".html",
-    ".sql",
-    ".sh",
-  ],
-  "application/pdf": [".pdf"],
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": [
-    ".docx",
-  ],
-  "application/vnd.openxmlformats-officedocument.presentationml.presentation": [
-    ".pptx",
-  ],
-  "text/csv": [".csv"],
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [
-    ".xlsx",
-  ],
-  "application/vnd.ms-excel": [".xls"],
-  "application/x-ipynb+json": [".ipynb"],
-  "text/javascript": [".js"],
-  "application/javascript": [".js"],
-  "application/typescript": [".ts", ".tsx"],
-  "text/typescript": [".ts", ".tsx"],
-  "video/mp2t": [".ts"],
-  "text/x-python": [".py"],
-  "application/x-python": [".py"],
-  "text/x-python-script": [".py"],
-  "text/html": [".html"],
-  "text/css": [".css"],
-  "application/sql": [".sql"],
-  "text/x-sql": [".sql"],
-  "application/x-sh": [".sh"],
-  "text/x-sh": [".sh"],
-  "application/x-shellscript": [".sh"],
-};
-
-const CHATBOT_ALLOWED_EXTENSIONS = new Set(
-  Object.values(CHATBOT_ALLOWED_FILE_TYPES).flat(),
-);
-
 /** Narrow untrusted JSON to a non-null, non-array object. */
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -221,7 +174,6 @@ export class FilesService {
       uploadType,
       fileName,
     );
-    this.validateUploadType(uploadType, fileType, fileName);
 
     let prefix = "";
     const normalizedPath = sanitizeUploadPath(context.path);
@@ -277,11 +229,6 @@ export class FilesService {
         }
 
         prefix = `${context.assignmentId}/${userId}/${context.questionId}/`;
-        break;
-      }
-
-      case UploadType.CHATBOT: {
-        prefix = `chatbot/${userId}/`;
         break;
       }
 
@@ -351,9 +298,8 @@ export class FilesService {
 
   /**
    * Who may delete which stored object. A learner may delete only their own
-   * answer uploads for the session's assignment (or their own chat
-   * attachments); an author only their own author files (under
-   * `authors/<userId>/`) or their own chat files; an admin anything. Keys with
+   * answer uploads for the session's assignment; an author only their own
+   * author files (under `authors/<userId>/`); an admin anything. Keys with
    * `.`/`..`/empty segments, backslashes or control characters never pass. Anything else is a bare 404 so the response never says whether
    * the object exists.
    */
@@ -365,7 +311,6 @@ export class FilesService {
     if (session.role === UserRole.ADMIN) {
       return;
     }
-    const ownChatPrefix = `chatbot/${session.userId}/`;
     let allowed = false;
     if (session.userId && typeof key === "string" && key.length > 0) {
       if (session.role === UserRole.LEARNER) {
@@ -373,15 +318,13 @@ export class FilesService {
           uploadType === UploadType.LEARNER ||
           uploadType === UploadType.LEARNER_PROD;
         allowed =
-          (isLearnerType &&
-            typeof session.assignmentId === "number" &&
-            key.startsWith(`${session.assignmentId}/${session.userId}/`)) ||
-          (uploadType === UploadType.CHATBOT && key.startsWith(ownChatPrefix));
+          isLearnerType &&
+          typeof session.assignmentId === "number" &&
+          key.startsWith(`${session.assignmentId}/${session.userId}/`);
       } else if (session.role === UserRole.AUTHOR) {
         allowed =
-          (uploadType === UploadType.AUTHOR &&
-            key.startsWith(authorUploadKeyPrefix(session.userId))) ||
-          (uploadType === UploadType.CHATBOT && key.startsWith(ownChatPrefix));
+          uploadType === UploadType.AUTHOR &&
+          key.startsWith(authorUploadKeyPrefix(session.userId));
       }
       allowed = allowed && isWellFormedStorageKey(key);
     }
@@ -517,12 +460,6 @@ export class FilesService {
         if (!isLearner && !isAdmin) denied();
         return;
       }
-      case UploadType.CHATBOT: {
-        // Chatbot keys are user-scoped (chatbot/<userId>/...). Both authors
-        // (testing the chat) and learners (using it) need to attach files.
-        if (!isAuthor && !isLearner && !isAdmin) denied();
-        return;
-      }
       case UploadType.DEBUG: {
         if (!isAdmin) denied();
         return;
@@ -541,7 +478,6 @@ export class FilesService {
       [UploadType.LEARNER]: process.env.LEARNER_UPLOAD_MAX_BYTES,
       [UploadType.LEARNER_PROD]: process.env.LEARNER_UPLOAD_MAX_BYTES,
       [UploadType.DEBUG]: process.env.DEBUG_UPLOAD_MAX_BYTES,
-      [UploadType.CHATBOT]: process.env.LEARNER_UPLOAD_MAX_BYTES,
     };
 
     const globalEnvironment = process.env.UPLOAD_MAX_BYTES;
@@ -575,44 +511,6 @@ export class FilesService {
     }
 
     return maxAllowedBytes;
-  }
-
-  private validateChatbotUploadType(fileType: string, fileName: string): void {
-    const normalizedFileType = fileType.trim().toLowerCase();
-    const extension = fileName.includes(".")
-      ? `.${fileName.split(".").pop()?.toLowerCase() || ""}`
-      : "";
-
-    if (!extension || !CHATBOT_ALLOWED_EXTENSIONS.has(extension)) {
-      throw new BadRequestException(
-        "Unsupported file extension for chatbot upload.",
-      );
-    }
-
-    if (!normalizedFileType) {
-      return;
-    }
-
-    const allowedExtensions = CHATBOT_ALLOWED_FILE_TYPES[normalizedFileType];
-    if (!allowedExtensions) {
-      throw new BadRequestException("Unsupported mimeType for chatbot upload.");
-    }
-
-    if (!allowedExtensions.includes(extension)) {
-      throw new BadRequestException(
-        "File extension does not match the provided MIME type for chatbot upload.",
-      );
-    }
-  }
-
-  private validateUploadType(
-    uploadType: UploadType,
-    fileType: string,
-    fileName: string,
-  ): void {
-    if (uploadType === UploadType.CHATBOT) {
-      this.validateChatbotUploadType(fileType, fileName);
-    }
   }
 
   private monitorUploadRequest(parameters: {

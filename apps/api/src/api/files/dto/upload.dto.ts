@@ -15,7 +15,6 @@ export enum UploadType {
   LEARNER = "learner",
   LEARNER_PROD = "learner-prod",
   DEBUG = "debug",
-  CHATBOT = "chatbot",
 }
 
 export class UploadContextDto {

@@ -198,7 +198,7 @@ export async function uploadFileToStorage(
     wantsMultipart ? "multipart_initiate" : "presign",
   );
   // Learner uploads are the ones whose silent failures leave empty answers;
-  // author and chatbot uploads fail in front of someone who can retry.
+  // author uploads fail in front of someone who can retry.
   const report =
     resolvedUploadRequest.uploadType === "learner"
       ? (outcome: "failed" | "fallback_succeeded") =>
@@ -1289,70 +1289,6 @@ export interface Chat {
   messages?: ChatMessage[];
 }
 
-interface Report {
-  id: string;
-  issueType: string;
-  description: string;
-  status: string;
-  statusMessage?: string;
-  resolution?: string;
-  createdAt: string;
-  updatedAt: string;
-  issueNumber?: string;
-  severity?: string;
-  assignmentId?: string;
-  attemptId?: string;
-}
-
-export interface ReportComment {
-  id: number;
-  body: string;
-  created_at: string;
-  author: string;
-  url: string;
-}
-
-export async function getReportsForUser(cookies?: string): Promise<Report[]> {
-  const url = `${getBaseApiPath("v1")}/reports/user`;
-
-  const reports = (await apiClient.get(url, {
-    headers: {
-      ...(cookies ? { Cookie: cookies } : {}),
-    },
-  })) as Report[];
-
-  return reports;
-}
-
-export async function getReportComments(
-  reportId: string,
-  cookies?: string,
-): Promise<{ comments: ReportComment[] }> {
-  const url = `${getBaseApiPath("v1")}/reports/${reportId}/comments`;
-  return (await apiClient.get(url, {
-    headers: {
-      ...(cookies ? { Cookie: cookies } : {}),
-    },
-  })) as { comments: ReportComment[] };
-}
-
-export async function addReportComment(
-  reportId: string,
-  comment: string,
-  cookies?: string,
-): Promise<{ message: string }> {
-  const url = `${getBaseApiPath("v1")}/reports/${reportId}/comments`;
-  return (await apiClient.post(
-    url,
-    { comment },
-    {
-      headers: {
-        ...(cookies ? { Cookie: cookies } : {}),
-      },
-    },
-  )) as { message: string };
-}
-
 /**
  * Get or create a chat session for today
  */
@@ -1362,6 +1298,30 @@ export async function getOrCreateTodayChat(
   cookies?: string,
 ): Promise<Chat> {
   const url = `${getApiRoutes().chats}/today`;
+
+  return await apiClient.post(
+    url,
+    {
+      userId,
+      assignmentId,
+    },
+    {
+      headers: {
+        ...(cookies ? { Cookie: cookies } : {}),
+      },
+    },
+  );
+}
+
+/**
+ * Find today's chat without creating one
+ */
+export async function findTodayChat(
+  userId: string,
+  assignmentId?: number,
+  cookies?: string,
+): Promise<Chat | { id: null; messages: ChatMessage[] }> {
+  const url = `${getApiRoutes().chats}/today/lookup`;
 
   return await apiClient.post(
     url,
@@ -1416,7 +1376,6 @@ export async function addMessageToChat(
   chatId: string,
   role: "USER" | "ASSISTANT",
   content: string,
-  toolCalls?: JSONValue,
   cookies?: string,
 ): Promise<ChatMessage> {
   const url = `${getApiRoutes().chats}/${chatId}/messages`;
@@ -1426,7 +1385,6 @@ export async function addMessageToChat(
     {
       role,
       content,
-      toolCalls,
     },
     {
       headers: {

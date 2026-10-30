@@ -1,16 +1,12 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { Response } from "express";
 import { AiFeatureFlagsService } from "src/api/ai-feature-flags/ai-feature-flags.service";
-import { FileContentExtractionService } from "src/api/attempt/services/file-content-extraction";
-import { FileProcessingBudgetService } from "src/api/files/services/file-processing-budget.service";
-import { S3Service } from "src/api/files/services/s3.service";
 import {
   UserRole,
   UserSession,
 } from "src/auth/interfaces/user.session.interface";
 import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { ChatRepository } from "../../../repositories/chat.repository";
-import { ChatService } from "../../../services/chat.service";
 import { MarkChatService } from "../../../services/mark-chat.service";
 
 const generateTextMock = jest.fn();
@@ -43,11 +39,14 @@ const AUTHOR_ONLY_TOOLS = [
   "setQuestionTitle",
 ];
 
-const LEARNER_ONLY_TOOLS = [
-  "getQuestionDetails",
-  "getAssignmentRubric",
-  "submitFeedbackQuestion",
+const LEARNER_ONLY_TOOLS = ["getQuestionDetails", "getAssignmentRubric"];
+
+const REMOVED_TOOLS = [
+  "searchKnowledgeBase",
   "requestRegrading",
+  "submitFeedbackQuestion",
+  "extractFileFromLink",
+  "summarizeFileFromLink",
 ];
 
 interface GenerateCall {
@@ -124,18 +123,7 @@ describe("MarkChatService role resolution", () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         MarkChatService,
-        { provide: S3Service, useValue: {} },
-        { provide: FileContentExtractionService, useValue: {} },
-        {
-          provide: ChatService,
-          useValue: {
-            getAuthorizedChatFileLinks: jest
-              .fn()
-              .mockResolvedValue(new Set<string>()),
-          },
-        },
         { provide: ChatRepository, useValue: chatRepository },
-        { provide: FileProcessingBudgetService, useValue: {} },
         {
           provide: AiFeatureFlagsService,
           useValue: { isDisabled: jest.fn().mockReturnValue(false) },
@@ -169,6 +157,9 @@ describe("MarkChatService role resolution", () => {
     for (const learnerTool of LEARNER_ONLY_TOOLS) {
       expect(toolNames).toContain(learnerTool);
     }
+    for (const removedTool of REMOVED_TOOLS) {
+      expect(toolNames).not.toContain(removedTool);
+    }
   });
 
   it("serves a learner session the learner prompt even when the body claims author", async () => {
@@ -190,7 +181,9 @@ describe("MarkChatService role resolution", () => {
     for (const authorTool of AUTHOR_ONLY_TOOLS) {
       expect(toolNames).not.toContain(authorTool);
     }
-    expect(toolNames).toContain("requestRegrading");
+    for (const removedTool of REMOVED_TOOLS) {
+      expect(toolNames).not.toContain(removedTool);
+    }
   });
 
   it("logs a warning when the body role disagrees with the session role", async () => {
@@ -272,6 +265,85 @@ describe("MarkChatService role resolution", () => {
     );
 
     expect(result.reply).toBe("ok");
-    expect(Object.keys(lastGenerateCall().tools)).toContain("requestRegrading");
+    expect(Object.keys(lastGenerateCall().tools)).toContain(
+      "getQuestionDetails",
+    );
+  });
+
+  it("gives the learner prompt the platform help guide without regrade or file wording", async () => {
+    await service.respond("chat-1", body("learner"), learnerSession);
+
+    const { system } = lastGenerateCall();
+    expect(system).toContain("PLATFORM HELP");
+    expect(system).toContain("Unable to grade");
+    expect(system).toContain("Grading Issue");
+    expect(system).not.toMatch(/regrad/i);
+    expect(system).not.toContain("FILE LINK WORKFLOW");
+  });
+
+  it("keeps the prefill rule on both role prompts", async () => {
+    const rule = "use only the user’s latest request";
+    await service.respond("chat-1", body("learner"), learnerSession);
+    expect(lastGenerateCall().system).toContain(rule);
+    await service.respond("chat-1", body("author"), authorSession);
+    expect(lastGenerateCall().system).toContain(rule);
+  });
+
+  it("keeps the hint-only rule for graded assignments and full tutoring for practice", async () => {
+    const conversationFor = (type: string) => [
+      {
+        role: "system" as const,
+        id: "system-context-1",
+        content: `Type: ${type}\nAssignment ID: 3670`,
+      },
+    ];
+    await service.respond(
+      "chat-1",
+      {
+        ...body("learner"),
+        conversation: conversationFor("Graded assignment"),
+      },
+      learnerSession,
+    );
+    expect(lastGenerateCall().system).toContain("NEVER provide direct answers");
+
+    await service.respond(
+      "chat-1",
+      {
+        ...body("learner"),
+        conversation: conversationFor("Practice assignment"),
+      },
+      learnerSession,
+    );
+    expect(lastGenerateCall().system).toContain("FULL TUTORING");
+  });
+
+  it("falls back to neutral text without file wording when only tool output came back", async () => {
+    streamTextMock.mockReturnValue({
+      textStream: textStreamOf([]),
+      steps: Promise.resolve([
+        {
+          toolResults: [
+            {
+              toolCallId: "t-1",
+              toolName: "getQuestionDetails",
+              output: "Question details",
+            },
+          ],
+        },
+      ]),
+    });
+    const response = makeResponse();
+
+    await service.respondStream(
+      "chat-1",
+      body("learner"),
+      learnerSession,
+      response,
+    );
+
+    const written = response.write.mock.calls.map(([chunk]) => chunk).join("");
+    expect(written).toContain("I looked up the details.");
+    expect(written).not.toMatch(/file/i);
   });
 });

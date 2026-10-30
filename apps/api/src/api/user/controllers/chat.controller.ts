@@ -11,7 +11,6 @@ import {
   UseGuards,
 } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
-import { JsonValue } from "@prisma/client/runtime/library";
 import {
   UserSession,
   UserSessionRequest,
@@ -107,6 +106,21 @@ export class ChatController {
     return this.chatService.getOrCreateTodayChat(userId, assignmentId);
   }
 
+  @Post("today/lookup")
+  @UseGuards(ChatAccessControlGuard)
+  async lookupTodayChat(
+    @Body() body: OpenChatDto,
+    @Req() request: UserSessionRequest,
+  ) {
+    const { userId, assignmentId } = this.identityFromSession(
+      request.userSession,
+      body,
+      "today/lookup",
+    );
+    const chat = await this.chatService.findTodayChat(userId, assignmentId);
+    return chat ?? { id: null, messages: [] };
+  }
+
   @Get("user/:userId")
   @UseGuards(ChatAccessControlGuard)
   async getUserChats(@Param("userId") userId: string) {
@@ -124,15 +138,8 @@ export class ChatController {
   async addMessage(
     @Param("chatId") chatId: string,
     @Body() body: AddChatMessageDto,
-    @Req() request: UserSessionRequest,
   ) {
-    return await this.chatService.addMessage(
-      chatId,
-      body.role,
-      body.content,
-      body.toolCalls as JsonValue | undefined,
-      request.userSession,
-    );
+    return await this.chatService.addMessage(chatId, body.role, body.content);
   }
 
   @Post(":chatId/end")
