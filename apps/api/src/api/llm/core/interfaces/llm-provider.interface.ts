@@ -37,7 +37,7 @@ export interface LlmRequestOptions {
 /**
  * Describes the reusable head of a prompt so it can be cached across calls.
  *
- * GPT-5.6 caches only at explicit breakpoints, and only when the prefix is at
+ * GPT-6 caches only at explicit breakpoints, and only when the prefix is at
  * least 1024 tokens — below that the request succeeds and stores nothing, so a
  * short prefix looks identical to a working one. Older OpenAI models reject
  * the parameters outright, which is why providers gate on capability rather

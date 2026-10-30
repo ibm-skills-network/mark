@@ -255,3 +255,56 @@ describe("GPT-6 Luna fallback pricing", () => {
     },
   );
 });
+
+describe("current model fallback pricing", () => {
+  it.each([
+    ["gpt-6.1-terra", 0.000_001, 0.000_005],
+    ["gpt-6.1-sol", 0.000_002, 0.000_01],
+  ])("prices %s at both context tiers", async (modelKey, input, output) => {
+    const service = new LLMPricingService({} as never, {} as never);
+    const fallback = service["getFallbackPricing"](modelKey)!;
+    expect(fallback.inputTokenPrice).toBe(input);
+    expect(fallback.outputTokenPrice).toBe(output);
+    expect(fallback.metadata.cachedInputTokenPrice).toBeCloseTo(
+      input * 0.05,
+      12,
+    );
+    expect(fallback.metadata.longContextCachedInputTokenPrice).toBeCloseTo(
+      input * 0.1,
+      12,
+    );
+    expect(fallback.metadata.cacheWriteTokenPrice).toBeCloseTo(
+      input * 1.25,
+      12,
+    );
+    jest.spyOn(service, "getPricingAtDate").mockResolvedValue(fallback);
+    jest
+      .spyOn(service, "getCurrentPriceUpscaling")
+      .mockResolvedValue(null as never);
+    const results = await service.calculateCostBatch(
+      [272_000, 272_001].map((inputTokens) => ({
+        modelKey,
+        inputTokens,
+        outputTokens: 1000,
+        usageDate: new Date("2026-10-30T00:00:00Z"),
+      })),
+    );
+    expect(results[0]?.totalCost).toBeCloseTo(
+      272_000 * input + 1000 * output,
+      12,
+    );
+    expect(results[1]?.totalCost).toBeCloseTo(
+      272_001 * input * 2 + 1000 * output * 1.5,
+      12,
+    );
+  });
+
+  it("refreshes only supported models while retaining historical fallback rates", () => {
+    const service = new LLMPricingService({} as never, {} as never);
+    expect(
+      service["getFallbackPricingForAllModels"]().map((p) => p.modelKey),
+    ).toEqual(["gpt-6-luna", "gpt-6.1-terra", "gpt-6.1-sol"]);
+    expect(service["getFallbackPricing"]("gpt-4o")).not.toBeNull();
+    expect(service["getFallbackPricing"]("gpt-5.6-sol")).not.toBeNull();
+  });
+});

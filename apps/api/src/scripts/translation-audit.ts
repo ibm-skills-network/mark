@@ -4,7 +4,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { HumanMessage } from "@langchain/core/messages";
 import { PrismaClient } from "@prisma/client";
-import { OpenAiLlmMiniService } from "src/api/llm/core/services/openai-llm-mini.service";
+import { Gpt6LunaLlmService } from "src/api/llm/core/services/gpt6-luna-llm.service";
 import { createLogger } from "winston";
 import { TokenCounterService } from "../api/llm/core/services/token-counter.service";
 import { markForRetranslationBatch } from "./translation-audit-batch";
@@ -18,7 +18,7 @@ const logger = createLogger({
 });
 
 const tokenCounter = new TokenCounterService(logger);
-const gpt4MiniService = new OpenAiLlmMiniService(tokenCounter, logger);
+const lunaService = new Gpt6LunaLlmService(tokenCounter, logger);
 
 // eslint-disable-next-line unicorn/prefer-module
 const LANGUAGES_FILE_PATH = path.join(
@@ -146,7 +146,7 @@ Text: "${text}"
 
 Language code:`;
 
-    const response = await gpt4MiniService.invoke([
+    const response = await lunaService.invoke([
       new HumanMessage(promptContent),
     ]);
 

@@ -9,29 +9,19 @@ import {
   LlmStructuredResponse,
 } from "../interfaces/llm-provider.interface";
 import { ITokenCounter } from "../interfaces/token-counter.interface";
+import { getModelReasoningEffort } from "../utils/model-reasoning.util";
 import { toImageDataList } from "../utils/multimodal-image.util";
 import { invokeStructuredChatModel } from "./structured-output.util";
 import { safetyIdentifierKwargs } from "../utils/safety-identifier.util";
 import { explicitPromptCacheKwargs } from "../utils/prompt-cache.util";
 
-/**
- * Shared base for OpenAI providers pinned to `reasoning_effort: "none"`.
- *
- * FileGradingService hashes `reasoningEffort: "none"` into the grade cache key
- * as a literal instead of reading it from the provider, so reasoning at any
- * other level here silently collides with grades produced at `none`.
- */
-export abstract class EffortNoneOpenAiLlmService
-  implements IMultimodalLlmProvider
-{
+/** Shared OpenAI provider with a fixed model and reasoning effort. */
+export abstract class OpenAiLlmBase implements IMultimodalLlmProvider {
   private static readonly FALLBACK_IMAGE_TOKENS = 200;
   protected readonly logger: Logger;
   abstract readonly key: string;
 
-  /**
-   * Off by default. GPT-5.4 shares this base and rejects the explicit-cache
-   * parameters with a 400, so only the GPT-5.6 subclasses opt in.
-   */
+  /** Providers opt into explicit prefix caching when supported. */
   readonly supportsExplicitPromptCache: boolean = false;
 
   // The installed SDK recognizes only GPT-5/o-series as reasoning models.
@@ -54,7 +44,7 @@ export abstract class EffortNoneOpenAiLlmService
       modelName: this.modelName,
       // Installed SDK types predate `none`, so go through modelKwargs.
       modelKwargs: {
-        reasoning_effort: "none",
+        reasoning_effort: getModelReasoningEffort(this.modelName),
         ...(this.explicitCompletionTokenLimit
           ? { max_completion_tokens: options?.maxTokens ?? 4096 }
           : {}),
@@ -168,7 +158,7 @@ export abstract class EffortNoneOpenAiLlmService
     return this.invokeWithUsageFallback(
       [message],
       this.tokenCounter.countTokens(textContent) +
-        EffortNoneOpenAiLlmService.FALLBACK_IMAGE_TOKENS * imageUrls.length,
+        OpenAiLlmBase.FALLBACK_IMAGE_TOKENS * imageUrls.length,
       options,
     );
   }

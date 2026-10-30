@@ -3,11 +3,11 @@ import { WINSTON_MODULE_PROVIDER } from "nest-winston";
 import { Logger } from "winston";
 import { TOKEN_COUNTER } from "../../llm.constants";
 import { ITokenCounter } from "../interfaces/token-counter.interface";
-import { EffortNoneOpenAiLlmService } from "./openai-effort-none-llm.base";
+import { OpenAiLlmBase } from "./openai-llm.base";
 
 /** GPT-6 Luna keeps the existing non-reasoning grading contract. */
 @Injectable()
-export class Gpt6LunaLlmService extends EffortNoneOpenAiLlmService {
+export class Gpt6LunaLlmService extends OpenAiLlmBase {
   static readonly MODEL = "gpt-6-luna";
   readonly key = Gpt6LunaLlmService.MODEL;
   readonly supportsExplicitPromptCache = true;

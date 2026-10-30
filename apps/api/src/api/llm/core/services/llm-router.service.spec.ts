@@ -16,7 +16,11 @@ const makeRouter = (resolved: string | null) => {
       ),
   };
   const router = new LlmRouter(
-    [provider("gpt-4o"), provider(DEFAULT_LLM_MODEL), provider("gpt-4o-mini")],
+    [
+      provider("gpt-6.1-sol"),
+      provider(DEFAULT_LLM_MODEL),
+      provider("gpt-6.1-terra"),
+    ],
     resolver as unknown as LLMResolverService,
   );
   return { router, resolver };
@@ -49,9 +53,9 @@ describe("LlmRouter default model", () => {
   });
 
   it("prefers the feature's assigned model", async () => {
-    const { router } = makeRouter("gpt-4o-mini");
+    const { router } = makeRouter("gpt-6.1-terra");
     expect((await router.getForFeatureWithFallback("text_grading")).key).toBe(
-      "gpt-4o-mini",
+      "gpt-6.1-terra",
     );
   });
 });

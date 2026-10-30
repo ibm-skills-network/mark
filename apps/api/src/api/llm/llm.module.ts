@@ -1,20 +1,15 @@
 import { Global, Module } from "@nestjs/common";
 import { S3Service } from "../files/services/s3.service";
 import { Gpt6LunaLlmService } from "./core/services/gpt6-luna-llm.service";
-import { Gpt54MiniLlmService } from "./core/services/gpt54-llm.service";
 import {
-  Gpt56LunaLlmService,
-  Gpt56SolLlmService,
-  Gpt56TerraLlmService,
-} from "./core/services/gpt56-llm.service";
+  Gpt61SolLlmService,
+  Gpt61TerraLlmService,
+} from "./core/services/gpt61-llm.service";
 import { LLMAssignmentService } from "./core/services/llm-assignment.service";
 import { LLMPricingService } from "./core/services/llm-pricing.service";
 import { LLMResolverService } from "./core/services/llm-resolver.service";
 import { LlmRouter } from "./core/services/llm-router.service";
 import { ModerationService } from "./core/services/moderation.service";
-import { OpenAiLlmMiniService } from "./core/services/openai-llm-mini.service";
-import { Gpt4VisionPreviewLlmService } from "./core/services/openai-llm-vision.service";
-import { OpenAiLlmService } from "./core/services/openai-llm.service";
 import { PromptProcessorService } from "./core/services/prompt-processor.service";
 import { TokenCounterService } from "./core/services/token-counter.service";
 import { UsageTrackerService } from "./core/services/usage-tracking.service";
@@ -79,13 +74,8 @@ const shouldDisableJudge = !["1", "true", "yes"].includes(
 @Global()
 @Module({
   providers: [
-    OpenAiLlmService,
-    OpenAiLlmMiniService,
-    Gpt4VisionPreviewLlmService,
-    Gpt54MiniLlmService,
-    Gpt56LunaLlmService,
-    Gpt56TerraLlmService,
-    Gpt56SolLlmService,
+    Gpt61TerraLlmService,
+    Gpt61SolLlmService,
     Gpt6LunaLlmService,
     LlmRouter,
     {
@@ -93,16 +83,7 @@ const shouldDisableJudge = !["1", "true", "yes"].includes(
       useFactory: (
         ...providers: IMultimodalLlmProvider[]
       ): IMultimodalLlmProvider[] => providers,
-      inject: [
-        OpenAiLlmService,
-        OpenAiLlmMiniService,
-        Gpt4VisionPreviewLlmService,
-        Gpt54MiniLlmService,
-        Gpt56LunaLlmService,
-        Gpt56TerraLlmService,
-        Gpt56SolLlmService,
-        Gpt6LunaLlmService,
-      ],
+      inject: [Gpt61TerraLlmService, Gpt61SolLlmService, Gpt6LunaLlmService],
     },
     S3Service,
     PdfAnnotationService,

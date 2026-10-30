@@ -994,7 +994,7 @@ enum PricingSource {
 /// This model represents different LLM models supported by the system
 model LLMModel {
   id                 Int                    @id @default(autoincrement())
-  modelKey           String                 @unique /// Unique identifier for the model (e.g., "gpt-4o", "gpt-4o-mini")
+  modelKey           String                 @unique /// Unique identifier for the model (e.g., "gpt-6-luna", "gpt-6.1-sol")
   displayName        String /// Human-readable name for the model
   provider           String /// Provider name (e.g., "OpenAI", "Anthropic")
   isActive           Boolean                @default(true) /// Whether this model is currently supported

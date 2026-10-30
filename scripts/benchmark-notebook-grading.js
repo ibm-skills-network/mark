@@ -73,14 +73,8 @@ async function main() {
     },
   });
   const providerClasses = [
-    service("openai-llm", "core").OpenAiLlmService,
-    service("openai-llm-mini", "core").OpenAiLlmMiniService,
-    service("gpt5-nano-llm", "core").Gpt5NanoLlmService,
-    service("gpt5-mini-llm", "core").Gpt5MiniLlmService,
-    service("gpt54-llm", "core").Gpt54MiniLlmService,
-    service("gpt54-llm", "core").Gpt54NanoLlmService,
-    service("gpt56-llm", "core").Gpt56LunaLlmService,
-    service("gpt56-llm", "core").Gpt56SolLlmService,
+    service("gpt61-llm", "core").Gpt61TerraLlmService,
+    service("gpt61-llm", "core").Gpt61SolLlmService,
     service("gpt6-luna-llm", "core").Gpt6LunaLlmService,
   ];
   const { LlmRouter } = service("llm-router", "core");

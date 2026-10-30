@@ -230,9 +230,13 @@ export interface ILlmProvider {
 
 #### Current Providers
 
-1. **OpenAiLlmService** - GPT-4o (`gpt-4o`)
-2. **OpenAiLlmMiniService** - GPT-4o Mini (`gpt-4o-mini`)
-3. **Gpt4VisionPreviewLlmService** - GPT-4.1 Mini Vision (`gpt-4.1-mini`)
+1. **Gpt6LunaLlmService** - GPT-6 Luna (`gpt-6-luna`), reasoning effort `none`
+2. **Gpt61TerraLlmService** - GPT-6.1 Terra (`gpt-6.1-terra`), reasoning effort `none`
+3. **Gpt61SolLlmService** - GPT-6.1 Sol (`gpt-6.1-sol`), reasoning effort `low`
+
+All three support text, images, structured output, and explicit prompt caching.
+Sol requires at least `low` reasoning effort. Model IDs and compatibility are
+documented in the [OpenAI GPT-6 guide](https://developers.openai.com/api/docs/guides/latest-model).
 
 ### 4. API Layer
 
@@ -335,11 +339,13 @@ graph TD
 
 ### Default Model Assignments
 
-The system initializes with these default assignments:
+GPT-6 Luna is the application fallback. Feature assignments and defaults are
+stored in the database and can select any current provider.
 
-- **GPT-4o**: Most AI features (grading, generation, moderation)
-- **GPT-4o-mini**: Translation and lightweight tasks
-- **GPT-4.1-mini**: Image-related processing
+Migration `20261030120000_update_supported_gpt_models` upgrades GPT-5.6 Terra
+and Sol selections to GPT-6.1 Terra and Sol. GPT-4, GPT-5.4, and GPT-5.6 Luna
+selections move to the existing GPT-6 Luna provider. Retired models are
+deactivated; their pricing and assignment history remains available for reports.
 
 ### Environment Configuration
 
