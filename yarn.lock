@@ -10685,10 +10685,10 @@ langchain@^1.5.14, langchain@~1.3.4:
     langsmith ">=0.5.0 <1.0.0"
     zod "^3.25.76 || ^4"
 
-langsmith@0.10.11, "langsmith@>=0.11.0 <1.0.0", "langsmith@>=0.5.0 <1.0.0":
-  version "0.10.11"
-  resolved "https://registry.yarnpkg.com/langsmith/-/langsmith-0.10.11.tgz#8b3d99c4630507d1dd89016dec4b6e8d84a55e5a"
-  integrity sha512-99ySd5piFC/y0kyKxlUODamdxYuHs0Sbnz47mop0SypvOaRT8REuB1vd8QpESBag8sHW0QPSXvUbhXpn2+v9yQ==
+langsmith@0.11.3, "langsmith@>=0.11.0 <1.0.0", "langsmith@>=0.5.0 <1.0.0":
+  version "0.11.3"
+  resolved "https://registry.yarnpkg.com/langsmith/-/langsmith-0.11.3.tgz#dea990a3f3aee2993e98664f2e85adb4523b8863"
+  integrity sha512-PKvl+msl8gj1qWBgHyfm76H/y6AcIUwhbW013jAHdFQTIuFmGk/2Ns3YTIlnOQT31EFRU+xVDbVGcBlbNQDFTQ==
   dependencies:
     p-queue "6.6.2"
 
