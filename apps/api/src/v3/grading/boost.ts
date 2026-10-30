@@ -8,12 +8,15 @@ import type { GradingLogger } from "./contracts";
 /**
  * Extra points for a genuine attempt that missed criteria: one point per
  * `pointsPerStep` of the question's points, at most `maxBoost`, never past
- * the question's points. A question out of 4 earns 1; out of 1–3, none.
+ * the question's points. A question out of 4 earns 1; out of 1–3, none. Only
+ * an attempt that earned at least `minScorePercent` qualifies, and the boost
+ * is never more than half of what it earned.
  */
 export const boostConfigSchema = z.strictObject({
   enabled: z.boolean(),
   pointsPerStep: z.number().int().min(1).max(100),
   maxBoost: z.number().int().min(0).max(20),
+  minScorePercent: z.number().int().min(0).max(100),
 });
 export type BoostConfig = z.infer<typeof boostConfigSchema>;
 
@@ -21,7 +24,11 @@ export const DEFAULT_BOOST_CONFIG: BoostConfig = {
   enabled: false,
   pointsPerStep: 4,
   maxBoost: 3,
+  minScorePercent: 40,
 };
+
+/** The most a boost can add, as a share of the points already earned. */
+export const MAX_BOOST_SHARE_OF_EARNED = 0.5;
 
 export const BOOST_CACHE_TTL_MS = 30_000;
 
@@ -47,11 +54,14 @@ export function applyEffortBoost(
   solidAttempt: boolean,
   config: BoostConfig,
 ): { points: number; boost: number } {
-  if (!solidAttempt) return { points, boost: 0 };
+  if (!solidAttempt || points * 100 < maxPoints * config.minScorePercent) {
+    return { points, boost: 0 };
+  }
   const boost = round2(
     Math.min(
       effortBoostPoints(maxPoints, config),
       Math.max(0, maxPoints - points),
+      points * MAX_BOOST_SHARE_OF_EARNED,
     ),
   );
   return { points: round2(points + boost), boost };
@@ -123,7 +133,12 @@ export class GradingBoostService {
       read: () =>
         this.prisma.gradingBoostConfig.findUnique({
           where: { id: 1 },
-          select: { enabled: true, pointsPerStep: true, maxBoost: true },
+          select: {
+            enabled: true,
+            pointsPerStep: true,
+            maxBoost: true,
+            minScorePercent: true,
+          },
         }),
     });
   }

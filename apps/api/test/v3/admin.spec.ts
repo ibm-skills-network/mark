@@ -72,7 +72,12 @@ describe("v3 admin routes", () => {
   it.each([
     ["no token", undefined, 401, "admin_token_missing"],
     ["an empty token", "", 401, "admin_token_missing"],
-    ["an unknown token", "unknown-token-0123456789", 401, "admin_session_invalid"],
+    [
+      "an unknown token",
+      "unknown-token-0123456789",
+      401,
+      "admin_session_invalid",
+    ],
     ["an author session", "author-token-0123456789", 403, "not_admin"],
   ])("refuses %s", async (_name, token, status, reason) => {
     const res = await get(token);
@@ -92,9 +97,7 @@ describe("v3 admin routes", () => {
 
   it("logs the admin as the request's user", async () => {
     await get("admin-token-0123456789");
-    expect(
-      t.logs.filter((l) => l.event === "v3.request.completed"),
-    ).toEqual([
+    expect(t.logs.filter((l) => l.event === "v3.request.completed")).toEqual([
       expect.objectContaining({ user_id: "admin@example.com", role: "admin" }),
     ]);
   });

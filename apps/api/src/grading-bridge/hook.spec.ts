@@ -338,7 +338,12 @@ describe("GradingBridgeService", () => {
     };
   }
 
-  const boostOn = { enabled: true, pointsPerStep: 4, maxBoost: 3 };
+  const boostOn = {
+    enabled: true,
+    pointsPerStep: 4,
+    maxBoost: 3,
+    minScorePercent: 40,
+  };
 
   describe("usage audit", () => {
     const billed = {
@@ -487,9 +492,25 @@ describe("GradingBridgeService", () => {
     );
   });
 
+  it("live: no boost for a solid attempt below the minimum score", async () => {
+    boosts.get.mockResolvedValue(boostOn);
+    grader.grade.mockResolvedValue(graded(1, true));
+    const { responseDto } = await bridge.gradeLive(
+      question,
+      request("42"),
+      context,
+      mode("live"),
+    );
+    expect(responseDto.totalPoints).toBe(1);
+    expect(responseDto.metadata).toEqual(
+      expect.objectContaining({ solidAttempt: true, effortBoost: 0 }),
+    );
+    expect(JSON.stringify(responseDto.feedback)).not.toContain("Effort credit");
+  });
+
   it("live: says points in the singular and plural correctly", async () => {
     boosts.get.mockResolvedValue(boostOn);
-    grader.grade.mockResolvedValue(graded(3, true));
+    grader.grade.mockResolvedValue(graded(4, true));
     const eight = { ...question, totalPoints: 8 } as QuestionDto;
     const { responseDto } = await bridge.gradeLive(
       eight,
@@ -497,7 +518,7 @@ describe("GradingBridgeService", () => {
       context,
       mode("live"),
     );
-    expect(responseDto.totalPoints).toBe(5);
+    expect(responseDto.totalPoints).toBe(6);
     expect(JSON.stringify(responseDto.feedback)).toContain(
       "Effort credit: +2 points",
     );

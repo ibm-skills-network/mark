@@ -2,6 +2,7 @@ import { Module } from "@nestjs/common";
 import { ThrottlerModule } from "@nestjs/throttler";
 import { AdminAuthModule } from "../../auth/admin-auth.module";
 import { GradingBoostController } from "./admin/grading-boost.controller";
+import { GradingEngineController } from "./admin/grading-engine.controller";
 import { GradingModesController } from "./admin/grading-modes.controller";
 import { GradingBoostService } from "./boost";
 import { GradingModeService } from "./mode";
@@ -14,13 +15,17 @@ import { V3GradingService } from "./v3-grading.service";
 })
 export class GradingV3Module {}
 
-/** HTTP surface: the mode switches and the boost. Registered by the api app only. */
+/** HTTP surface: the mode switches, the engine switch and the boost. Registered by the api app only. */
 @Module({
   imports: [
     GradingV3Module,
     AdminAuthModule,
     ThrottlerModule.forRoot([{ name: "default", ttl: 60_000, limit: 30 }]),
   ],
-  controllers: [GradingModesController, GradingBoostController],
+  controllers: [
+    GradingModesController,
+    GradingEngineController,
+    GradingBoostController,
+  ],
 })
 export class GradingV3AdminModule {}

@@ -63,7 +63,8 @@ describe("LoggerMiddleware", () => {
     ])(
       "replaces %s with a fresh id that is echoed and forwarded downstream",
       (_label, value) => {
-        mockRequest.headers = value === undefined ? {} : { "x-request-id": value };
+        mockRequest.headers =
+          value === undefined ? {} : { "x-request-id": value };
         (mockRequest.get as jest.Mock).mockImplementation((header: string) =>
           header === "x-request-id" ? value : undefined,
         );

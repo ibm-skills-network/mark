@@ -36,7 +36,7 @@ describe("gateway API versions", () => {
             rootV1: () => ({ ok: true }),
             forwardRequestToDownstreamService: (
               service: DownstreamService,
-              incoming: UserSessionRequest
+              incoming: UserSessionRequest,
             ) => {
               forwarded.push({ service, url: incoming.originalUrl });
               return Promise.resolve({ status: 200, data: { ok: true } });
@@ -68,7 +68,7 @@ describe("gateway API versions", () => {
 
   it("forwards a v3 learner route to mark-api behind the cookie guard", async () => {
     const response = await request(app.getHttpServer()).get(
-      "/api/v3/attempts/7?x=1"
+      "/api/v3/attempts/7?x=1",
     );
     expect(response.status).toBe(200);
     expect(guardCalls).toEqual(["cookie"]);
@@ -105,7 +105,7 @@ describe("gateway API versions", () => {
       const response = await request(app.getHttpServer()).get(path);
       expect(response.status).toBe(404);
       expect(forwarded).toEqual([]);
-    }
+    },
   );
 
   it("keeps v1 and v2 routed", async () => {

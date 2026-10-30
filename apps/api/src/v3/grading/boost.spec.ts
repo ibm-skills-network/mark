@@ -6,7 +6,12 @@ import {
   effortBoostPoints,
 } from "./boost";
 
-const on: BoostConfig = { enabled: true, pointsPerStep: 4, maxBoost: 3 };
+const on: BoostConfig = {
+  enabled: true,
+  pointsPerStep: 4,
+  maxBoost: 3,
+  minScorePercent: 40,
+};
 
 describe("effortBoostPoints", () => {
   it.each([
@@ -33,8 +38,40 @@ describe("applyEffortBoost", () => {
     expect(applyEffortBoost(2, 4, true, on)).toEqual({ points: 3, boost: 1 });
   });
 
-  it("gives a solid attempt that scored 0 the boost too", () => {
-    expect(applyEffortBoost(0, 8, true, on)).toEqual({ points: 2, boost: 2 });
+  it.each([
+    [0, 8],
+    [3, 12],
+    [1.59, 4],
+  ])("adds nothing to %d/%d, below the minimum score", (points, maxPoints) => {
+    expect(applyEffortBoost(points, maxPoints, true, on)).toEqual({
+      points,
+      boost: 0,
+    });
+  });
+
+  it("qualifies exactly at the minimum score", () => {
+    expect(applyEffortBoost(4, 10, true, on)).toEqual({ points: 6, boost: 2 });
+  });
+
+  it("uses the configured minimum score", () => {
+    const strict = { ...on, minScorePercent: 60 };
+    expect(applyEffortBoost(2, 4, true, strict).boost).toBe(0);
+    const open = { ...on, minScorePercent: 0 };
+    expect(applyEffortBoost(1, 4, true, open)).toEqual({
+      points: 1.5,
+      boost: 0.5,
+    });
+  });
+
+  it("never adds more than half of what was earned", () => {
+    expect(applyEffortBoost(5, 12, true, on)).toEqual({
+      points: 7.5,
+      boost: 2.5,
+    });
+    expect(applyEffortBoost(8, 16, true, on)).toEqual({
+      points: 11,
+      boost: 3,
+    });
   });
 
   it("adds nothing when the attempt was not solid", () => {
@@ -50,8 +87,8 @@ describe("applyEffortBoost", () => {
   });
 
   it("keeps fractional scores to two decimals", () => {
-    expect(applyEffortBoost(1.33, 4, true, on)).toEqual({
-      points: 2.33,
+    expect(applyEffortBoost(2.33, 4, true, on)).toEqual({
+      points: 3.33,
       boost: 1,
     });
   });

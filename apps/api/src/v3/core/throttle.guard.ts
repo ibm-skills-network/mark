@@ -11,7 +11,9 @@ import { principalFor } from "./http-context";
  */
 @Injectable()
 export class V3ThrottlerGuard extends ThrottlerGuard {
-  protected override getTracker(request: Record<string, unknown>): Promise<string> {
+  protected override getTracker(
+    request: Record<string, unknown>,
+  ): Promise<string> {
     const principal = principalFor(request);
     if (principal) return Promise.resolve(`user:${principal.userId}`);
     const ip = request.ip;

@@ -8,10 +8,7 @@ import { V3Error } from "../../core/errors";
 import type { Principal } from "../../core/principal";
 import { UseV3Throttle } from "../../core/throttle.guard";
 import { V3Principal } from "../../core/principal.guard";
-import {
-  V3Controller,
-  V3Route,
-} from "../../core/v3-controller.decorator";
+import { V3Controller, V3Route } from "../../core/v3-controller.decorator";
 import { V3Logger } from "../../core/v3-logger";
 import { ZodPipe } from "../../core/zod.pipe";
 import { gradingEffortSchema } from "../contracts";

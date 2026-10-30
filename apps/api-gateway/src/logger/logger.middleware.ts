@@ -27,7 +27,8 @@ export class LoggerMiddleware implements NestMiddleware {
     }
     const requestId =
       [akamaiGrn, request.get("x-request-id")].find(
-        (id): id is string => typeof id === "string" && SAFE_REQUEST_ID.test(id),
+        (id): id is string =>
+          typeof id === "string" && SAFE_REQUEST_ID.test(id),
       ) ?? randomUUID();
     request.headers["x-request-id"] = requestId;
     response.setHeader("x-request-id", requestId);

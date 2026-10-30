@@ -4,11 +4,9 @@ import { parseBounce } from "./email-bounce-source";
 
 jest.mock("axios");
 jest.mock("ibm-cloud-sdk-core", () => ({
-  IamTokenManager: jest
-    .fn()
-    .mockImplementation(() => ({
-      getToken: jest.fn().mockResolvedValue("test-token"),
-    })),
+  IamTokenManager: jest.fn().mockImplementation(() => ({
+    getToken: jest.fn().mockResolvedValue("test-token"),
+  })),
 }));
 
 const row = {
