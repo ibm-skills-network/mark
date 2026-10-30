@@ -6,7 +6,12 @@ import {
   Prisma,
 } from "@prisma/client";
 import { PrismaService } from "../../database/prisma.service";
-import { BounceEvent, bounceSource, DAY_MS } from "./email-bounce-source";
+import {
+  BounceEvent,
+  bounceSource,
+  DAY_MS,
+  BOUNCE_REPLAY_WINDOW_MS,
+} from "./email-bounce-source";
 
 const MAX_DETAIL_LENGTH = 500;
 const HOLD_DAYS = [1, 3, 7];
@@ -146,7 +151,9 @@ export class EmailSuppressionService {
           source,
           recoveredAt: null,
           probeAcceptedAt: { lte: observedThrough },
-          probeStartedAt: { gte: new Date(end.getTime() - 30 * DAY_MS) },
+          probeStartedAt: {
+            gte: new Date(end.getTime() - BOUNCE_REPLAY_WINDOW_MS),
+          },
         },
         data: { recoveredAt: end, probeToken: null },
       });
@@ -156,7 +163,11 @@ export class EmailSuppressionService {
           recoveredAt: null,
           OR: [
             { probeAcceptedAt: null, probeStartedAt: { lte: observedThrough } },
-            { probeStartedAt: { lt: new Date(end.getTime() - 30 * DAY_MS) } },
+            {
+              probeStartedAt: {
+                lt: new Date(end.getTime() - BOUNCE_REPLAY_WINDOW_MS),
+              },
+            },
           ],
         },
         data: {

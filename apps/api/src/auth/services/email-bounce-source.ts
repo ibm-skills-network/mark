@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 
 export const DAY_MS = 24 * 60 * 60 * 1000;
+// Stay inside IBM's rolling retention boundary, including during pagination.
+export const BOUNCE_REPLAY_WINDOW_MS = 30 * DAY_MS - 60 * 60_000;
 
 export function bounceSource(): string | undefined {
   const {

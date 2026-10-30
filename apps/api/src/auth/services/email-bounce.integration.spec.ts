@@ -384,27 +384,30 @@ const databaseUrl = process.env.EMAIL_BOUNCE_TEST_DATABASE_URL;
       });
     });
 
-    it("requires a fresh trial when the previous observation is outside provider history", async () => {
-      const hold = await createHold();
-      await beginTrial();
-      await prisma.emailDeliveryHold.update({
-        where: { email: hold.email },
-        data: {
-          probeStartedAt: new Date(Date.now() - 35 * DAY_MS),
-          probeAcceptedAt: new Date(Date.now() - 35 * DAY_MS),
-        },
-      });
-      await service.recoverAfterSweep(source, new Date());
-      expect(await holdFor()).toMatchObject({
-        recoveredAt: null,
-        probeStartedAt: null,
-        probeAcceptedAt: null,
-      });
-      expect(await service.acquireRecoveryPermit(hold.email)).toMatchObject({
-        allowed: true,
-        probeToken: expect.any(String),
-      });
-    });
+    it.each([35 * DAY_MS, 30 * DAY_MS - 30 * 60_000])(
+      "requires a fresh trial when the previous observation is outside the sweep (%i ms old)",
+      async (age) => {
+        const hold = await createHold();
+        await beginTrial();
+        await prisma.emailDeliveryHold.update({
+          where: { email: hold.email },
+          data: {
+            probeStartedAt: new Date(Date.now() - age),
+            probeAcceptedAt: new Date(Date.now() - age),
+          },
+        });
+        await service.recoverAfterSweep(source, new Date());
+        expect(await holdFor()).toMatchObject({
+          recoveredAt: null,
+          probeStartedAt: null,
+          probeAcceptedAt: null,
+        });
+        expect(await service.acquireRecoveryPermit(hold.email)).toMatchObject({
+          allowed: true,
+          probeToken: expect.any(String),
+        });
+      },
+    );
 
     it("does not escalate for a local SMTP failure that has no provider bounce", async () => {
       const hold = await createHold();

@@ -93,7 +93,11 @@ describe("EmailBouncePoller", () => {
       number,
     ];
     expect(end.getTime()).toBe(Date.now() - 60_000);
-    expect(end.getTime() - start.getTime()).toBe(30 * DAY_MS);
+    expect(start.getTime()).toBeGreaterThan(Date.now() - 30 * DAY_MS);
+    expect(start.getTime()).toBeGreaterThan(
+      Date.now() + 30 * 60_000 - 30 * DAY_MS,
+    ); // Later pages must remain inside IBM's retention boundary too.
+    expect(end.getTime() - start.getTime()).toBe(30 * DAY_MS - 60 * 60_000);
     expect(offset).toBe(0);
     expect(client.page).toHaveBeenLastCalledWith(
       "instance/config",
