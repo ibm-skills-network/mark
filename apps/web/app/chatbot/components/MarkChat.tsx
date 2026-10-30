@@ -10,9 +10,6 @@ import {
   PlusCircleIcon,
   QuestionMarkCircleIcon,
   InformationCircleIcon,
-  ClockIcon,
-  ArchiveBoxIcon,
-  BellIcon,
   ChatBubbleBottomCenterTextIcon,
 } from "@heroicons/react/24/outline";
 import {
@@ -23,34 +20,25 @@ import {
   ChatBubbleOvalLeftEllipsisIcon,
 } from "@heroicons/react/24/solid";
 import { AnimatePresence, motion } from "framer-motion";
-import Draggable from "react-draggable";
 import Image from "next/image";
 import React, { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { useAuthorContext } from "../store/useAuthorContext";
 import { useLearnerContext } from "../store/useLearnerContext";
 import { ChatRole, useMarkChatStore } from "../store/useMarkChatStore";
-import { useAuthorStore } from "@/stores/author";
 import { toast } from "sonner";
-import Tippy from "@tippyjs/react";
-import "tippy.js/dist/tippy.css";
 import {
   getOrCreateTodayChat,
   findTodayChat,
-  getUserChats,
-  getChatById,
   addMessageToChat,
   endChat,
   getUser,
+  type ChatMessage as SavedChatMessage,
 } from "@/lib/shared";
-import { useDropzone } from "react-dropzone";
 import { submitBugReport } from "@/lib/report-client";
 import ReportPreviewModal from "@/components/ReportPreviewModal";
 import { useChatbot } from "../../../hooks/useChatbot";
-import { useMarkSpeech } from "../../../hooks/useMarkSpeech";
 import { useCallback } from "react";
-import SpeechBubble from "../../../components/SpeechBubble";
-import { OrbitingActionDock } from "../../../components/OrbitingActionDock";
 import type { User } from "@/config/types";
 
 let cachedUser: User | null = null;
@@ -72,140 +60,18 @@ const fetchUserCached = async (): Promise<User | null> => {
   return cachedUserPromise;
 };
 
-interface ScreenshotDropzoneProps {
-  file: File | null | undefined;
-  onFileSelect: (file: File) => void;
-  onFileRemove: () => void;
-}
+const CLIENT_EXECUTION_MARKER =
+  /\s*<!-- CLIENT_EXECUTION_MARKER\n[\S\s]*?\n-->/g;
 
-const ScreenshotDropzone: React.FC<ScreenshotDropzoneProps> = ({
-  file,
-  onFileSelect,
-  onFileRemove,
-}) => {
-  const onDrop = useCallback(
-    (acceptedFiles: File[]) => {
-      if (acceptedFiles.length > 0) {
-        onFileSelect(acceptedFiles[0]);
-      }
-    },
-    [onFileSelect],
-  );
-
-  const { getRootProps, getInputProps, isDragActive, fileRejections } =
-    useDropzone({
-      onDrop,
-      accept: {
-        "image/png": [".png"],
-        "image/jpeg": [".jpg", ".jpeg"],
-        "image/gif": [".gif"],
-        "image/webp": [".webp"],
-      },
-      multiple: false,
-      maxSize: 10 * 1024 * 1024,
-      onDropRejected: (rejectedFiles) => {
-        const error = rejectedFiles[0]?.errors[0];
-        if (error?.code === "file-too-large") {
-          toast.error("File is too large. Maximum size is 10MB.");
-        } else if (error?.code === "file-invalid-type") {
-          toast.error("Invalid file type. Please select an image file.");
-        } else {
-          toast.error("File rejected. Please try another file.");
-        }
-      },
-    });
-
-  if (file) {
-    return (
-      <div className="flex items-center justify-between p-4 border-2 border-gray-200 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800">
-        <div className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
-          <svg
-            className="w-4 h-4 text-green-500"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-            />
-          </svg>
-          <span className="truncate font-medium">{file.name}</span>
-          <span className="text-xs text-gray-500 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
-            {Math.round(file.size / 1024)}KB
-          </span>
-        </div>
-        <button
-          onClick={onFileRemove}
-          className="text-red-500 hover:text-red-700 text-sm font-medium px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
-        >
-          Remove
-        </button>
-      </div>
-    );
-  }
-
-  const rootProps = getRootProps();
-
-  return (
-    <div
-      className={`cursor-pointer border-2 border-dashed rounded-md p-4 transition-colors hover:scale-105 transform ${
-        isDragActive
-          ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20"
-          : "border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500"
-      }`}
-      {...rootProps}
-    >
-      <input {...getInputProps()} />
-      <div className="flex flex-col items-center justify-center text-center">
-        {isDragActive ? (
-          <>
-            <svg
-              className="w-8 h-8 text-blue-500 mb-2"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-              />
-            </svg>
-            <p className="text-blue-600 dark:text-blue-400 font-medium">
-              Drop screenshot here
-            </p>
-          </>
-        ) : (
-          <>
-            <svg
-              className="w-8 h-8 text-gray-400 mb-2"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"
-              />
-            </svg>
-            <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">
-              Drop screenshot here or click to select
-            </p>
-            <p className="text-xs text-gray-500 mt-1">
-              PNG, JPG, GIF, WebP up to 10MB
-            </p>
-          </>
-        )}
-      </div>
-    </div>
-  );
-};
+// A saved reply records the report form it opened, in its text and in toolCalls.
+// Loading it must show neither, or the form opens again on every load.
+const toStoreMessages = (savedMessages: SavedChatMessage[]) =>
+  savedMessages.map((msg) => ({
+    id: `msg-${msg.id}`,
+    role: msg.role.toLowerCase() as ChatRole,
+    content: msg.content.replace(CLIENT_EXECUTION_MARKER, ""),
+    timestamp: new Date(msg.timestamp).toISOString(),
+  }));
 
 const SuggestionsPanel = ({
   suggestions,
@@ -556,6 +422,7 @@ const ChatMessages = ({
   getAccentColor,
   renderTypingIndicator,
   onClientExecution,
+  processedMessageIds,
 }) => {
   const filteredMessages = React.useMemo(() => {
     return messages.filter((msg) => {
@@ -570,10 +437,6 @@ const ChatMessages = ({
       return false;
     });
   }, [messages]);
-
-  const [processedMessageIds, setProcessedMessageIds] = React.useState(
-    new Set(),
-  );
 
   React.useEffect(() => {
     if (onClientExecution) {
@@ -590,7 +453,7 @@ const ChatMessages = ({
             }
           });
 
-          setProcessedMessageIds((prev) => new Set(prev).add(msg.id));
+          processedMessageIds.add(msg.id);
         }
       });
     }
@@ -631,97 +494,6 @@ const ChatMessages = ({
   );
 };
 
-const ChatHistoryDrawer = ({
-  isOpen,
-  onClose,
-  chats,
-  onSelectChat,
-  currentChatId,
-  isLoading,
-}) => {
-  return (
-    <AnimatePresence>
-      {isOpen && (
-        <>
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 0.5 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/20 backdrop-blur-sm z-50"
-            onClick={onClose}
-          />
-
-          <motion.div
-            initial={{ x: "-100%" }}
-            animate={{ x: 0 }}
-            exit={{ x: "-100%" }}
-            transition={{ type: "spring", damping: 25, stiffness: 300 }}
-            className="fixed left-0 top-0 h-full w-80 bg-white dark:bg-gray-900 shadow-xl z-[999999] overflow-y-auto"
-          >
-            <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
-              <h2 className="font-bold text-lg">Chat History</h2>
-              <button
-                onClick={onClose}
-                className="p-1 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800"
-              >
-                <XMarkIcon className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="p-2">
-              {isLoading ? (
-                <div className="text-center text-gray-500 dark:text-gray-400 p-4">
-                  Loading chat history...
-                </div>
-              ) : chats.length === 0 ? (
-                <div className="text-center text-gray-500 dark:text-gray-400 p-4">
-                  No chat history found
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {chats.map((chat) => (
-                    <button
-                      key={chat.id}
-                      onClick={() => onSelectChat(chat.id)}
-                      className={`w-full p-3 text-left rounded-lg transition-colors ${
-                        currentChatId === chat.id
-                          ? "bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-800"
-                          : "hover:bg-gray-100 dark:hover:bg-gray-800"
-                      }`}
-                    >
-                      <div className="font-medium truncate flex items-center">
-                        <span className="mr-2 flex-1">
-                          {chat.title ||
-                            "Chat " +
-                              new Date(chat.startedAt).toLocaleDateString()}
-                        </span>
-                        {!chat.isActive && (
-                          <span className="text-xs bg-gray-100 dark:bg-gray-800 text-gray-500 px-1.5 py-0.5 rounded">
-                            <ArchiveBoxIcon className="w-3 h-3 inline mr-1" />
-                            Archived
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 flex items-center">
-                        <ClockIcon className="w-3 h-3 mr-1" />
-                        {new Date(chat.lastActiveAt).toLocaleString()}
-                      </div>
-                      {chat.assignmentId && (
-                        <div className="text-xs text-purple-600 dark:text-purple-400 mt-1">
-                          Assignment: {chat.assignmentId}
-                        </div>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </motion.div>
-        </>
-      )}
-    </AnimatePresence>
-  );
-};
-
 export const MarkChat = () => {
   const {
     isOpen: isChatbotOpen,
@@ -730,8 +502,6 @@ export const MarkChat = () => {
     markUnavailable: markChatUnavailable,
   } = useChatbot();
   const {
-    isOpen,
-    toggleChat,
     messages,
     userInput,
     setUserInput,
@@ -741,31 +511,15 @@ export const MarkChat = () => {
     resetChat,
   } = useMarkChatStore();
 
-  const {
-    activeBubble,
-    dismiss: dismissBubble,
-    sayMotionSick,
-    sayExcited,
-  } = useMarkSpeech();
-
   const learnerContext = useLearnerContext();
   const authorContext = useAuthorContext();
 
-  const authorStore = useAuthorStore((state) => ({
-    name: state.name,
-    questions: state.questions,
-    activeAssignmentId: state.activeAssignmentId,
-  }));
-
   const messagesEndRef = useRef(null);
-  const chatContainerRef = useRef(null);
   const textareaRef = useRef(null);
   const isSendingRef = useRef(false);
-  const [isExpanded, setIsExpanded] = useState(true);
+  const processedClientExecutions = useRef(new Set<string>());
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [contextReady, setContextReady] = useState(false);
   const [activeQuestion, setActiveQuestion] = useState(null);
-  const [feedbackMode, setFeedbackMode] = useState(false);
   const [history, setHistory] = useState([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const [specialActions, setSpecialActions] = useState({
@@ -795,355 +549,14 @@ export const MarkChat = () => {
 
   const [user, setUser] = useState(null);
   const [currentChatId, setCurrentChatId] = useState(null);
-  const [showChatHistory, setShowChatHistory] = useState(false);
-  const [userChats, setUserChats] = useState([]);
-  const [isLoadingChats, setIsLoadingChats] = useState(false);
 
   const [isInitializing, setIsInitializing] = useState(true);
   const [isEndingChat, setIsEndingChat] = useState(false);
-  const [shouldAutoOpen, setShouldAutoOpen] = useState(false);
   const [reportPreviewModal, setReportPreviewModal] = useState({
     isOpen: false,
     type: "report" as "report" | "feedback" | "suggestion" | "inquiry",
     data: null as any,
   });
-  const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
-  const [currentPosition, setCurrentPosition] = useState({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-  const [hasMoved, setHasMoved] = useState(false);
-  const [isDocked, setIsDocked] = useState(false);
-  const [dragStartPosition, setDragStartPosition] = useState({ x: 0, y: 0 });
-  const [dragStartTime, setDragStartTime] = useState(0);
-  const [touchStartTime, setTouchStartTime] = useState(0);
-  const [touchStartPosition, setTouchStartPosition] = useState({ x: 0, y: 0 });
-  const [isTouching, setIsTouching] = useState(false);
-  const draggableNodeRef = useRef<HTMLDivElement | null>(null);
-
-  const isMobileDevice = useCallback(() => {
-    return (
-      typeof window !== "undefined" &&
-      ("ontouchstart" in window ||
-        navigator.maxTouchPoints > 0 ||
-        window.innerWidth < 768)
-    );
-  }, []);
-
-  const [motionData, setMotionData] = useState({
-    dragCount: 0,
-    dragStartTime: 0,
-    lastPosition: { x: 0, y: 0 },
-    totalDistance: 0,
-    lastMotionSickTime: 0,
-    continuousDragTime: 0,
-  });
-
-  const constrainToViewport = useCallback((position) => {
-    if (typeof window === "undefined") return position;
-
-    const padding = 10;
-    const buttonSize = 66;
-
-    return {
-      x: Math.max(
-        padding,
-        Math.min(position.x, window.innerWidth - buttonSize - padding),
-      ),
-      y: Math.max(
-        padding,
-        Math.min(position.y, window.innerHeight - buttonSize - padding),
-      ),
-    };
-  }, []);
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("mark-chat-position");
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          const constrainedPos = constrainToViewport(parsed);
-          setDragPosition(constrainedPos);
-          setCurrentPosition(constrainedPos);
-        } catch (e) {
-          const defaultPos = constrainToViewport({
-            x: window.innerWidth - 80,
-            y: window.innerHeight - 80,
-          });
-          setDragPosition(defaultPos);
-          setCurrentPosition(defaultPos);
-        }
-      } else {
-        const defaultPos = constrainToViewport({
-          x: window.innerWidth - 80,
-          y: window.innerHeight - 80,
-        });
-        setDragPosition(defaultPos);
-        setCurrentPosition(defaultPos);
-      }
-    }
-  }, [constrainToViewport]);
-
-  useEffect(() => {
-    const handleResize = () => {
-      setDragPosition((prev) => constrainToViewport(prev));
-      setCurrentPosition((prev) => constrainToViewport(prev));
-    };
-
-    if (typeof window !== "undefined") {
-      window.addEventListener("resize", handleResize);
-      return () => window.removeEventListener("resize", handleResize);
-    }
-  }, [constrainToViewport]);
-
-  const handleDragStart = useCallback(
-    (e, data) => {
-      setHasMoved(false);
-      setIsDragging(false);
-      setDragStartPosition({ x: data.x, y: data.y });
-      setDragStartTime(Date.now());
-      setMotionData((prev) => ({
-        ...prev,
-        dragCount: prev.dragCount + 1,
-        dragStartTime: Date.now(),
-        lastPosition: dragPosition,
-        totalDistance: 0,
-      }));
-    },
-    [dragPosition],
-  );
-
-  const handleDrag = useCallback(
-    (e, data) => {
-      const distanceFromStart = Math.sqrt(
-        Math.pow(data.x - dragStartPosition.x, 2) +
-          Math.pow(data.y - dragStartPosition.y, 2),
-      );
-
-      const timeElapsed = Date.now() - dragStartTime;
-
-      const MOBILE_DRAG_THRESHOLD = 25;
-      const DESKTOP_DRAG_THRESHOLD = 5;
-      const MIN_DRAG_TIME = 200;
-
-      const dragThreshold = isMobileDevice()
-        ? MOBILE_DRAG_THRESHOLD
-        : DESKTOP_DRAG_THRESHOLD;
-
-      if (
-        !hasMoved &&
-        distanceFromStart > dragThreshold &&
-        timeElapsed > MIN_DRAG_TIME
-      ) {
-        setHasMoved(true);
-        setIsDragging(true);
-      }
-
-      setCurrentPosition({ x: data.x, y: data.y });
-
-      setMotionData((prev) => {
-        const distance = Math.sqrt(
-          Math.pow(data.x - prev.lastPosition.x, 2) +
-            Math.pow(data.y - prev.lastPosition.y, 2),
-        );
-        const newTotalDistance = prev.totalDistance + distance;
-        const currentTime = Date.now();
-        const dragDuration = currentTime - prev.dragStartTime;
-
-        const shouldGetSick =
-          dragDuration > 5000 ||
-          newTotalDistance > 500 ||
-          (prev.dragCount > 6 &&
-            currentTime - prev.lastMotionSickTime < 30000) ||
-          (dragDuration > 1000 && newTotalDistance / dragDuration > 1.0);
-
-        if (
-          shouldGetSick &&
-          currentTime - prev.lastMotionSickTime > 15000 &&
-          Math.random() < 0.3
-        ) {
-          sayMotionSick();
-          return {
-            ...prev,
-            totalDistance: newTotalDistance,
-            lastPosition: { x: data.x, y: data.y },
-            lastMotionSickTime: currentTime,
-          };
-        }
-
-        return {
-          ...prev,
-          totalDistance: newTotalDistance,
-          lastPosition: { x: data.x, y: data.y },
-        };
-      });
-    },
-    [hasMoved, sayMotionSick, dragStartPosition, dragStartTime, isMobileDevice],
-  );
-
-  const handleDragStop = useCallback(
-    (e, data) => {
-      if (hasMoved) {
-        const padding = 10;
-        const buttonSize = 66;
-
-        const constrainedPosition = {
-          x: Math.max(
-            padding,
-            Math.min(data.x, window.innerWidth - buttonSize - padding),
-          ),
-          y: Math.max(
-            padding,
-            Math.min(data.y, window.innerHeight - buttonSize - padding),
-          ),
-        };
-
-        const dockThreshold = 50;
-        const dockedPosition = { ...constrainedPosition };
-        let docked = false;
-
-        if (constrainedPosition.x < dockThreshold) {
-          dockedPosition.x = padding;
-          docked = true;
-        } else if (
-          constrainedPosition.x >
-          window.innerWidth - buttonSize - dockThreshold
-        ) {
-          dockedPosition.x = window.innerWidth - buttonSize - padding;
-          docked = true;
-        }
-
-        if (constrainedPosition.y < dockThreshold) {
-          dockedPosition.y = padding;
-          docked = true;
-        } else if (
-          constrainedPosition.y >
-          window.innerHeight - buttonSize - dockThreshold
-        ) {
-          dockedPosition.y = window.innerHeight - buttonSize - padding;
-          docked = true;
-        }
-
-        setIsDocked(docked);
-
-        setDragPosition(dockedPosition);
-        setCurrentPosition(dockedPosition);
-        if (typeof window !== "undefined") {
-          localStorage.setItem(
-            "mark-chat-position",
-            JSON.stringify(dockedPosition),
-          );
-        }
-
-        if (Math.random() < 0.1) {
-          setTimeout(() => sayExcited(), 800);
-        }
-      }
-
-      setTimeout(() => {
-        setIsDragging(false);
-        setHasMoved(false);
-      }, 50);
-    },
-    [hasMoved, sayExcited],
-  );
-
-  const handleTouchStart = useCallback(
-    (e: React.TouchEvent) => {
-      if (!isMobileDevice()) return;
-
-      const touch = e.touches[0];
-      setIsTouching(true);
-      setTouchStartTime(Date.now());
-      setTouchStartPosition({ x: touch.clientX, y: touch.clientY });
-    },
-    [isMobileDevice],
-  );
-
-  const handleTouchMove = useCallback(
-    (e: React.TouchEvent) => {
-      if (!isMobileDevice() || !isTouching) return;
-
-      const touch = e.touches[0];
-      const distanceMoved = Math.sqrt(
-        Math.pow(touch.clientX - touchStartPosition.x, 2) +
-          Math.pow(touch.clientY - touchStartPosition.y, 2),
-      );
-
-      if (distanceMoved > 20) {
-        setIsTouching(false);
-      }
-    },
-    [isMobileDevice, isTouching, touchStartPosition],
-  );
-
-  const handleTouchEnd = useCallback(
-    (e: React.TouchEvent) => {
-      if (!isMobileDevice() || !isTouching) return;
-
-      const touchDuration = Date.now() - touchStartTime;
-      const isQuickTap = touchDuration < 200;
-
-      if (isQuickTap && !isDragging && !hasMoved) {
-        e.preventDefault();
-        e.stopPropagation();
-        toggleChatbot();
-      }
-
-      setIsTouching(false);
-    },
-    [
-      isMobileDevice,
-      isTouching,
-      touchStartTime,
-      isDragging,
-      hasMoved,
-      toggleChatbot,
-    ],
-  );
-
-  const handleActionClick = useCallback(
-    (action: string) => {
-      switch (action) {
-        case "help":
-          toggleChatbot();
-          setTimeout(() => {
-            setUserInput("/help");
-          }, 300);
-          break;
-        case "magic":
-          toggleChatbot();
-          setTimeout(() => {
-            setUserInput("/");
-          }, 300);
-          break;
-        case "settings":
-          toast.info("Settings coming soon!");
-          break;
-        case "mute":
-          break;
-        default:
-          toggleChatbot();
-          break;
-      }
-    },
-    [toggleChatbot],
-  );
-
-  const handleChatToggle = useCallback(() => {
-    let shouldToggle: boolean;
-
-    if (isMobileDevice()) {
-      const tapDuration = Date.now() - dragStartTime;
-      const isQuickTap = tapDuration < 300;
-      shouldToggle = isQuickTap || !isDragging;
-    } else {
-      shouldToggle = !isDragging;
-    }
-
-    if (shouldToggle) {
-      toggleChatbot();
-    }
-  }, [isDragging, isMobileDevice, dragStartTime, toggleChatbot]);
   const context = userRole === "learner" ? learnerContext : authorContext;
   useEffect(() => {
     let cancelled = false;
@@ -1201,14 +614,9 @@ export const MarkChat = () => {
         setCurrentChatId(todayChat.id);
 
         if (todayChat.messages && todayChat.messages.length > 0) {
-          const storeMessages = todayChat.messages.map((msg) => ({
-            id: `msg-${msg.id}`,
-            role: msg.role.toLowerCase() as ChatRole,
-            content: msg.content,
-            timestamp: new Date(msg.timestamp).toISOString(),
-            toolCalls: msg.toolCalls,
-          }));
-          useMarkChatStore.setState({ messages: storeMessages });
+          useMarkChatStore.setState({
+            messages: toStoreMessages(todayChat.messages),
+          });
         } else {
           resetChat();
         }
@@ -1245,65 +653,10 @@ export const MarkChat = () => {
   ]);
 
   useEffect(() => {
-    if (shouldAutoOpen && !isOpen && !isInitializing) {
-      toggleChat();
-      setShouldAutoOpen(false);
-    }
-  }, [shouldAutoOpen, isOpen, isInitializing, toggleChat]);
-
-  useEffect(() => {
-    const loadUserChats = async () => {
-      if (user?.userId && isOpen) {
-        setIsLoadingChats(true);
-        try {
-          const chats = await getUserChats(user.userId);
-          setUserChats(chats);
-        } catch (error) {
-        } finally {
-          setIsLoadingChats(false);
-        }
-      }
-    };
-
-    loadUserChats();
-  }, [user?.userId, isOpen]);
-
-  useEffect(() => {
-    setContextReady(true);
     if (userRole === "learner" && learnerContext.currentQuestion) {
       setActiveQuestion(learnerContext.currentQuestion.id);
     }
-    setFeedbackMode(userRole === "learner" && learnerContext.isFeedbackMode);
   }, [userRole, learnerContext]);
-
-  const handleSelectChat = useCallback(
-    async (chatId) => {
-      try {
-        const chat = await getChatById(chatId);
-        setCurrentChatId(chat.id);
-
-        if (chat.messages && chat.messages.length > 0) {
-          const storeMessages = chat.messages.map((msg) => ({
-            id: `msg-${msg.id}`,
-            role: msg.role.toLowerCase() as ChatRole,
-            content: msg.content,
-            timestamp: new Date(msg.timestamp).toISOString(),
-            toolCalls: msg.toolCalls,
-          }));
-
-          useMarkChatStore.setState({ messages: storeMessages });
-        } else {
-          resetChat();
-        }
-
-        setShowChatHistory(false);
-        toast.success("Loaded chat session");
-      } catch (error) {
-        toast.error("Could not load selected chat");
-      }
-    },
-    [resetChat],
-  );
 
   const checkForLearnerSpecialActions = useCallback(
     (input) => {
@@ -1584,7 +937,6 @@ export const MarkChat = () => {
           typeof window !== "undefined" ? document.cookie : "";
         if (user?.userId) {
           let chatId = currentChatId;
-          const isNewChat = !chatId;
           if (!chatId) {
             try {
               const created = await getOrCreateTodayChat(
@@ -1606,9 +958,6 @@ export const MarkChat = () => {
                 trimmedInput,
                 browserCookies,
               );
-              if (isNewChat) {
-                setUserChats(await getUserChats(user.userId));
-              }
             } catch (error) {
               console.error(
                 "MarkChat: addMessageToChat(USER) failed — chat log may be incomplete:",
@@ -1685,18 +1034,18 @@ export const MarkChat = () => {
   );
 
   useEffect(() => {
-    if (isOpen && messagesEndRef.current) {
+    if (isChatbotOpen && messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
-  }, [messages, isOpen]);
+  }, [messages, isChatbotOpen]);
 
   useEffect(() => {
-    if (isOpen && textareaRef.current) {
+    if (isChatbotOpen && textareaRef.current) {
       setTimeout(() => {
         textareaRef.current?.focus();
       }, 300);
     }
-  }, [isOpen]);
+  }, [isChatbotOpen]);
 
   const insertSuggestion = useCallback((suggestion) => {
     setUserInput(suggestion);
@@ -1705,14 +1054,10 @@ export const MarkChat = () => {
   }, []);
 
   useEffect(() => {
-    if (userInput.trim() !== "" || !isExpanded) {
+    if (userInput.trim() !== "") {
       setShowSuggestions(false);
     }
-  }, [userInput, isExpanded]);
-
-  const toggleExpanded = useCallback(() => {
-    setIsExpanded(!isExpanded);
-  }, [isExpanded]);
+  }, [userInput]);
 
   const handleIssueReport = useCallback(() => {
     try {
@@ -1929,9 +1274,6 @@ Please help me with this.`;
       setCurrentChatId(null);
       resetChat();
 
-      const updatedChats = await getUserChats(user.userId);
-      setUserChats(updatedChats);
-
       toast.success("Started a new chat session");
     } catch (error) {
       console.error("handleEndChat failed:", error);
@@ -1940,19 +1282,6 @@ Please help me with this.`;
       setIsEndingChat(false);
     }
   }, [isInitializing, isEndingChat, currentChatId, user?.userId, resetChat]);
-
-  const getChatTitle = useCallback(() => {
-    if (userRole === "author") return "Mark - Assignment Creator";
-    if (userRole === "learner") {
-      if (learnerContext.isFeedbackMode) {
-        return "Mark - Feedback Coach";
-      }
-      return learnerContext.isGradedAssignment
-        ? "Mark - Assignment Guide"
-        : "Mark - Practice Coach";
-    }
-    return "Mark AI Assistant";
-  }, [userRole, learnerContext]);
 
   const getHelperText = useCallback(() => {
     if (userRole === "author") {
@@ -2112,27 +1441,6 @@ Please help me with this.`;
     textareaRef.current?.focus();
   }, []);
 
-  const chatWindowVariants = {
-    hidden: { y: 20, opacity: 0, height: 0 },
-    visible: {
-      y: 0,
-      opacity: 1,
-      height: isExpanded ? "85vh" : "400px",
-      transition: {
-        type: "spring",
-        stiffness: 300,
-        damping: 25,
-        opacity: { duration: 0.2 },
-        height: { duration: 0.3 },
-      },
-    },
-    exit: {
-      y: 20,
-      opacity: 0,
-      transition: { duration: 0.2 },
-    },
-  };
-
   const chatBubbleVariants = {
     hidden: { scale: 0, opacity: 0 },
     visible: (i) => ({
@@ -2145,11 +1453,6 @@ Please help me with this.`;
         damping: 20,
       },
     }),
-  };
-
-  const fadeInVariants = {
-    hidden: { opacity: 0 },
-    visible: { opacity: 1, transition: { duration: 0.3 } },
   };
 
   const renderTypingIndicator = useCallback(() => {
@@ -2179,6 +1482,10 @@ Please help me with this.`;
   }, [isTyping]);
 
   const isSendDisabled = !userInput.trim() || isTyping || isInitializing;
+  const hasConversation = messages.some(
+    (message) =>
+      message.role !== "system" && message.id !== "assistant-initial",
+  );
 
   // Chat access was denied for this session — render nothing (the toggle
   // button hides itself off the same store flag).
@@ -2234,13 +1541,6 @@ Please help me with this.`;
             <div className="flex items-center justify-between p-2 md:p-3 bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
               <div className="flex space-x-2">
                 <button
-                  onClick={() => setShowChatHistory(true)}
-                  className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full transition-colors"
-                  title="Chat History"
-                >
-                  <ClockIcon className="w-4 h-4 text-gray-600 dark:text-gray-400" />
-                </button>
-                <button
                   onClick={handleEndChat}
                   className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-full transition-colors"
                   title="Start New Chat"
@@ -2284,7 +1584,7 @@ Please help me with this.`;
                       <div className="h-2 bg-gray-300 dark:bg-gray-700 rounded w-32"></div>
                     </div>
                   </div>
-                ) : messages.length <= 1 ? (
+                ) : !hasConversation ? (
                   <WelcomeMessage
                     getAccentColor={getAccentColor}
                     userRole={userRole}
@@ -2298,6 +1598,7 @@ Please help me with this.`;
                     getAccentColor={getAccentColor}
                     renderTypingIndicator={renderTypingIndicator}
                     onClientExecution={handleClientExecution}
+                    processedMessageIds={processedClientExecutions.current}
                   />
                 )}
                 <div ref={messagesEndRef} />
@@ -2378,15 +1679,6 @@ Please help me with this.`;
           </motion.div>
         )}
       </AnimatePresence>
-      <ChatHistoryDrawer
-        isOpen={showChatHistory}
-        onClose={() => setShowChatHistory(false)}
-        chats={userChats}
-        onSelectChat={handleSelectChat}
-        currentChatId={currentChatId}
-        isLoading={isLoadingChats}
-      />
-
       <ReportPreviewModal
         isOpen={reportPreviewModal.isOpen}
         onClose={() =>

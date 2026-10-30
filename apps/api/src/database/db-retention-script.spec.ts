@@ -6,6 +6,22 @@ const retention = require("../../../../scripts/db-retention.js") as {
   parseArgs: (argv: string[]) => Args;
   cutoffFor: (days: number, now: Date) => Date;
   buildSteps: (args: Args, now: Date, sql: SqlTag) => Step[];
+  runStep: (
+    prisma: unknown,
+    step: Step,
+    args: Args,
+    deadline: number,
+  ) => Promise<{ total: number; batches: number; exhausted: boolean }>;
+  sweepChatFiles: (
+    store: FileStore,
+    options: { cutoff: Date; dryRun: boolean; deadline: number },
+  ) => Promise<{
+    matched: number;
+    deleted: number;
+    failed: number;
+    exhausted: boolean;
+  }>;
+  createChatFileStore: (env: Record<string, string>) => FileStore | null;
   DEFAULTS: Args;
   MIN_DAYS: Record<string, number>;
 };
@@ -16,6 +32,8 @@ type Args = {
   auditDays: number;
   cookieDays: number;
   ltiSyncDays: number;
+  chatDays: number;
+  chatFileDays: number;
   batchSize: number;
   maxSeconds: number;
   pauseMs: number;
@@ -31,6 +49,16 @@ type Step = {
   cutoff: Date;
   count: (cutoff: Date) => Statement;
   apply: (cutoff: Date, limit: number) => Statement;
+  maxBatch?: number;
+};
+
+type StoredFile = { Key: string; LastModified: Date };
+type FileStore = {
+  list: (
+    prefix: string,
+    token?: string,
+  ) => Promise<{ files: StoredFile[]; nextToken?: string }>;
+  remove: (key: string) => Promise<void>;
 };
 
 // Stand-in for Prisma.sql: keeps the raw text and the bound values apart so
@@ -65,6 +93,8 @@ describe("db-retention arguments", () => {
       auditDays: 60,
       cookieDays: 7,
       ltiSyncDays: 365,
+      chatDays: 30,
+      chatFileDays: 30,
       batchSize: 5000,
       maxSeconds: 1500,
       pauseMs: 200,
@@ -102,6 +132,8 @@ describe("db-retention arguments", () => {
     "--cache-days=0",
     "--cookie-days=0",
     "--lti-sync-days=10",
+    "--chat-days=0",
+    "--chat-file-days=0",
     "--batch-size=0",
     "--batch-size=2.5",
     "--audit-days=abc",
@@ -126,14 +158,16 @@ describe("db-retention statements", () => {
     expect(byName.grading_audit.cutoff).toEqual(retention.cutoffFor(60, now));
     expect(byName.lti_sync_cookies.cutoff).toEqual(retention.cutoffFor(7, now));
     expect(byName.lti_sync_rows.cutoff).toEqual(retention.cutoffFor(365, now));
+    expect(byName.chats.cutoff).toEqual(retention.cutoffFor(30, now));
   });
 
-  it("blanks cookies before deleting anything, and only touches the four byproduct tables", () => {
+  it("blanks cookies before deleting anything, and only touches the byproduct tables", () => {
     expect(steps.map((step) => step.name)).toEqual([
       "lti_sync_cookies",
       "grading_cache",
       "grading_audit",
       "lti_sync_rows",
+      "chats",
     ]);
     for (const step of steps) {
       const { text } = step.apply(step.cutoff, 10);
@@ -146,6 +180,7 @@ describe("db-retention statements", () => {
     ["grading_cache", "GradingCache", "cachedAt", "DELETE"],
     ["grading_audit", "GradingAudit", "timestamp", "DELETE"],
     ["lti_sync_rows", "LtiGradeSync", "updatedAt", "DELETE"],
+    ["chats", "Chat", "lastActiveAt", "DELETE"],
   ])("%s is a bounded statement on %s.%s (%s)", (name, table, column, verb) => {
     const step = byName[name];
     const statement = step.apply(step.cutoff, 500);
@@ -168,5 +203,196 @@ describe("db-retention statements", () => {
     const { text } = byName.lti_sync_cookies.apply(new Date(), 1);
     expect(text).toContain(`SET "authCookie" = ''`);
     expect(text).toContain(`"authCookie" <> ''`);
+  });
+});
+
+describe("db-retention batching", () => {
+  const now = new Date("2026-10-25T03:15:00Z");
+
+  it("deletes chats in small batches because each one cascades to its messages", async () => {
+    const steps = retention.buildSteps(retention.DEFAULTS, now, sql);
+    const chats = steps.find((step) => step.name === "chats") as Step;
+    const limits: unknown[] = [];
+    const tx = {
+      $executeRawUnsafe: () => Promise.resolve(0),
+      $executeRaw: (statement: Statement) => {
+        limits.push(statement.values[1]);
+        return Promise.resolve(limits.length === 1 ? chats.maxBatch : 0);
+      },
+    };
+    const prisma = {
+      $transaction: (run: (client: typeof tx) => Promise<unknown>) => run(tx),
+    };
+    jest.spyOn(console, "log").mockImplementation(() => undefined);
+
+    const result = await retention.runStep(
+      prisma,
+      chats,
+      { ...retention.DEFAULTS, pauseMs: 0 },
+      0,
+    );
+
+    expect(chats.maxBatch).toBeLessThan(retention.DEFAULTS.batchSize);
+    expect(limits).toEqual([chats.maxBatch, chats.maxBatch]);
+    expect(result.total).toBe(chats.maxBatch);
+    expect(result.batches).toBe(2);
+    jest.restoreAllMocks();
+  });
+});
+
+describe("db-retention chat attachment sweep", () => {
+  const cutoff = new Date("2026-09-25T00:00:00Z");
+  const old = new Date("2026-01-01T00:00:00Z");
+  const recent = new Date("2026-10-20T00:00:00Z");
+
+  // Behaves like a bucket: list honours the prefix and pages its results.
+  const bucketWith = (files: StoredFile[], pageSize = 1000) => {
+    const stored = new Map(files.map((file) => [file.Key, file]));
+    const store: FileStore = {
+      list: (prefix, token) => {
+        const matching = [...stored.values()]
+          .filter((file) => file.Key.startsWith(prefix))
+          .sort((a, b) => a.Key.localeCompare(b.Key))
+          .filter((file) => !token || file.Key > token);
+        const page = matching.slice(0, pageSize);
+        return Promise.resolve({
+          files: page,
+          nextToken:
+            matching.length > pageSize ? page[page.length - 1].Key : undefined,
+        });
+      },
+      remove: (key) => {
+        stored.delete(key);
+        return Promise.resolve();
+      },
+    };
+    return { store, keys: () => [...stored.keys()].sort() };
+  };
+
+  it("deletes old chat attachments and leaves learner answers alone", async () => {
+    const { store, keys } = bucketWith([
+      { Key: "chatbot/a@example.test/old.pdf", LastModified: old },
+      { Key: "chatbot/a@example.test/new.pdf", LastModified: recent },
+      { Key: "3670/a@example.test/answer.pdf", LastModified: old },
+      { Key: "chatbot-exports/old.csv", LastModified: old },
+    ]);
+
+    const result = await retention.sweepChatFiles(store, {
+      cutoff,
+      dryRun: false,
+      deadline: 0,
+    });
+
+    expect(keys()).toEqual([
+      "3670/a@example.test/answer.pdf",
+      "chatbot-exports/old.csv",
+      "chatbot/a@example.test/new.pdf",
+    ]);
+    expect(result).toEqual({
+      matched: 1,
+      deleted: 1,
+      failed: 0,
+      exhausted: false,
+    });
+  });
+
+  it("refuses a key outside the prefix even if the listing returns one", async () => {
+    const removed: string[] = [];
+    const store: FileStore = {
+      list: () =>
+        Promise.resolve({
+          files: [{ Key: "3670/a@example.test/answer.pdf", LastModified: old }],
+        }),
+      remove: (key) => {
+        removed.push(key);
+        return Promise.resolve();
+      },
+    };
+
+    await retention.sweepChatFiles(store, {
+      cutoff,
+      dryRun: false,
+      deadline: 0,
+    });
+
+    expect(removed).toEqual([]);
+  });
+
+  it("only counts on a dry run", async () => {
+    const { store, keys } = bucketWith([
+      { Key: "chatbot/a@example.test/old.pdf", LastModified: old },
+    ]);
+
+    const result = await retention.sweepChatFiles(store, {
+      cutoff,
+      dryRun: true,
+      deadline: 0,
+    });
+
+    expect(keys()).toEqual(["chatbot/a@example.test/old.pdf"]);
+    expect(result.matched).toBe(1);
+    expect(result.deleted).toBe(0);
+  });
+
+  it("walks every page", async () => {
+    const files = Array.from({ length: 7 }, (_, index) => ({
+      Key: `chatbot/a@example.test/${index}.pdf`,
+      LastModified: old,
+    }));
+    const { store, keys } = bucketWith(files, 3);
+
+    const result = await retention.sweepChatFiles(store, {
+      cutoff,
+      dryRun: false,
+      deadline: 0,
+    });
+
+    expect(keys()).toEqual([]);
+    expect(result.deleted).toBe(7);
+  });
+
+  it("stops at the deadline and reports work remaining", async () => {
+    const { store, keys } = bucketWith([
+      { Key: "chatbot/a@example.test/old.pdf", LastModified: old },
+    ]);
+
+    const result = await retention.sweepChatFiles(store, {
+      cutoff,
+      dryRun: false,
+      deadline: Date.now() - 1000,
+    });
+
+    expect(result.exhausted).toBe(true);
+    expect(keys()).toHaveLength(1);
+  });
+
+  it("keeps going past a failed delete and counts it", async () => {
+    const { store, keys } = bucketWith([
+      { Key: "chatbot/a@example.test/1.pdf", LastModified: old },
+      { Key: "chatbot/a@example.test/2.pdf", LastModified: old },
+    ]);
+    const remove = store.remove;
+    store.remove = (key) =>
+      key.endsWith("1.pdf")
+        ? Promise.reject(new Error("AccessDenied"))
+        : remove(key);
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {
+      return undefined;
+    });
+
+    const result = await retention.sweepChatFiles(store, {
+      cutoff,
+      dryRun: false,
+      deadline: 0,
+    });
+
+    expect(keys()).toEqual(["chatbot/a@example.test/1.pdf"]);
+    expect(result).toMatchObject({ deleted: 1, failed: 1 });
+    expect(JSON.stringify(errorSpy.mock.calls)).not.toContain("example.test");
+    jest.restoreAllMocks();
+  });
+
+  it("has no store when the bucket is not configured", () => {
+    expect(retention.createChatFileStore({})).toBeNull();
   });
 });

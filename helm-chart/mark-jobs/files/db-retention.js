@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Delete grading byproduct that nothing reads back, in bounded batches.
+ * Delete byproduct that nothing reads back, in bounded batches.
  *
  * What it removes, and why each window is safe:
  *   GradingCache   rows older than --cache-days (30). A cache: a miss costs
@@ -14,6 +14,13 @@
  *                  dead weight that still carries a learner token. Rows
  *                  older than --lti-sync-days (365) are deleted outright;
  *                  the grade itself lives on AssignmentAttempt.
+ *   Chat           rows idle longer than --chat-days (30), with their messages
+ *                  (FK cascade). Chats are private to the learner and a
+ *                  conversation only continues on the day it started.
+ *   chatbot/ files objects under the chatbot/ prefix of the learner bucket
+ *                  older than --chat-file-days (30). Retired attachments that
+ *                  nothing reads. The same bucket holds graded answer uploads,
+ *                  so no other key is ever touched.
  *
  * Never touches attempts, responses or grades.
  *
@@ -24,13 +31,15 @@
  *
  * FLAGS:
  *   --cache-days=30  --audit-days=60  --cookie-days=7  --lti-sync-days=365
+ *   --chat-days=30  --chat-file-days=30
  *   --batch-size=5000      rows per statement
  *   --max-seconds=1500     stop (exit 0) once this much time has passed; the
  *                          next run continues. 0 = no limit.
  *   --pause-ms=200         wait between batches so autovacuum and replication
  *                          keep up
  *
- * Reads DATABASE_URL like the running pod. Each batch is one short
+ * Reads DATABASE_URL and the IBM_COS_* variables like the running pod; without
+ * IBM_COS_LEARNER_BUCKET and IBM_COS_ENDPOINT the file sweep is skipped. Each batch is one short
  * transaction with a local statement timeout, which is the only safe shape
  * behind pgbouncer in transaction mode (nothing session-level is ever set).
  * Deleted space is reused by Postgres for new rows; it is not returned to
@@ -45,6 +54,8 @@ const MIN_DAYS = {
   auditDays: 7,
   cookieDays: 1,
   ltiSyncDays: 30,
+  chatDays: 1,
+  chatFileDays: 1,
 };
 
 const DEFAULTS = {
@@ -53,12 +64,23 @@ const DEFAULTS = {
   auditDays: 60,
   cookieDays: 7,
   ltiSyncDays: 365,
+  chatDays: 30,
+  chatFileDays: 30,
   batchSize: 5000,
   maxSeconds: 1500,
   pauseMs: 200,
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+// A deleted chat takes all its messages with it, so a full-size batch could
+// outlast the statement timeout.
+const CHAT_MAX_BATCH = 500;
+
+// The trailing slash matters: it is the only thing separating these objects
+// from the graded answer uploads in the same bucket.
+const CHAT_FILE_PREFIX = "chatbot/";
+const CHAT_FILE_DELETE_CONCURRENCY = 20;
 
 // Set by the kubelet in every k8s pod; gates the linkerd-proxy handshakes
 // below so local/manual runs skip them entirely.
@@ -82,6 +104,8 @@ function parseArgs(argv) {
     "audit-days": "auditDays",
     "cookie-days": "cookieDays",
     "lti-sync-days": "ltiSyncDays",
+    "chat-days": "chatDays",
+    "chat-file-days": "chatFileDays",
     "batch-size": "batchSize",
     "max-seconds": "maxSeconds",
     "pause-ms": "pauseMs",
@@ -156,6 +180,15 @@ function buildSteps(args, now, sql) {
       apply: (cutoff, limit) =>
         sql`DELETE FROM "LtiGradeSync" WHERE id IN (SELECT id FROM "LtiGradeSync" WHERE "updatedAt" < ${cutoff} ORDER BY "updatedAt" LIMIT ${limit} FOR UPDATE SKIP LOCKED)`,
     },
+    {
+      name: "chats",
+      cutoff: cutoffFor(args.chatDays, now),
+      maxBatch: CHAT_MAX_BATCH,
+      count: (cutoff) =>
+        sql`SELECT count(*)::int AS n FROM "Chat" WHERE "lastActiveAt" < ${cutoff}`,
+      apply: (cutoff, limit) =>
+        sql`DELETE FROM "Chat" WHERE id IN (SELECT id FROM "Chat" WHERE "lastActiveAt" < ${cutoff} ORDER BY "lastActiveAt" LIMIT ${limit} FOR UPDATE SKIP LOCKED)`,
+    },
   ];
 }
 
@@ -180,6 +213,7 @@ async function inTransaction(prisma, timeoutSeconds, run) {
 }
 
 async function runStep(prisma, step, args, deadline) {
+  const limit = Math.min(args.batchSize, step.maxBatch ?? args.batchSize);
   let total = 0;
   let batches = 0;
   for (;;) {
@@ -188,16 +222,105 @@ async function runStep(prisma, step, args, deadline) {
     }
     const batchStart = Date.now();
     const rows = await inTransaction(prisma, 60, (tx) =>
-      tx.$executeRaw(step.apply(step.cutoff, args.batchSize)),
+      tx.$executeRaw(step.apply(step.cutoff, limit)),
     );
     total += rows;
     batches += 1;
     console.log(
       `${step.name}: batch ${batches} touched ${rows} rows in ${Date.now() - batchStart}ms (total ${total})`,
     );
-    if (rows < args.batchSize) return { total, batches, exhausted: false };
+    if (rows < limit) return { total, batches, exhausted: false };
     await sleep(args.pauseMs);
   }
+}
+
+// Same client settings as the API's S3Service. Only the bucket's list and
+// single-object delete are used.
+function createChatFileStore(env) {
+  const bucket = env.IBM_COS_LEARNER_BUCKET;
+  if (!bucket || !env.IBM_COS_ENDPOINT) return null;
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const sdk = require("@aws-sdk/client-s3");
+  const client = new sdk.S3Client({
+    endpoint: env.IBM_COS_ENDPOINT,
+    credentials: {
+      accessKeyId: env.IBM_COS_ACCESS_KEY_ID ?? "",
+      secretAccessKey: env.IBM_COS_SECRET_ACCESS_KEY ?? "",
+    },
+    forcePathStyle: true,
+    region: env.IBM_COS_REGION ?? "us-east",
+  });
+  return {
+    list: async (prefix, token) => {
+      const page = await client.send(
+        new sdk.ListObjectsV2Command({
+          Bucket: bucket,
+          Prefix: prefix,
+          ContinuationToken: token,
+        }),
+      );
+      return {
+        files: page.Contents ?? [],
+        nextToken: page.NextContinuationToken,
+      };
+    },
+    remove: async (key) => {
+      await client.send(
+        new sdk.DeleteObjectCommand({ Bucket: bucket, Key: key }),
+      );
+    },
+  };
+}
+
+// Keys hold the learner's email, so failures log the error name and never the
+// key. The key check repeats the listing's prefix on purpose: this bucket also
+// holds graded answers, and a wrong listing must not be able to delete one.
+async function sweepChatFiles(store, { cutoff, dryRun, deadline }) {
+  const result = { matched: 0, deleted: 0, failed: 0, exhausted: false };
+  let token;
+  do {
+    if (deadline && Date.now() >= deadline) {
+      result.exhausted = true;
+      return result;
+    }
+    const page = await store.list(CHAT_FILE_PREFIX, token);
+    const expired = page.files
+      .filter(
+        (file) =>
+          file.Key.startsWith(CHAT_FILE_PREFIX) && file.LastModified < cutoff,
+      )
+      .map((file) => file.Key);
+    result.matched += expired.length;
+    if (!dryRun) {
+      for (
+        let start = 0;
+        start < expired.length;
+        start += CHAT_FILE_DELETE_CONCURRENCY
+      ) {
+        const chunk = expired.slice(
+          start,
+          start + CHAT_FILE_DELETE_CONCURRENCY,
+        );
+        const outcomes = await Promise.allSettled(
+          chunk.map((key) => store.remove(key)),
+        );
+        for (const outcome of outcomes) {
+          if (outcome.status === "fulfilled") {
+            result.deleted += 1;
+            continue;
+          }
+          if (result.failed === 0) {
+            console.error(
+              `chatbot_files: delete failed (${outcome.reason?.name ?? "unknown error"}); later failures are only counted`,
+            );
+          }
+          result.failed += 1;
+        }
+      }
+    }
+    token = page.nextToken;
+  } while (token);
+  return result;
 }
 
 async function main() {
@@ -215,7 +338,8 @@ async function main() {
   console.log(
     `db-retention ${args.dryRun ? "DRY RUN" : "EXECUTE"} at ${now.toISOString()} ` +
       `(cache ${args.cacheDays}d, audit ${args.auditDays}d, cookies ${args.cookieDays}d, ` +
-      `lti rows ${args.ltiSyncDays}d, batch ${args.batchSize})`,
+      `lti rows ${args.ltiSyncDays}d, chats ${args.chatDays}d, ` +
+      `chat files ${args.chatFileDays}d, batch ${args.batchSize})`,
   );
 
   await awaitLinkerdProxy();
@@ -246,10 +370,35 @@ async function main() {
   } finally {
     await prisma.$disconnect();
   }
+  let failedFiles = 0;
+  if (!exhausted) {
+    const store = createChatFileStore(process.env);
+    if (store) {
+      const cutoff = cutoffFor(args.chatFileDays, now);
+      const files = await sweepChatFiles(store, {
+        cutoff,
+        dryRun: args.dryRun,
+        deadline,
+      });
+      failedFiles = files.failed;
+      exhausted = files.exhausted;
+      console.log(
+        `chatbot_files: ${files.matched} objects older than ${cutoff.toISOString()}, ` +
+          `${files.deleted} deleted, ${files.failed} failed` +
+          (files.exhausted ? " (time budget exhausted, resumes next run)" : ""),
+      );
+    } else {
+      console.warn("chatbot_files: skipped, object storage is not configured");
+    }
+  }
   const elapsedSec = ((Date.now() - start) / 1000).toFixed(1);
   console.log(
     `db-retention finished in ${elapsedSec}s${exhausted ? " with work remaining" : ""}`,
   );
+  // Fail the Job so denied deletes surface instead of recurring unnoticed.
+  if (failedFiles > 0) {
+    throw new Error(`chatbot_files: ${failedFiles} deletes failed`);
+  }
 }
 
 // The kubelet does not wait for the injected linkerd-proxy to be ready
@@ -304,4 +453,13 @@ if (require.main === module) {
     });
 }
 
-module.exports = { parseArgs, cutoffFor, buildSteps, DEFAULTS, MIN_DAYS };
+module.exports = {
+  parseArgs,
+  cutoffFor,
+  buildSteps,
+  runStep,
+  sweepChatFiles,
+  createChatFileStore,
+  DEFAULTS,
+  MIN_DAYS,
+};

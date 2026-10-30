@@ -2,12 +2,7 @@
 /* eslint-disable @typescript-eslint/no-unsafe-call */
 /* eslint-disable @typescript-eslint/no-unsafe-member-access */
 import { openai } from "@ai-sdk/openai";
-import {
-  BadRequestException,
-  HttpException,
-  Inject,
-  Injectable,
-} from "@nestjs/common";
+import { BadRequestException, Inject, Injectable } from "@nestjs/common";
 import {
   CoreMessage,
   generateText,
@@ -92,9 +87,6 @@ function withErrorHandling<TArguments extends any[], TResult>(
       }
       return result;
     } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
       const message =
         error instanceof Error ? error.message : STANDARD_ERROR_MESSAGE;
       return `Error in ${function_.name || "function"}: ${message}`;
@@ -537,9 +529,8 @@ export class MarkChatService {
         partitionClientExecutions(collectToolResultsAcrossSteps(steps));
 
       if (!fullContent.trim() && nonClientToolOutputs.length > 0) {
-        const fallback = TOOL_ONLY_FALLBACK_MESSAGE;
-        fullContent += fallback;
-        writeChunk(fallback);
+        fullContent += TOOL_ONLY_FALLBACK_MESSAGE;
+        writeChunk(TOOL_ONLY_FALLBACK_MESSAGE);
       }
 
       if (trackedClientExecutions.length > 0) {
@@ -572,9 +563,18 @@ export class MarkChatService {
             toolCallsForDatabase,
           );
         } catch (persistError) {
-          console.error(
-            "MarkChatService.respondStream: failed to persist assistant message",
-            persistError,
+          this.logger.error(
+            "chat_assistant_message_not_saved: reply reached the user but is missing from the chat",
+            {
+              chat_id: chatId,
+              user_id: userSession.userId,
+              error:
+                persistError instanceof Error
+                  ? persistError.message
+                  : String(persistError),
+              stack:
+                persistError instanceof Error ? persistError.stack : undefined,
+            },
           );
         }
       }
@@ -826,8 +826,6 @@ TOOL USAGE:
 - Use submitInquiry for general questions or inquiries
 - reportIssue, provideFeedback, submitSuggestion, and submitInquiry only OPEN a pre-filled form — nothing is submitted until the user submits the form. After calling one, ask the user to review and submit the form. NEVER claim the report, feedback, suggestion, or inquiry was already submitted.
 
-IMPORTANT: ${assignmentId ? `When calling tools that require assignmentId, always use ${assignmentId}` : "Assignment ID information is not available in the current context"}
-
 RESPONSE STYLE:
 - Warm, encouraging, and patient
 - Use clear, simple language
@@ -835,7 +833,9 @@ RESPONSE STYLE:
 - Use emojis sparingly to add warmth
 - Always end with a question or next step to keep engagement
 
-${LEARNER_HELP_GUIDE}`,
+${LEARNER_HELP_GUIDE}
+
+IMPORTANT: ${assignmentId ? `When calling tools that require assignmentId, always use ${assignmentId}` : "Assignment ID information is not available in the current context"}`,
     };
 
     const prefillGuidance = `

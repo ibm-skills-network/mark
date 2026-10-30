@@ -1338,38 +1338,6 @@ export async function findTodayChat(
 }
 
 /**
- * Get a specific chat by ID with all its messages
- */
-export async function getChatById(
-  chatId: string,
-  cookies?: string,
-): Promise<Chat> {
-  const url = `${getApiRoutes().chats}/${chatId}`;
-
-  return await apiClient.get(url, {
-    headers: {
-      ...(cookies ? { Cookie: cookies } : {}),
-    },
-  });
-}
-
-/**
- * Get all chats for a user
- */
-export async function getUserChats(
-  userId: string,
-  cookies?: string,
-): Promise<Chat[]> {
-  const url = `${getApiRoutes().chats}/user/${userId}`;
-
-  return await apiClient.get(url, {
-    headers: {
-      ...(cookies ? { Cookie: cookies } : {}),
-    },
-  });
-}
-
-/**
  * Add a message to a chat
  */
 export async function addMessageToChat(

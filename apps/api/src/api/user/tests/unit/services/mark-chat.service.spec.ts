@@ -57,6 +57,7 @@ interface GenerateCall {
 describe("MarkChatService role resolution", () => {
   let service: MarkChatService;
   let warn: jest.Mock;
+  let logError: jest.Mock;
   let chatRepository: { addMessage: jest.Mock };
 
   const learnerSession: UserSession = {
@@ -109,11 +110,12 @@ describe("MarkChatService role resolution", () => {
     });
 
     warn = jest.fn();
+    logError = jest.fn();
     const logger = {
       child: jest.fn(),
       warn,
       info: jest.fn(),
-      error: jest.fn(),
+      error: logError,
       debug: jest.fn(),
     };
     logger.child.mockReturnValue(logger);
@@ -279,6 +281,39 @@ describe("MarkChatService role resolution", () => {
     expect(system).toContain("Grading Issue");
     expect(system).not.toMatch(/regrad/i);
     expect(system).not.toContain("FILE LINK WORKFLOW");
+  });
+
+  it("keeps the shared help guide ahead of the per-assignment line, so the prompt prefix can be cached", async () => {
+    await service.respond("chat-1", body("learner"), learnerSession);
+
+    const { system } = lastGenerateCall();
+    expect(system.indexOf("PLATFORM HELP")).toBeGreaterThan(-1);
+    expect(system.indexOf("PLATFORM HELP")).toBeLessThan(
+      system.indexOf("When calling tools that require assignmentId"),
+    );
+  });
+
+  it("logs through the service logger when the assistant message cannot be saved", async () => {
+    streamTextMock.mockReturnValue({
+      textStream: textStreamOf(["hello"]),
+      steps: Promise.resolve([]),
+    });
+    chatRepository.addMessage.mockRejectedValueOnce(new Error("db down"));
+    const consoleError = jest.spyOn(console, "error");
+
+    await service.respondStream(
+      "chat-1",
+      body("learner"),
+      learnerSession,
+      makeResponse(),
+    );
+
+    expect(logError).toHaveBeenCalledWith(
+      expect.stringContaining("chat_assistant_message_not_saved"),
+      expect.objectContaining({ chat_id: "chat-1", error: "db down" }),
+    );
+    expect(consoleError).not.toHaveBeenCalled();
+    consoleError.mockRestore();
   });
 
   it("keeps the prefill rule on both role prompts", async () => {

@@ -8,6 +8,7 @@ import {
   Post,
   Req,
   Res,
+  ServiceUnavailableException,
   UseGuards,
 } from "@nestjs/common";
 import { ApiTags } from "@nestjs/swagger";
@@ -118,19 +119,35 @@ export class ChatController {
       "today/lookup",
     );
     const chat = await this.chatService.findTodayChat(userId, assignmentId);
+    this.logger.info("chat_today_lookup", {
+      user_id: userId,
+      assignment_id: assignmentId,
+      chat_id: chat?.id,
+      found: !!chat,
+    });
     return chat ?? { id: null, messages: [] };
+  }
+
+  private chatHistoryRejection(route: string, entityId: string) {
+    this.logger.info("chat_history_unavailable", {
+      route,
+      entity_id: entityId,
+    });
+    return new ServiceUnavailableException(
+      "Chat history is temporarily unavailable",
+    );
   }
 
   @Get("user/:userId")
   @UseGuards(ChatAccessControlGuard)
-  async getUserChats(@Param("userId") userId: string) {
-    return this.chatService.getUserChats(userId);
+  getUserChats(@Param("userId") userId: string): Promise<never> {
+    return Promise.reject(this.chatHistoryRejection("user", userId));
   }
 
   @Get(":chatId")
   @UseGuards(ChatAccessControlGuard)
-  async getChat(@Param("chatId") chatId: string) {
-    return this.chatService.getChatById(chatId);
+  getChat(@Param("chatId") chatId: string): Promise<never> {
+    return Promise.reject(this.chatHistoryRejection("chat", chatId));
   }
 
   @Post(":chatId/messages")

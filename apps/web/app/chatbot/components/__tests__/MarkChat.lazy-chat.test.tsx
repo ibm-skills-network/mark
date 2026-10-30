@@ -14,7 +14,6 @@ import {
   endChat,
   findTodayChat,
   getOrCreateTodayChat,
-  getUserChats,
 } from "@/lib/shared";
 
 jest.mock("@/lib/shared", () => ({
@@ -24,8 +23,6 @@ jest.mock("@/lib/shared", () => ({
   findTodayChat: jest.fn(),
   getOrCreateTodayChat: jest.fn(),
   addMessageToChat: jest.fn(),
-  getUserChats: jest.fn(),
-  getChatById: jest.fn(),
   endChat: jest.fn(),
 }));
 
@@ -36,15 +33,6 @@ jest.mock("../../../../hooks/useChatbot", () => ({
     toggle: jest.fn(),
     isUnavailable: false,
     markUnavailable,
-  }),
-}));
-
-jest.mock("../../../../hooks/useMarkSpeech", () => ({
-  useMarkSpeech: () => ({
-    activeBubble: null,
-    dismiss: jest.fn(),
-    sayMotionSick: jest.fn(),
-    sayExcited: jest.fn(),
   }),
 }));
 
@@ -69,22 +57,14 @@ jest.mock("../../store/useAuthorContext", () => ({
   useAuthorContext: () => authorContext,
 }));
 
-jest.mock("@/stores/author", () => ({
-  useAuthorStore: (selector: (state: unknown) => unknown) =>
-    selector({ name: "", questions: [], activeAssignmentId: null }),
-}));
-
 jest.mock("react-markdown", () => ({
-  __esModule: true,
-  default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-}));
-jest.mock("@tippyjs/react", () => ({
   __esModule: true,
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 jest.mock("@/components/ReportPreviewModal", () => ({
   __esModule: true,
-  default: () => null,
+  default: ({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) =>
+    isOpen ? <button onClick={onClose}>report form</button> : null,
 }));
 jest.mock("@/lib/report-client", () => ({ submitBugReport: jest.fn() }));
 jest.mock("sonner", () => ({
@@ -103,6 +83,11 @@ const waitForInit = async () => {
 };
 
 // jest.setup.js stubs MessageChannel, so updates must land inside act.
+const flushUpdates = () =>
+  act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
 const clickAndSettle = async (title: string, done: () => boolean) => {
   await act(async () => {
     fireEvent.click(screen.getByTitle(title));
@@ -137,11 +122,9 @@ describe("MarkChat chat rows", () => {
       messages: [],
     });
     (addMessageToChat as jest.Mock).mockResolvedValue({ id: 1 });
-    (getUserChats as jest.Mock).mockResolvedValue([]);
     (endChat as jest.Mock).mockResolvedValue({ id: "chat-9" });
     useMarkChatStore.setState({
       userRole: "learner",
-      isOpen: true,
       isTyping: false,
       userInput: "",
       sendMessage,
@@ -182,7 +165,6 @@ describe("MarkChat chat rows", () => {
       "hi",
       expect.any(String),
     );
-    expect(getUserChats).toHaveBeenCalled();
 
     await typeAndSend("again");
     expect(getOrCreateTodayChat).toHaveBeenCalledTimes(1);
@@ -236,6 +218,104 @@ describe("MarkChat chat rows", () => {
     expect(addMessageToChat).not.toHaveBeenCalled();
   });
 
+  it("offers no way to open chat history", async () => {
+    render(<MarkChat />);
+    await waitForInit();
+
+    expect(screen.queryByTitle("Chat History")).not.toBeInTheDocument();
+    expect(screen.getByTitle("Start New Chat")).toBeInTheDocument();
+  });
+
+  it("shows a restored chat that holds a single message", async () => {
+    (findTodayChat as jest.Mock).mockResolvedValue({
+      id: "chat-5",
+      messages: [
+        {
+          id: 1,
+          role: "USER",
+          content: "only question",
+          timestamp: "2026-10-28T10:00:00.000Z",
+        },
+      ],
+    });
+
+    render(<MarkChat />);
+
+    expect(await screen.findByText("only question")).toBeInTheDocument();
+  });
+
+  it("restores a reply that opened a report form without the marker or the form", async () => {
+    const operations = [
+      { function: "showReportPreview", params: { type: "report" } },
+    ];
+    (findTodayChat as jest.Mock).mockResolvedValue({
+      id: "chat-5",
+      messages: [
+        {
+          id: 1,
+          role: "USER",
+          content: "the upload is broken",
+          timestamp: "2026-10-28T10:00:00.000Z",
+        },
+        {
+          id: 2,
+          role: "ASSISTANT",
+          content: `Please review the form.\n\n<!-- CLIENT_EXECUTION_MARKER\n${JSON.stringify(operations)}\n-->`,
+          timestamp: "2026-10-28T10:00:05.000Z",
+          toolCalls: operations,
+        },
+      ],
+    });
+
+    // Every stage runs inside act, or the effect that opens forms never fires.
+    await act(async () => {
+      render(<MarkChat />);
+    });
+    for (let stage = 0; stage < 4; stage++) {
+      await flushUpdates();
+    }
+
+    expect(screen.getByText("Please review the form.")).toBeInTheDocument();
+    expect(screen.queryByText(/CLIENT_EXECUTION_MARKER/)).toBeNull();
+    expect(screen.queryByText("report form")).toBeNull();
+  });
+
+  it("does not reopen a report form when the message list mounts again", async () => {
+    const showReplyWithForm = () =>
+      act(() => {
+        useMarkChatStore.setState({
+          messages: [
+            { id: "user-1", role: "user", content: "the upload is broken" },
+            {
+              id: "assistant-1",
+              role: "assistant",
+              content: "Please review the form.",
+              toolCalls: [
+                { function: "showReportPreview", params: { type: "report" } },
+              ],
+            },
+          ],
+        });
+      });
+
+    render(<MarkChat />);
+    await waitForInit();
+
+    showReplyWithForm();
+    fireEvent.click(await screen.findByText("report form"));
+    expect(screen.queryByText("report form")).toBeNull();
+
+    // The list unmounts whenever there is nothing to show, like a closed panel.
+    act(() => useMarkChatStore.getState().resetChat());
+    showReplyWithForm();
+
+    expect(
+      await screen.findByText("Please review the form."),
+    ).toBeInTheDocument();
+    await flushUpdates();
+    expect(screen.queryByText("report form")).toBeNull();
+  });
+
   it("starting a new chat before any message creates and ends nothing", async () => {
     render(<MarkChat />);
     await waitForInit();
@@ -260,7 +340,7 @@ describe("MarkChat chat rows", () => {
     });
     await clickAndSettle(
       "Start New Chat",
-      () => (getUserChats as jest.Mock).mock.calls.length > 1,
+      () => (endChat as jest.Mock).mock.calls.length > 0,
     );
     expect(endChat).toHaveBeenCalledWith("chat-9");
     expect(getOrCreateTodayChat).toHaveBeenCalledTimes(1);

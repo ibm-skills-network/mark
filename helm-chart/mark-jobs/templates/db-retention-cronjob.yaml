@@ -47,6 +47,8 @@ spec:
                 - --audit-days={{ .Values.dbRetention.auditDays }}
                 - --cookie-days={{ .Values.dbRetention.cookieDays }}
                 - --lti-sync-days={{ .Values.dbRetention.ltiSyncDays }}
+                - --chat-days={{ .Values.dbRetention.chatDays }}
+                - --chat-file-days={{ .Values.dbRetention.chatFileDays }}
                 - --batch-size={{ .Values.dbRetention.batchSize }}
                 - --max-seconds={{ .Values.dbRetention.maxSeconds }}
               env:

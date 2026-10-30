@@ -28,8 +28,6 @@ interface MarkChatUsage {
 }
 
 interface MarkChatState {
-  isOpen: boolean;
-  toggleChat: () => void;
   userRole: "author" | "learner";
   setUserRole: (role: "author" | "learner") => void;
   messages: ChatMessage[];
@@ -52,8 +50,6 @@ interface MarkChatState {
 export const useMarkChatStore = create<MarkChatState>()(
   persist(
     (set, get) => ({
-      isOpen: false,
-      toggleChat: () => set((s) => ({ isOpen: !s.isOpen })),
       userRole: "learner",
       setUserRole: (role) => set({ userRole: role }),
       addMessage: (message: ChatMessage) =>
@@ -267,6 +263,14 @@ export const useMarkChatStore = create<MarkChatState>()(
                 });
               }
             } catch (streamError) {
+              console.error("MarkChat: reply stream failed:", streamError);
+              // Nothing arrived, so show the error instead of a blank reply.
+              if (!accumulatedContent.trim()) {
+                set((s) => ({
+                  messages: s.messages.filter((m) => m.id !== newId),
+                }));
+                throw streamError;
+              }
             } finally {
               set({ isTyping: false });
 

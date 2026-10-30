@@ -1,3 +1,4 @@
+import { ServiceUnavailableException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import { Response } from "express";
 import {
@@ -22,6 +23,7 @@ describe("ChatController identity", () => {
   };
   let markChatService: { respond: jest.Mock; respondStream: jest.Mock };
   let warn: jest.Mock;
+  let info: jest.Mock;
 
   const learnerSession: UserSession = {
     userId: "learner-1@example.test",
@@ -46,10 +48,11 @@ describe("ChatController identity", () => {
     };
 
     warn = jest.fn();
+    info = jest.fn();
     const logger = {
       child: jest.fn(),
       warn,
-      info: jest.fn(),
+      info,
       error: jest.fn(),
       debug: jest.fn(),
     };
@@ -157,6 +160,33 @@ describe("ChatController identity", () => {
       expect(result).toEqual({ id: null, messages: [] });
       expect(chatService.getOrCreateTodayChat).not.toHaveBeenCalled();
       expect(chatService.createChat).not.toHaveBeenCalled();
+    });
+
+    it("logs who looked up which chat and what came back", async () => {
+      chatService.findTodayChat.mockResolvedValue({ id: "chat-1" });
+
+      await controller.lookupTodayChat({}, requestOf(learnerSession));
+
+      expect(info).toHaveBeenCalledWith("chat_today_lookup", {
+        user_id: learnerSession.userId,
+        assignment_id: learnerSession.assignmentId,
+        chat_id: "chat-1",
+        found: true,
+      });
+    });
+  });
+
+  describe("chat history", () => {
+    it("is unavailable when listing a user's chats", async () => {
+      await expect(
+        controller.getUserChats(learnerSession.userId),
+      ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    });
+
+    it("is unavailable when opening a chat by id", async () => {
+      await expect(controller.getChat("chat-1")).rejects.toBeInstanceOf(
+        ServiceUnavailableException,
+      );
     });
   });
 

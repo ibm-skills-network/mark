@@ -87,33 +87,8 @@ export class ChatAccessControlGuard implements CanActivate {
         throw new NotFoundException("Chat not found");
       }
 
+      // Chats are private to their owner, whatever the requester's role or group.
       if (chat.userId !== userSession.userId) {
-        if (chat.assignmentId) {
-          const assignmentAccess = await this.checkAssignmentAccess(
-            chat.assignmentId,
-            userSession.groupId,
-          );
-
-          if (!assignmentAccess) {
-            this.logger.warn(
-              "chat_access_denied: assignment-linked chat, no group link",
-              {
-                denial_reason: "no_assignment_access",
-                chat_id: chatId,
-                chat_owner: chat.userId,
-                requesting_user_id: userSession.userId,
-                assignment_id: chat.assignmentId,
-                group_id: userSession.groupId,
-                method,
-                url: originalUrl,
-              },
-            );
-            throw new ForbiddenException("Access denied to this chat");
-          }
-
-          return true;
-        }
-
         this.logger.warn("chat_access_denied: not chat owner", {
           denial_reason: "not_chat_owner",
           chat_id: chatId,
@@ -129,18 +104,15 @@ export class ChatAccessControlGuard implements CanActivate {
     } else if (path.includes("/user/")) {
       const userId = params.userId;
 
-      if (userId !== userSession.userId && userSession.role !== "admin") {
-        this.logger.warn(
-          "chat_access_denied: cross-user chat list access by non-admin",
-          {
-            denial_reason: "cross_user_non_admin",
-            target_user_id: userId,
-            requesting_user_id: userSession.userId,
-            requesting_role: userSession.role,
-            method,
-            url: originalUrl,
-          },
-        );
+      if (userId !== userSession.userId) {
+        this.logger.warn("chat_access_denied: cross-user chat list access", {
+          denial_reason: "cross_user",
+          target_user_id: userId,
+          requesting_user_id: userSession.userId,
+          requesting_role: userSession.role,
+          method,
+          url: originalUrl,
+        });
         throw new ForbiddenException("Access denied to other users' chats");
       }
 
@@ -167,9 +139,12 @@ export class ChatAccessControlGuard implements CanActivate {
         throw new ForbiddenException("Cannot create chats for other users");
       }
 
-      if (body && body.assignmentId) {
+      // The handlers scope the chat to the session's assignment and ignore the
+      // body's, so that is the one to check.
+      const assignmentId = userSession.assignmentId;
+      if (Number.isInteger(assignmentId) && assignmentId > 0) {
         const assignmentAccess = await this.checkAssignmentAccess(
-          body.assignmentId,
+          assignmentId,
           userSession.groupId,
         );
 
@@ -178,7 +153,7 @@ export class ChatAccessControlGuard implements CanActivate {
             "chat_access_denied: cannot create chat for inaccessible assignment",
             {
               denial_reason: "no_assignment_access_on_create",
-              assignment_id: body.assignmentId,
+              assignment_id: assignmentId,
               user_id: userSession.userId,
               group_id: userSession.groupId,
               method,

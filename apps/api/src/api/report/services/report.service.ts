@@ -1398,10 +1398,10 @@ export class ReportsService {
         : heldReason === "grading_dispute"
           ? `It has been recorded for review.`
           : `Our team will review it soon.`;
-      let message = `Thank you for your report. ${ticketSegment} You can check the status anytime by asking about your reported issues.`;
+      let message = `Thank you for your report. ${ticketSegment}`;
 
       if (isDuplicate) {
-        message = `Thank you for your report. This looks like a duplicate of a previously reported issue, so your report has been linked to it and they will be handled together. You can check the status anytime by asking about your reported issues.`;
+        message = `Thank you for your report. This looks like a duplicate of a previously reported issue, so your report has been linked to it and they will be handled together.`;
 
         if (
           reportStatus === ReportStatus.RESOLVED ||
@@ -1412,13 +1412,13 @@ export class ReportsService {
           }.`;
         }
       } else if (highSimilarityReport) {
-        message = `Thank you for your report. ${ticketSegment} It has been linked to a similar existing report and our team will review them together. You can check the status anytime by asking about your reported issues.`;
+        message = `Thank you for your report. ${ticketSegment} It has been linked to a similar existing report and our team will review them together.`;
       } else if (similarReports.length > 0) {
         message = `Thank you for your report. ${ticketSegment} We found ${
           similarReports.length
         } similar ${
           similarReports.length === 1 ? "issue" : "issues"
-        } that might be related. You can check the status anytime by asking about your reported issues.`;
+        } that might be related.`;
       }
 
       return {
@@ -2766,11 +2766,7 @@ export class ReportsService {
     }
 
     return {
-      message: `Thank you for your feedback! Our team will review it soon.${
-        report
-          ? " You can check the status of this feedback anytime by asking me about your reported issues."
-          : ""
-      }`,
+      message: "Thank you for your feedback! Our team will review it soon.",
       reportId: report?.id,
     };
   }

@@ -285,6 +285,7 @@ model Chat {
 
   @@index([userId, startedAt])
   @@index([assignmentId])
+  @@index([lastActiveAt])
 }
 
 model ChatMessage {
