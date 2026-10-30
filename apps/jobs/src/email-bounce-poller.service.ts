@@ -8,7 +8,7 @@ import { EmailSuppressionService } from "../../api/src/auth/services/email-suppr
 import { IbmBounceClient } from "../../api/src/auth/services/ibm-bounce-client";
 import {
   bounceSource,
-  DAY_MS,
+  BOUNCE_REPLAY_WINDOW_MS,
 } from "../../api/src/auth/services/email-bounce-source";
 
 const LEASE_MS = 5 * 60_000;
@@ -55,7 +55,9 @@ export class EmailBouncePoller {
       // Re-read the bounded reporting window to catch late arrivals and recover
       // after outages. Never advance a cursor past a partially processed page.
       const end = new Date(Math.floor((Date.now() - 60_000) / 1000) * 1000);
-      const start = new Date(end.getTime() - 30 * DAY_MS);
+      // IBM also rejects a start older than 30 days at request time. Leave
+      // headroom for the end lag, clock skew, and subsequent page requests.
+      const start = new Date(end.getTime() - BOUNCE_REPLAY_WINDOW_MS);
       const before = await this.suppressions.bounceHealth();
       let offset = 0;
       for (let pageNumber = 0; ; pageNumber++) {

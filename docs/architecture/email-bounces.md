@@ -65,7 +65,7 @@ Tests use synthetic fixtures; a production response and IAM permissions still
 need verification. If IBM returns diagnostic text rather than exact reason
 codes, it is retained but not interpreted as proof of an invalid mailbox.
 
-On first enable, the job imports the last 30 days, including suppressions for
+On first enable, the job imports nearly 30 days, including suppressions for
 historical invalid mailboxes. Check that this is the intended configuration
 before switching polling on. Check the dashboard after the first interval.
 Disabling the opt-in switch stops ingestion and recovery, preserving existing
@@ -87,8 +87,11 @@ sender reputation or proof that a receiving organisation blocked Mark.
 
 ## Reliability and limitations
 
-- Each sweep uses a fixed 30-day window ending one minute behind the worker
-  clock, explicit `limit=100`, and offset pagination. Pages are paced one second
+- Each sweep uses a fixed 29-day, 23-hour window ending one minute behind the
+  worker clock. The hour of headroom keeps the start inside IBM's rolling 30-day
+  retention boundary during pagination. Recovery uses the same window so older
+  probes require a fresh trial. Requests use explicit `limit=100` and offset
+  pagination. Pages are paced one second
   apart. Full overlapping sweeps recover late reports and partial failures.
 - A database lease prevents worker replicas from issuing simultaneous sweeps.
   It expires after five minutes and renews before each page. HTTP requests time
