@@ -81,7 +81,10 @@ import {
   type SlowGradingType,
 } from "../grading-progress.service";
 import { GradingRateLimiterService } from "../grading-rate-limiter.service";
-import { GradingBridgeService } from "../../../../grading-bridge/hook";
+import {
+  GradingBridgeService,
+  V3LegacyFallbackError,
+} from "../../../../grading-bridge/hook";
 
 function issueHost(issue: GradingIssue): string | undefined {
   if (!issue.source?.url) return undefined;
@@ -1118,21 +1121,35 @@ export class QuestionResponseService {
     let learnerResponse: unknown;
 
     try {
+      let gradedByV3 = false;
       if (v3Mode?.mode === "live" && this.gradingBridge) {
         if (sourceCheckOnly) return skippedForSourceCheck();
-        ({ responseDto, learnerResponse } = await this.gradingBridge.gradeLive(
-          question,
-          requestDto,
-          gradingContext,
-          v3Mode,
-        ));
-      } else if (question.type === QuestionType.LINK_FILE) {
+        try {
+          ({ responseDto, learnerResponse } =
+            await this.gradingBridge.gradeLive(
+              question,
+              requestDto,
+              gradingContext,
+              v3Mode,
+            ));
+          gradedByV3 = true;
+        } catch (error) {
+          if (!(error instanceof V3LegacyFallbackError)) throw error;
+          this.logger.warn("grading.v3.legacy_fallback", {
+            questionId,
+            assignmentId,
+            assignmentAttemptId,
+            code: error.code,
+          });
+        }
+      }
+      if (!gradedByV3 && question.type === QuestionType.LINK_FILE) {
         ({ responseDto, learnerResponse } = await this.handleLinkFileQuestion(
           question,
           requestDto,
           gradingContext,
         ));
-      } else {
+      } else if (!gradedByV3) {
         const startTime = Date.now();
 
         this.logger.info("Starting question grading process", {

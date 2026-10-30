@@ -36,6 +36,17 @@ export class V3GradingFailedError extends Error {
   }
 }
 
+/**
+ * v3 could not produce a grade for a reason that says nothing about the
+ * submission (the answer was cut off twice); legacy grades the question.
+ */
+export class V3LegacyFallbackError extends Error {
+  constructor(readonly code: string) {
+    super(`v3 grading fell back to legacy (${code})`);
+    this.name = "V3LegacyFallbackError";
+  }
+}
+
 const OFF: ResolvedMode = { mode: "off", effort: "medium", source: "default" };
 
 /**
@@ -211,6 +222,9 @@ export class GradingBridgeService {
         questionId: context.questionId,
         attemptId: context.attemptId,
       });
+    }
+    if (failure.code === "grading.v3.output_limit") {
+      return new V3LegacyFallbackError(failure.code);
     }
     if (failure.retryable)
       return new RetryableProcessingError("grading_unavailable");

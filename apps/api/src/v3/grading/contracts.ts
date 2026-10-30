@@ -213,6 +213,7 @@ export const GRADING_FAILURE_CODES = [
   "grading.v3.source_unreadable",
   "grading.v3.model_unavailable",
   "grading.v3.model_error",
+  "grading.v3.output_limit",
   "grading.v3.check_failed",
 ] as const;
 export type GradingFailureCode = (typeof GRADING_FAILURE_CODES)[number];
