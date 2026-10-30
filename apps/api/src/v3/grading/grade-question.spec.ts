@@ -210,6 +210,19 @@ describe("gradeWithV3", () => {
     ).toBe(16_300);
   });
 
+  it("drops low to no reasoning on the retry when the model allows it", async () => {
+    const client = Object.assign(
+      new FakeClient([new GradingModelOutputLimitError(usage), good]),
+      { lowestEffort: "none" as const },
+    );
+    const outcome = await gradeWithV3(input, { client, logger: logger() });
+    expect(client.requests.map((request) => request.effort)).toEqual([
+      "low",
+      "none",
+    ]);
+    expect(outcome.status === "graded" && outcome.result.effort).toBe("none");
+  });
+
   it("fails as output_limit when the retry is cut off too", async () => {
     const client = new FakeClient([
       new GradingModelOutputLimitError(usage),
@@ -759,6 +772,20 @@ describe("debug mode", () => {
     expect(
       toResponsesRequest({ ...base, reasoningSummary: true }, "m").reasoning,
     ).toEqual({ effort: "low", summary: "detailed" });
+  });
+
+  it("allows no reasoning on gpt-6-luna only", () => {
+    const fakeOpenAi = {
+      responses: { create: jest.fn() },
+    } as unknown as OpenAI;
+    expect(
+      new OpenAiGradingModelClient({ client: fakeOpenAi, model: "gpt-6-luna" })
+        .lowestEffort,
+    ).toBe("none");
+    expect(
+      new OpenAiGradingModelClient({ client: fakeOpenAi, model: "gpt-6-terra" })
+        .lowestEffort,
+    ).toBe("low");
   });
 
   it("reports a cut-off answer as an output-limit error carrying its usage", async () => {

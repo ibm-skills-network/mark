@@ -1,10 +1,11 @@
 import OpenAI from "openai";
+import type { ReasoningEffort } from "openai/resources/shared";
 import type {
   ResponseCreateParamsNonStreaming,
   ResponseInputContent,
   ResponseInputItem,
 } from "openai/resources/responses/responses";
-import type { GradingEffort, GradingUsage } from "./contracts";
+import type { GradingUsage, ModelEffort } from "./contracts";
 
 export type PromptContent =
   | { type: "text"; text: string }
@@ -18,7 +19,7 @@ export interface PromptMessage {
 
 export interface GradingModelRequest {
   messages: PromptMessage[];
-  effort: GradingEffort;
+  effort: ModelEffort;
   /** Name and JSON schema for strict structured output. */
   schemaName: string;
   jsonSchema: Record<string, unknown>;
@@ -40,6 +41,8 @@ export interface GradingModelResponse {
 /** The one call v3 grading makes to a model. Tests use a fake. */
 export interface GradingModelClient {
   complete(request: GradingModelRequest): Promise<GradingModelResponse>;
+  /** The least reasoning the model accepts; "low" when unset. */
+  readonly lowestEffort?: ModelEffort;
 }
 
 /** The model could not be reached or refused for capacity; a retry may work. */
@@ -124,12 +127,14 @@ export function toResponsesRequest(
   request: GradingModelRequest,
   model: string,
 ): ResponseCreateParamsNonStreaming {
+  // The SDK's ReasoningEffort predates "none", which Luna accepts.
+  const effort = request.effort as ReasoningEffort;
   return {
     model,
     input: request.messages.map((message) => toInputItem(message)),
     reasoning: request.reasoningSummary
-      ? { effort: request.effort, summary: "detailed" }
-      : { effort: request.effort },
+      ? { effort, summary: "detailed" }
+      : { effort },
     max_output_tokens: request.maxOutputTokens,
     store: false,
     text: {
@@ -167,10 +172,13 @@ export interface OpenAiGradingModelClientOptions {
 export class OpenAiGradingModelClient implements GradingModelClient {
   private readonly client: OpenAI;
   readonly model: string;
+  readonly lowestEffort: ModelEffort;
 
   constructor(options: OpenAiGradingModelClientOptions = {}) {
     this.model =
       options.model ?? process.env.GRADING_V3_MODEL ?? DEFAULT_GRADING_MODEL;
+    // Only Luna takes reasoning effort "none"; Terra and Sol stop at "low".
+    this.lowestEffort = this.model.startsWith("gpt-6-luna") ? "none" : "low";
     this.client =
       options.client ??
       new OpenAI({

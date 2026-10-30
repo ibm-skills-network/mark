@@ -9,7 +9,7 @@ import {
   type CheckFailure,
   type GradingDebug,
   gradingInputSchema,
-  type GradingEffort,
+  type ModelEffort,
   type GradingFailure,
   type GradingFailureCode,
   type GradingInput,
@@ -50,11 +50,12 @@ import {
 } from "./prompts/grade.v3";
 
 /** Ids for logs only; never learner content. */
-const LOWER_EFFORT: Record<GradingEffort, GradingEffort> = {
-  high: "medium",
-  medium: "low",
-  low: "low",
-};
+/** One step less reasoning, but never below what the model accepts. */
+function retryEffort(effort: ModelEffort, lowest: ModelEffort): ModelEffort {
+  if (effort === "high") return "medium";
+  if (effort === "medium") return "low";
+  return lowest;
+}
 
 export interface GradingLogContext {
   questionId?: number;
@@ -163,7 +164,7 @@ export async function gradeWithV3(
   const now = deps.now ?? (() => Date.now());
   const started = now();
   const context = deps.context ?? {};
-  let effort: GradingEffort = input.effort;
+  let effort: ModelEffort = input.effort;
   let usage: GradingUsage = ZERO_USAGE;
   let model: string | undefined;
   const reasoningSummary: string[] = [];
@@ -295,7 +296,7 @@ export async function gradeWithV3(
           usage: error.usage,
         });
         if (attempt === 1) {
-          effort = LOWER_EFFORT[effort];
+          effort = retryEffort(effort, deps.client.lowestEffort ?? "low");
           continue;
         }
         return fail("grading.v3.output_limit", error.message);
