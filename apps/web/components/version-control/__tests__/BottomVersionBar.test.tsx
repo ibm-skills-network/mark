@@ -15,6 +15,7 @@ const mockUseChatbot = jest.fn();
 const mockUseAuthorStore = jest.fn();
 
 jest.mock("next/navigation", () => ({
+  usePathname: () => "/author/1",
   useRouter: () => ({
     push: mockPush,
   }),
