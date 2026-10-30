@@ -7,6 +7,7 @@ import {
   isGithubRateLimitResponse,
   parseGithubRateLimitInfo,
 } from "./github-rate-limit-detection.util";
+import { GITHUB_EXPECTED_HOSTS } from "./learner-url.util";
 import { isMeshConnectRefused, safeGet } from "./ssrf-safe-http";
 
 /**
@@ -536,6 +537,16 @@ function throwIfRetryable(
     return;
   }
   if (classification.rateLimited) {
+    if (!isGithubRequestUrl(requestUrl)) {
+      logger.warn(
+        `Rate limited by the site while fetching learner URL content (${logSuffix}, status=${classification.status ?? "none"})`,
+      );
+      throw new RetryableUrlFetchError({
+        requestUrl,
+        reason: classification.reason,
+        status: classification.status,
+      });
+    }
     const { owner, repo } = extractOwnerRepoForLogging(requestUrl);
     const { resetAt, retryAfterSeconds } = parseGithubRateLimitInfo(
       classification.headers,
@@ -547,6 +558,7 @@ function throwIfRetryable(
       owner: owner ?? "unknown",
       repo: repo ?? "unknown",
       requestUrl,
+      status: classification.status,
       resetAt,
       retryAfterSeconds,
     });
@@ -1048,6 +1060,18 @@ async function dispatchUrlContentFetch(
 const GITHUB_OWNER_REPO_RE = /^https:\/\/github\.com\/([^/]+)\/([^/]+)/;
 
 /** Best-effort owner/repo extraction for log context only — never gates fetch behavior. */
+function isGithubRequestUrl(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return GITHUB_EXPECTED_HOSTS.some(
+      (expected) => host === expected || host.endsWith(`.${expected}`),
+    );
+  } catch {
+    // Not parseable as a URL, so it can't be a GitHub request.
+    return false;
+  }
+}
+
 function extractOwnerRepoForLogging(url: string): {
   owner?: string;
   repo?: string;

@@ -516,6 +516,30 @@ describe("fetchUrlContentForGrading", () => {
       ).rejects.toBeInstanceOf(GithubRateLimitedError);
     });
 
+    it("does not blame GitHub when another site answers 429", async () => {
+      mockedSafeGet.mockRejectedValue(axiosError(429));
+
+      const rejection: unknown = await fetchUrlContentForGrading(
+        "https://us.trabajo.org/job-4023",
+      ).catch((error: unknown) => error);
+
+      expect(rejection).toBeInstanceOf(RetryableUrlFetchError);
+      expect(rejection).not.toBeInstanceOf(GithubRateLimitedError);
+      expect((rejection as RetryableUrlFetchError).status).toBe(429);
+      expect((rejection as Error).message).not.toMatch(/github/i);
+    });
+
+    it("keeps the status on a GitHub rate limit", async () => {
+      mockedSafeGet.mockRejectedValue(axiosError(429));
+
+      const rejection: unknown = await fetchUrlContentForGrading(
+        "https://github.com/octocat/hello-world/blob/main/index.js",
+      ).catch((error: unknown) => error);
+
+      expect(rejection).toBeInstanceOf(GithubRateLimitedError);
+      expect((rejection as GithubRateLimitedError).status).toBe(429);
+    });
+
     it("throws a retryable error on a read timeout", async () => {
       mockedSafeGet.mockRejectedValue(networkError("ECONNABORTED"));
 
