@@ -128,6 +128,10 @@ export const modelGradeOutputSchema = z.strictObject({
     }),
   ),
   overallFeedback: z.string(),
+  /** A genuine attempt at the question, whatever it scores. */
+  solidAttempt: z.boolean(),
+  /** One sentence for the instructor; model text, never logged. */
+  solidAttemptReason: z.string(),
 });
 export type ModelGradeOutput = z.infer<typeof modelGradeOutputSchema>;
 
@@ -200,6 +204,7 @@ export const gradingResultSchema = z.object({
   verdicts: z.array(criterionVerdictSchema),
   totalPoints: z.number(),
   overallFeedback: z.string(),
+  solidAttempt: z.boolean(),
   usage: usageSchema,
   model: z.string(),
   effort: modelEffortSchema,

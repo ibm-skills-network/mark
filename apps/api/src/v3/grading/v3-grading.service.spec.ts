@@ -23,6 +23,8 @@ describe("V3GradingService", () => {
               },
             ],
             overallFeedback: "ok",
+            solidAttempt: true,
+            solidAttemptReason: "r",
           }),
           usage: {
             inputTokens: 1,

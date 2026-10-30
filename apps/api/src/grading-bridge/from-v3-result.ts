@@ -30,6 +30,8 @@ export function toLegacyResponse(
   result: GradingResult,
   question: GradingQuestion,
   mode: ResolvedMode,
+  /** Effort credit already included in result.totalPoints. */
+  effortBoost = 0,
 ): CreateQuestionResponseAttemptResponseDto {
   const criteriaById = new Map(
     question.rubric.criteria.map((criterion) => [criterion.id, criterion]),
@@ -56,14 +58,18 @@ export function toLegacyResponse(
     (criterion) =>
       `**${criterion.name}** (${criterion.pointsAwarded}/${criterion.maxPoints}): ${criterion.feedback}`,
   );
+  const boostNote =
+    effortBoost > 0
+      ? `Effort credit: +${effortBoost} point${effortBoost === 1 ? "" : "s"} for a genuine attempt at this question.`
+      : "";
   const feedback = new GeneralFeedbackDto();
-  feedback.feedback = [result.overallFeedback, ...lines]
+  feedback.feedback = [result.overallFeedback, ...lines, boostNote]
     .filter((line) => line.trim().length > 0)
     .join("\n\n");
   feedback.structuredFeedback = {
     summary: result.overallFeedback,
     criteria,
-    guidance: "",
+    guidance: boostNote,
   };
 
   const responseDto = new CreateQuestionResponseAttemptResponseDto();
@@ -86,6 +92,8 @@ export function toLegacyResponse(
       criterionId: failure.criterionId,
     })),
     maxPossiblePoints: question.totalPoints,
+    solidAttempt: result.solidAttempt,
+    effortBoost,
   };
   return responseDto;
 }

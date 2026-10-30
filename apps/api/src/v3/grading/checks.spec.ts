@@ -28,7 +28,12 @@ const parts: Part[] = [
 ];
 
 function output(verdicts: ModelGradeOutput["verdicts"]): ModelGradeOutput {
-  return { verdicts, overallFeedback: "ok" };
+  return {
+    verdicts,
+    overallFeedback: "ok",
+    solidAttempt: true,
+    solidAttemptReason: "r",
+  };
 }
 
 function verdict(
@@ -561,6 +566,8 @@ describe("quotes from rich-text answers", () => {
           },
         ],
         overallFeedback: "",
+        solidAttempt: true,
+        solidAttemptReason: "r",
       },
       [{ id: "c1", description: "d", maxPoints: 1 }],
       [{ name: "answer", kind: "text", text }],

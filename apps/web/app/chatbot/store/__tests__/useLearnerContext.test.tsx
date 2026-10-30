@@ -18,8 +18,8 @@ const fullQuestion = {
 
 /** What a page reload does: the store comes back from localStorage alone. */
 const reloadStoreFromStorage = async () => {
-  const key = useLearnerStore.persist.getOptions().name as string;
-  const saved = localStorage.getItem(key) as string;
+  const key = useLearnerStore.persist.getOptions().name;
+  const saved = localStorage.getItem(key);
   useLearnerStore.setState({ questions: [] });
   localStorage.setItem(key, saved);
   await useLearnerStore.persist.rehydrate();

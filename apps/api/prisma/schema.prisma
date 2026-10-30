@@ -1211,3 +1211,14 @@ model GradingModeConfig {
 
   @@unique([questionType, assignmentId])
 }
+
+/// Extra points for a genuine attempt that missed criteria (v3 grading).
+/// One row, id 1; no row means off.
+model GradingBoostConfig {
+  id            Int      @id @default(1)
+  enabled       Boolean  @default(false)
+  pointsPerStep Int      @default(4) /// one point per this many question points
+  maxBoost      Int      @default(3) /// most points one question can gain
+  updatedBy     String
+  updatedAt     DateTime @updatedAt
+}

@@ -311,6 +311,13 @@ function AdminDashboardContent({
                 </Button>
               </Link>
 
+              <Link href="/admin/grading-boost">
+                <Button variant="outline" size="sm">
+                  <Settings className="h-4 w-4 mr-2" />
+                  Effort Boost
+                </Button>
+              </Link>
+
               <Link href="/admin/queues">
                 <Button variant="outline" size="sm">
                   <Activity className="h-4 w-4 mr-2" />

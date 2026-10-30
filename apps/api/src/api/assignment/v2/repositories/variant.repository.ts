@@ -315,11 +315,13 @@ export class VariantRepository {
     }
 
     const mediaRegex = /<img\b[^>]*>|<table\b[^>]*>[\S\s]*?<\/table>/gi;
-    const withoutMedia = trimmedContent.replaceAll(mediaRegex, "");
-    const withoutTags = withoutMedia.replaceAll(/<[^>]*>/g, "").trim();
+    // Media is dropped because reads re-append it from the parent question;
+    // other markup is the author's formatting and is kept.
+    const withoutMedia = trimmedContent.replaceAll(mediaRegex, "").trim();
+    const textOnly = withoutMedia.replaceAll(/<[^>]*>/g, "").trim();
 
-    if (withoutTags) {
-      return withoutTags;
+    if (textOnly) {
+      return withoutMedia;
     }
 
     const hash = this.hashString(trimmedContent);
