@@ -33,19 +33,13 @@ function buildMocks() {
 }
 
 describe("ContentSummarizationService.getSafeContextLimit", () => {
-  it("applies the 0.8 safety ratio to a known model's 128k window", () => {
-    const { service } = buildMocks();
-    // 128_000 * 0.8 = 102_400
-    expect(service.getSafeContextLimit("gpt-4o-mini")).toBe(102_400);
-  });
-
   it("falls back to the default 32k window for an unknown model", () => {
     const { service } = buildMocks();
     // 32_000 * 0.8 = 25_600
     expect(service.getSafeContextLimit("some-unknown-model")).toBe(25_600);
   });
 
-  it.each(["gpt-6-luna", "gpt-5.6-luna", "gpt-5.6-terra", "gpt-5.6-sol"])(
+  it.each(["gpt-6-luna", "gpt-6.1-terra", "gpt-6.1-sol"])(
     "gives %s its 1.05M window",
     (modelKey) => {
       const { service } = buildMocks();
@@ -100,7 +94,7 @@ describe("ContentSummarizationService.summarizeTextToBudget", () => {
       text,
       label: "answer.txt",
       questionText: "What is 2+2?",
-      modelKey: "gpt-4o-mini",
+      modelKey: "gpt-6-luna",
       assignmentId: 1,
       usageType: AIUsageType.ASSIGNMENT_GRADING,
       feature: "text_grading",
@@ -125,7 +119,7 @@ describe("ContentSummarizationService.summarizeTextToBudget", () => {
       text,
       label: "answer.txt",
       questionText: "Explain the topic.",
-      modelKey: "gpt-4o-mini",
+      modelKey: "gpt-6-luna",
       assignmentId: 1,
       usageType: AIUsageType.ASSIGNMENT_GRADING,
       feature: "text_grading",
@@ -153,7 +147,7 @@ describe("ContentSummarizationService.summarizeTextToBudget", () => {
         text,
         label: "learner response",
         questionText: "Explain the topic.",
-        modelKey: "gpt-4o-mini",
+        modelKey: "gpt-6-luna",
         assignmentId: 1,
         usageType: AIUsageType.ASSIGNMENT_GRADING,
         feature: "text_grading",
@@ -187,7 +181,7 @@ describe("ContentSummarizationService.summarizeTextToBudget", () => {
       text,
       label: "answer.txt",
       questionText: "Explain the topic.",
-      modelKey: "gpt-4o-mini",
+      modelKey: "gpt-6-luna",
       assignmentId: 1,
       usageType: AIUsageType.ASSIGNMENT_GRADING,
       feature: "text_grading",
@@ -216,7 +210,7 @@ describe("ContentSummarizationService.summarizeTextToBudget", () => {
       text,
       label: "answer.txt",
       questionText: "Explain the topic.",
-      modelKey: "gpt-4o-mini",
+      modelKey: "gpt-6-luna",
       assignmentId: 1,
       usageType: AIUsageType.ASSIGNMENT_GRADING,
       feature: "text_grading",
@@ -253,7 +247,7 @@ describe("ContentSummarizationService.summarizeTextToBudget", () => {
       text,
       label: "answer.txt",
       questionText: "Explain the topic.",
-      modelKey: "gpt-4o-mini",
+      modelKey: "gpt-6-luna",
       assignmentId: 1,
       usageType: AIUsageType.ASSIGNMENT_GRADING,
       feature: "text_grading",

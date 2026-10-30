@@ -1,14 +1,6 @@
 import { ChatOpenAI } from "@langchain/openai";
-import { Gpt54MiniLlmService } from "./gpt54-llm.service";
-import {
-  Gpt56LunaLlmService,
-  Gpt56SolLlmService,
-  Gpt56TerraLlmService,
-} from "./gpt56-llm.service";
+import { Gpt61SolLlmService, Gpt61TerraLlmService } from "./gpt61-llm.service";
 import { Gpt6LunaLlmService } from "./gpt6-luna-llm.service";
-import { Gpt4VisionPreviewLlmService } from "./openai-llm-vision.service";
-import { OpenAiLlmMiniService } from "./openai-llm-mini.service";
-import { OpenAiLlmService } from "./openai-llm.service";
 
 jest.mock("@langchain/openai", () => ({
   ChatOpenAI: jest.fn().mockImplementation(() => ({
@@ -23,14 +15,9 @@ jest.mock("@langchain/openai", () => ({
  * Every vision-capable provider must render one image part per payload.
  */
 const VISION_PROVIDERS = [
-  ["OpenAiLlmService", OpenAiLlmService],
-  ["OpenAiLlmMiniService", OpenAiLlmMiniService],
-  ["Gpt4VisionPreviewLlmService", Gpt4VisionPreviewLlmService],
-  ["Gpt54MiniLlmService", Gpt54MiniLlmService],
   ["Gpt6LunaLlmService", Gpt6LunaLlmService],
-  ["Gpt56LunaLlmService", Gpt56LunaLlmService],
-  ["Gpt56TerraLlmService", Gpt56TerraLlmService],
-  ["Gpt56SolLlmService", Gpt56SolLlmService],
+  ["Gpt61TerraLlmService", Gpt61TerraLlmService],
+  ["Gpt61SolLlmService", Gpt61SolLlmService],
 ] as const;
 
 const IMAGES = [

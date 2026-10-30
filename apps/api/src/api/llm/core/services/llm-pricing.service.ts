@@ -39,17 +39,24 @@ function getTieredPricingMetadata(
   inputTokenPrice: number,
   outputTokenPrice: number,
 ): Record<string, number> {
-  if (!modelKey.startsWith("gpt-5.6-") && modelKey !== "gpt-6-luna") return {};
+  if (
+    !modelKey.startsWith("gpt-5.6-") &&
+    !modelKey.startsWith("gpt-6.1-") &&
+    modelKey !== "gpt-6-luna"
+  )
+    return {};
 
+  const cachedInputRatio = modelKey === "gpt-6-luna" ? 0.1 : 0.05;
   return {
     longContextInputTokenPrice: inputTokenPrice * 2,
     longContextOutputTokenPrice: outputTokenPrice * 1.5,
     longContextInputThresholdTokens: TIERED_LONG_CONTEXT_THRESHOLD_TOKENS,
     cacheWriteTokenPrice: inputTokenPrice * 1.25,
-    ...(modelKey === "gpt-6-luna"
+    ...(modelKey === "gpt-6-luna" || modelKey.startsWith("gpt-6.1-")
       ? {
-          cachedInputTokenPrice: inputTokenPrice * 0.1,
-          longContextCachedInputTokenPrice: inputTokenPrice * 0.2,
+          cachedInputTokenPrice: inputTokenPrice * cachedInputRatio,
+          longContextCachedInputTokenPrice:
+            inputTokenPrice * cachedInputRatio * 2,
           longContextCacheWriteTokenPrice: inputTokenPrice * 2.5,
         }
       : {}),
@@ -1028,7 +1035,7 @@ export class LLMPricingService {
 
   /**
    * Get fallback pricing for a specific model when registry lookup fails
-   * Pricing based on OpenAI Standard tier as of Jan 2025
+   * OpenAI Standard rates; retired model rates are retained for historical reports.
    */
   private getFallbackPricing(modelKey: string): ModelPricing | null {
     const fallbackPrices: Record<string, { input: number; output: number }> = {
@@ -1045,6 +1052,8 @@ export class LLMPricingService {
       // GPT-5.6 and Luna 6 short-context tiers. Long-context rates are added to metadata
       // below and selected for the whole request above the 272K threshold.
       "gpt-6-luna": { input: 0.000_000_1, output: 0.000_000_5 },
+      "gpt-6.1-terra": { input: 0.000_001, output: 0.000_005 },
+      "gpt-6.1-sol": { input: 0.000_002, output: 0.000_01 },
       "gpt-5.6-luna": { input: 0.000_000_2, output: 0.000_001_2 },
       "gpt-5.6-terra": { input: 0.000_002, output: 0.000_012 },
       "gpt-5.6-sol": { input: 0.000_005, output: 0.000_03 },
@@ -1064,7 +1073,9 @@ export class LLMPricingService {
         source: "Fallback pricing",
         notes: modelKey.startsWith("gpt-5.4-")
           ? "Official OpenAI Standard-tier snapshot pricing"
-          : modelKey.startsWith("gpt-5.6-") || modelKey === "gpt-6-luna"
+          : modelKey.startsWith("gpt-5.6-") ||
+              modelKey.startsWith("gpt-6.1-") ||
+              modelKey === "gpt-6-luna"
             ? "Official OpenAI Standard-tier pricing, short-context (<=272K input) rate"
             : "Known pricing when registry lookup failed",
         ...getTieredPricingMetadata(modelKey, pricing.input, pricing.output),
@@ -1076,17 +1087,7 @@ export class LLMPricingService {
    * Get fallback pricing for all known models when registry lookup completely fails
    */
   private getFallbackPricingForAllModels(): ModelPricing[] {
-    const modelKeys = [
-      "gpt-4o",
-      "gpt-4o-mini",
-      "gpt-4.1",
-      "gpt-4.1-mini",
-      "gpt-5.4-mini-2026-03-17",
-      "gpt-6-luna",
-      "gpt-5.6-luna",
-      "gpt-5.6-terra",
-      "gpt-5.6-sol",
-    ];
+    const modelKeys = ["gpt-6-luna", "gpt-6.1-terra", "gpt-6.1-sol"];
     return modelKeys
       .map((modelKey) => this.getFallbackPricing(modelKey))
       .filter((pricing): pricing is ModelPricing => pricing !== null);

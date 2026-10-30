@@ -11,7 +11,7 @@ import type {
  */
 export const MIN_CACHEABLE_PREFIX_TOKENS = 1024;
 
-/** The only time-to-live the API accepts. */
+/** Use the standard 30-minute cache-write rate. */
 const PROMPT_CACHE_TTL = "30m";
 
 const EXPLICIT_BREAKPOINT = { mode: "explicit" } as const;
@@ -19,8 +19,7 @@ const EXPLICIT_BREAKPOINT = { mode: "explicit" } as const;
 /**
  * Top-level request parameters that opt into explicit caching. Only ever call
  * this from a provider that advertises `supportsExplicitPromptCache` — the
- * parameters are rejected with a 400 by every other OpenAI model, including
- * the GPT-5.4 pair that shares the same provider base class.
+ * parameters are rejected by models that lack this capability.
  */
 export function explicitPromptCacheKwargs(
   options?: LlmRequestOptions,

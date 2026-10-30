@@ -62,7 +62,7 @@ describe("CriterionGradingService", () => {
     const service = new CriterionGradingService(
       { processStructuredPrompt } as unknown as IPromptProcessor,
       {
-        getModelKeyWithFallback: jest.fn().mockResolvedValue("gpt-4o-mini"),
+        getModelKeyWithFallback: jest.fn().mockResolvedValue("gpt-6-luna"),
       } as unknown as LLMResolverService,
     );
     for (const notebookRenderedOutput of [false, true]) {
@@ -98,7 +98,7 @@ describe("CriterionGradingService", () => {
     } as unknown as IPromptProcessor;
 
     const llmResolver = {
-      getModelKeyWithFallback: jest.fn().mockResolvedValue("gpt-4o-mini"),
+      getModelKeyWithFallback: jest.fn().mockResolvedValue("gpt-6-luna"),
     } as unknown as LLMResolverService;
 
     const service = new CriterionGradingService(promptProcessor, llmResolver);
@@ -120,11 +120,9 @@ describe("CriterionGradingService", () => {
       1,
       expect.anything(),
       expect.anything(),
-      "gpt-4o-mini",
+      "gpt-6-luna",
       expect.objectContaining({
-        temperature: 0,
         maxRetries: 1,
-        modelName: "gpt-4o-mini-2024-07-18",
         promptCache: expect.objectContaining({
           key: CRITERION_GRADING_CACHE_KEY,
         }),
@@ -143,7 +141,7 @@ describe("CriterionGradingService", () => {
     } as unknown as IPromptProcessor;
 
     const llmResolver = {
-      getModelKeyWithFallback: jest.fn().mockResolvedValue("gpt-4o-mini"),
+      getModelKeyWithFallback: jest.fn().mockResolvedValue("gpt-6-luna"),
     } as unknown as LLMResolverService;
 
     const service = new CriterionGradingService(promptProcessor, llmResolver);

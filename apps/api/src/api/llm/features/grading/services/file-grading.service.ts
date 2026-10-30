@@ -27,6 +27,7 @@ import { IModerationService } from "../../../core/interfaces/moderation.interfac
 import { IPromptProcessor } from "../../../core/interfaces/prompt-processor.interface";
 import { ITokenCounter } from "../../../core/interfaces/token-counter.interface";
 import { LLMResolverService } from "../../../core/services/llm-resolver.service";
+import { getModelReasoningEffort } from "../../../core/utils/model-reasoning.util";
 import { getGradingModelCacheIdentity } from "../../../core/utils/grading-cache-identity.util";
 import { isContextLengthExceededError } from "../../../core/utils/llm-error.util";
 import {
@@ -906,7 +907,7 @@ export class FileGradingService implements IFileGradingService {
     const rubricHash = this.hashCanonical({
       graderVersion,
       modelSnapshot: modelCacheIdentity,
-      reasoningEffort: "none",
+      reasoningEffort: getModelReasoningEffort(parameters.modelSnapshot),
       question: parameters.question,
       scoringCriteria: parameters.scoringCriteria,
       questionMaxPoints: parameters.questionMaxPoints,

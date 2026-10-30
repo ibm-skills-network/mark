@@ -126,6 +126,7 @@ artifacts/*
 .planning/*
 
 !apps/api/prisma/migrations/20261014190000_rich_text_migration_ledger/migration.sql
+!apps/api/prisma/migrations/20261030120000_update_supported_gpt_models/migration.sql
 !apps/api/maintenance/rich-text-normalization/test-schema.sql
 /STRANGLER_FIG
 STRANGELER_FIG.md

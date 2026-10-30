@@ -232,21 +232,10 @@ export interface ModelSelectionConfig {
   judgeModel: string;
 }
 
-/** Pin the backend revision as well as the provider key for stable grading. */
-export const DETERMINISTIC_GRADING_MODEL_SNAPSHOT = "gpt-4o-mini-2024-07-18";
-
 export function getDeterministicGradingOptions(modelKey: string) {
-  if (modelKey === "gpt-4o-mini") {
-    return {
-      temperature: 0,
-      maxRetries: 1,
-      modelName: DETERMINISTIC_GRADING_MODEL_SNAPSHOT,
-    };
-  }
-
-  // GPT-5.x and Luna 6 providers do not take sampling controls here. Keep
-  // them usable without pretending they are seeded or temperature-controlled.
-  if (modelKey.startsWith("gpt-5") || modelKey === "gpt-6-luna") {
+  // GPT providers pin their own model and reasoning effort. Avoid passing
+  // sampling controls to reasoning models.
+  if (modelKey.startsWith("gpt-6")) {
     return { maxRetries: 1 };
   }
 
