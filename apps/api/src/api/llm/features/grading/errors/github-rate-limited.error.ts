@@ -16,6 +16,8 @@ export interface GithubRateLimitedErrorFields {
   owner: string;
   repo: string;
   requestUrl: string;
+  /** Status GitHub answered with. */
+  status?: number;
   /** Epoch seconds from the `x-ratelimit-reset` response header, when present. */
   resetAt?: number;
   /** Seconds from the `retry-after` response header (secondary/abuse-detection limits). */
@@ -30,7 +32,11 @@ export class GithubRateLimitedError extends RetryableUrlFetchError {
 
   constructor(fields: GithubRateLimitedErrorFields) {
     super(
-      { requestUrl: fields.requestUrl, reason: "rate_limited" },
+      {
+        requestUrl: fields.requestUrl,
+        reason: "rate_limited",
+        status: fields.status,
+      },
       `GitHub API rate limit exceeded while fetching ${fields.owner}/${fields.repo} for grading. This is a temporary system limit, not a problem with the submitted URL.`,
     );
     this.name = "GithubRateLimitedError";

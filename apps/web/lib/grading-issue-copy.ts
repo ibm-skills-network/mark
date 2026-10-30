@@ -3,6 +3,7 @@ import type {
   GradingIssueCode,
   GradingIssueSource,
 } from "@/lib/grading-failure";
+import { GITHUB_EXPECTED_HOSTS } from "@/lib/url-response";
 
 /**
  * Learner-facing copy for "unable to grade" issues. Every string here is an
@@ -25,7 +26,7 @@ export const UNABLE_TO_GRADE_UI_STRINGS = {
   goToAnswers: "Back to my answers",
   tryAgain: "Try again",
   retryHint:
-    "This is a temporary problem on the other site. You don't need to change anything.",
+    "This is usually a temporary problem on the other site. If it keeps happening, try a different public link.",
   yourLink: "Your link:",
   yourFile: "Your file:",
 } as const;
@@ -35,8 +36,16 @@ const MESSAGES = {
     "We couldn't open your link ({url}). If the repository is private, make it public so it can be graded, then check the address is right.",
   urlUnreachableStatus:
     "We couldn't open your link ({url}) — the site answered with error {httpStatus}. If the repository is private, make it public so it can be graded, then check the address is right.",
+  urlUnreachablePage:
+    "We couldn't connect to the site at your link ({url}). Check the address for typos and that it opens without signing in, then submit again.",
+  urlUnreachablePageStatus:
+    "We couldn't open your link ({url}) — the site answered with error {httpStatus}. Check that it opens without signing in, then submit again or try a different public link.",
   urlUnreachableBare:
-    "We couldn't open your link. If the repository is private, make it public so it can be graded, then check the address is right.",
+    "We couldn't open your link. Check the address for typos and that it opens without signing in, then submit again.",
+  urlNotFound:
+    "The page at your link ({url}) doesn't exist or has been removed. Check that you copied the whole address. If the page has expired, use a current link that meets the assignment requirements.",
+  urlSignIn:
+    "Your link ({url}) needs a sign-in, so our grader can't read it. Use a link that opens without signing in, or contact course support if you can't find one.",
   urlPlaceholder:
     "Your link still has a placeholder in it ({url}). Replace the placeholder, such as <your-username>, with your own GitHub username, then submit again.",
   urlPlaceholderBare:
@@ -50,17 +59,21 @@ const MESSAGES = {
   urlInvalidBare:
     "Your answer doesn't look like a web address. Copy the full link from your browser's address bar, starting with https://, and paste it again.",
   urlBlocked:
-    "The site at {url} doesn't allow automated access, so we can't read it. Put your work on GitHub or another public host and submit that link instead.",
+    "We couldn't read your link ({url}) because the site blocks automated tools like our grader. The page may open fine in your browser. Try a different public link that meets the assignment requirements, or contact course support if you can't find one.",
   urlBlockedBare:
-    "The site your link points to doesn't allow automated access, so we can't read it. Put your work on GitHub or another public host and submit that link instead.",
+    "We couldn't read your link because the site blocks automated tools like our grader. The page may open fine in your browser. Try a different public link that meets the assignment requirements, or contact course support if you can't find one.",
   urlEmpty:
     "We opened your link ({url}) but found nothing to grade. Check that your work is saved or committed there, then submit again.",
+  urlEmptyPage:
+    "We opened your link ({url}) but couldn't read anything on the page. It may need a sign-in or only load in a browser. Try a different public link that meets the assignment requirements.",
   urlEmptyBare:
-    "We opened your link but found nothing to grade. Check that your work is saved or committed there, then submit again.",
+    "We opened your link but couldn't read anything on the page. It may need a sign-in or only load in a browser. Try a different public link that meets the assignment requirements.",
   urlUnsupported:
     "We can't grade this kind of page ({url}). Link directly to the file or repository that holds your work instead.",
   urlUnsupportedBare:
     "We can't grade this kind of page. Link directly to the file or repository that holds your work instead.",
+  urlRateLimited:
+    "The site hosting your link ({url}) is limiting how many requests we can make right now. Nothing is wrong with your answer. Wait a few minutes and try again, or use a different public link if it keeps happening.",
   urlTemporarilyUnavailable:
     "The site hosting your link ({url}) isn't responding right now. Nothing is wrong with your answer — wait a minute and try again.",
   urlTemporarilyUnavailableBare:
@@ -136,6 +149,51 @@ function urlTemplate(
     : { source: bare };
 }
 
+function isGithubLink(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return GITHUB_EXPECTED_HOSTS.some(
+      (expected) => host === expected || host.endsWith(`.${expected}`),
+    );
+  } catch {
+    // Not parseable as a URL, so it can't be a GitHub link.
+    return false;
+  }
+}
+
+/** A site refusing automated readers; v3 reports these as url_unreachable. */
+const REFUSED_STATUSES = new Set([403, 406, 451]);
+
+function blockedTemplate(source: GradingIssueSource | undefined): Template {
+  if (source?.url && source.httpStatus === 401) {
+    return {
+      source: MESSAGES.urlSignIn,
+      params: { url: truncateMiddle(source.url) },
+    };
+  }
+  return urlTemplate(source, MESSAGES.urlBlocked, MESSAGES.urlBlockedBare);
+}
+
+function unreachableTemplate(source: GradingIssueSource | undefined): Template {
+  const httpStatus = source?.httpStatus;
+  if (!source?.url) return { source: MESSAGES.urlUnreachableBare };
+  const url = truncateMiddle(source.url);
+  if (isGithubLink(source.url)) {
+    return httpStatus
+      ? { source: MESSAGES.urlUnreachableStatus, params: { url, httpStatus } }
+      : { source: MESSAGES.urlUnreachable, params: { url } };
+  }
+  if (httpStatus === 401 || REFUSED_STATUSES.has(httpStatus ?? 0)) {
+    return blockedTemplate(source);
+  }
+  if (httpStatus === 404 || httpStatus === 410) {
+    return { source: MESSAGES.urlNotFound, params: { url } };
+  }
+  return httpStatus
+    ? { source: MESSAGES.urlUnreachablePageStatus, params: { url, httpStatus } }
+    : { source: MESSAGES.urlUnreachablePage, params: { url } };
+}
+
 function fileTemplate(
   source: GradingIssueSource | undefined,
   withFile: string,
@@ -180,36 +238,30 @@ const TEMPLATES: Record<
   Exclude<GradingIssueCode, "source_unreadable">,
   (source: GradingIssueSource | undefined) => Template
 > = {
-  url_unreachable: (source) =>
-    source?.url && source.httpStatus
-      ? {
-          source: MESSAGES.urlUnreachableStatus,
-          params: {
-            url: truncateMiddle(source.url),
-            httpStatus: source.httpStatus,
-          },
-        }
-      : urlTemplate(
-          source,
-          MESSAGES.urlUnreachable,
-          MESSAGES.urlUnreachableBare,
-        ),
+  url_unreachable: unreachableTemplate,
   url_placeholder: (source) =>
     urlTemplate(source, MESSAGES.urlPlaceholder, MESSAGES.urlPlaceholderBare),
   url_template_repo: (source) =>
     urlTemplate(source, MESSAGES.urlTemplateRepo, MESSAGES.urlTemplateRepoBare),
   url_invalid: (source) =>
     urlTemplate(source, MESSAGES.urlInvalid, MESSAGES.urlInvalidBare),
-  url_blocked: (source) =>
-    urlTemplate(source, MESSAGES.urlBlocked, MESSAGES.urlBlockedBare),
+  url_blocked: blockedTemplate,
   url_empty: (source) =>
-    urlTemplate(source, MESSAGES.urlEmpty, MESSAGES.urlEmptyBare),
+    urlTemplate(
+      source,
+      source?.url && isGithubLink(source.url)
+        ? MESSAGES.urlEmpty
+        : MESSAGES.urlEmptyPage,
+      MESSAGES.urlEmptyBare,
+    ),
   url_unsupported: (source) =>
     urlTemplate(source, MESSAGES.urlUnsupported, MESSAGES.urlUnsupportedBare),
   url_temporarily_unavailable: (source) =>
     urlTemplate(
       source,
-      MESSAGES.urlTemporarilyUnavailable,
+      source?.httpStatus === 429
+        ? MESSAGES.urlRateLimited
+        : MESSAGES.urlTemporarilyUnavailable,
       MESSAGES.urlTemporarilyUnavailableBare,
     ),
   file_wrong_format: wrongFormatTemplate,

@@ -63,6 +63,22 @@ describe("grading issue payload", () => {
     expect(issue.retryable).toBe(true);
   });
 
+  it.each([
+    ["url_unreachable", 404, "doesn't exist or has been removed"],
+    ["url_unreachable", 410, "doesn't exist or has been removed"],
+    ["url_unreachable", 403, "blocked automated access"],
+    ["url_blocked", 401, "sign-in"],
+    ["url_unreachable", 401, "sign-in"],
+    ["url_temporarily_unavailable", 429, "limiting how many requests"],
+  ] as const)("explains %s with status %i", (code, httpStatus, expected) => {
+    const issue = buildGradingIssue(10037, {
+      code,
+      source: { kind: "url", url: "https://jobs.example.com/1", httpStatus },
+    });
+    expect(issue.message).toContain(expected);
+    expect(issue.message).not.toMatch(/GitHub|repositor/);
+  });
+
   it("rotates the catch-all wording deterministically by question", () => {
     const source = { kind: "file" as const, fileName: "a.bin" };
     const variants = new Set(

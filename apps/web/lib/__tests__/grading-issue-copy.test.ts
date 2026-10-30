@@ -76,12 +76,123 @@ describe("describeGradingIssue", () => {
       describeGradingIssue(
         issue({
           code: "url_unreachable",
-          source: { kind: "url", url: "https://x.test/a", httpStatus: 404 },
+          source: { kind: "url", url: "https://x.test/a", httpStatus: 500 },
         }),
         t,
         en,
       ),
-    ).toContain("error 404");
+    ).toContain("error 500");
+  });
+
+  describe("link failures on sites other than GitHub", () => {
+    const JOB_POST = "https://www.theladders.com/job/project-manager_86061933";
+    const describeLink = (code: string, httpStatus?: number) =>
+      describeGradingIssue(
+        issue({ code, source: { kind: "url", url: JOB_POST, httpStatus } }),
+        t,
+        en,
+      );
+
+    it.each([
+      ["url_blocked", 403],
+      ["url_blocked", 401],
+      ["url_unreachable", 404],
+      ["url_unreachable", 410],
+      ["url_unreachable", 500],
+      ["url_unreachable", undefined],
+      ["url_empty", 200],
+      ["url_temporarily_unavailable", 429],
+      ["url_temporarily_unavailable", 503],
+    ])(
+      "%s with status %s gives no GitHub or repository advice",
+      (code, status) => {
+        expect(describeLink(code, status)).not.toMatch(
+          /github|repositor|committed/i,
+        );
+      },
+    );
+
+    it("says the site blocks automated tools when it refuses us", () => {
+      const text = describeLink("url_blocked", 403);
+      expect(text).toContain("blocks automated tools");
+      expect(text).toContain("may open fine in your browser");
+    });
+
+    it("gives the same advice when the refusal arrives as url_unreachable", () => {
+      expect(describeLink("url_unreachable", 403)).toBe(
+        describeLink("url_blocked", 403),
+      );
+    });
+
+    it("says a sign-in is needed on a 401", () => {
+      expect(describeLink("url_blocked", 401)).toContain("sign-in");
+    });
+
+    it.each([404, 410])("says the page is gone on a %i", (status) => {
+      const text = describeLink("url_unreachable", status);
+      expect(text).toContain("doesn't exist or has been removed");
+      expect(text).toContain("whole address");
+    });
+
+    it("names the status for any other error answer", () => {
+      expect(describeLink("url_unreachable", 500)).toContain("error 500");
+    });
+
+    it("suspects the address when the site never answered", () => {
+      expect(describeLink("url_unreachable")).toContain("typos");
+    });
+
+    it("says the page had nothing readable when it loads only in a browser", () => {
+      expect(describeLink("url_empty", 200)).toContain("sign-in");
+    });
+
+    it("says the site is limiting requests on a 429, and offers a way out", () => {
+      const text = describeLink("url_temporarily_unavailable", 429);
+      expect(text).toContain("limiting how many requests");
+      expect(text).toContain("different public link");
+    });
+  });
+
+  it("keeps the repository advice for GitHub links", () => {
+    const describeGithub = (code: string, httpStatus?: number) =>
+      describeGradingIssue(
+        issue({
+          code,
+          source: {
+            kind: "url",
+            url: "https://github.com/me/private",
+            httpStatus,
+          },
+        }),
+        t,
+        en,
+      );
+
+    expect(describeGithub("url_unreachable", 404)).toContain(
+      "If the repository is private",
+    );
+    expect(describeGithub("url_empty", 200)).toContain("committed");
+  });
+
+  it("does not mistake a lookalike host for GitHub", () => {
+    expect(
+      describeGradingIssue(
+        issue({
+          code: "url_unreachable",
+          source: { kind: "url", url: "https://notgithub.com/me/repo" },
+        }),
+        t,
+        en,
+      ),
+    ).not.toMatch(/repository/);
+  });
+
+  it("gives no repository advice when the link is unknown", () => {
+    for (const code of ["url_unreachable", "url_blocked", "url_empty"]) {
+      expect(describeGradingIssue(issue({ code }), t, en)).not.toMatch(
+        /github|repositor|committed/i,
+      );
+    }
   });
 
   it("explains a spreadsheet that is really a web page", () => {

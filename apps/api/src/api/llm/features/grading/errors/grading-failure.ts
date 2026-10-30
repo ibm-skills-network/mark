@@ -168,6 +168,24 @@ function subjectOf(source: GradingIssueSource | undefined): string {
   return "your submission";
 }
 
+/** A site refusing automated readers; v3 reports these as url_unreachable. */
+const REFUSED_STATUSES = new Set([403, 406, 451]);
+
+function isGithubHost(host: string | undefined): boolean {
+  return host === "github.com" || Boolean(host?.endsWith(".github.com"));
+}
+
+function blockedMessage(
+  url: string,
+  source: GradingIssueSource | undefined,
+): string {
+  if (source?.httpStatus === 401) {
+    return `${url} needs a sign-in, so we couldn't read it. Use a link that opens without signing in. If you can't find one, contact course support.`;
+  }
+  const host = hostOf(source?.url) ?? "This site";
+  return `We couldn't read ${url} because ${host} blocked automated access. The link may still open in your browser. Try another publicly accessible link that meets the assignment requirements. If the assignment allows it, provide screenshots or paste the relevant text instead; otherwise, contact course support.`;
+}
+
 /** English, actionable copy for a code. */
 export function defaultIssueMessage(
   code: GradingIssueCode,
@@ -179,6 +197,16 @@ export function defaultIssueMessage(
   const fileLower = source?.fileName ? `"${source.fileName}"` : "your file";
   switch (code) {
     case "url_unreachable": {
+      // GitHub answers 404 for a private repository, so the generic copy fits it.
+      const status = isGithubHost(hostOf(source?.url))
+        ? undefined
+        : source?.httpStatus;
+      if (status === 401 || REFUSED_STATUSES.has(status ?? 0)) {
+        return blockedMessage(url, source);
+      }
+      if (status === 404 || status === 410) {
+        return `The page at ${url} doesn't exist or has been removed. Check that you copied the whole address. If the page has expired, use a current link that meets the assignment requirements.`;
+      }
       return `We couldn't open ${url}. The page may be private or the address may be incorrect. Check whether it opens without signing in. If you own the page, check its sharing settings. Otherwise, try another publicly accessible source that meets the assignment requirements. If no suitable link works, contact course support.`;
     }
     case "url_placeholder": {
@@ -193,8 +221,7 @@ export function defaultIssueMessage(
         : "We couldn't read your answer as a web address. Paste the full link, starting with https://, and submit again.";
     }
     case "url_blocked": {
-      const host = hostOf(source?.url) ?? "This site";
-      return `We couldn't read ${url} because ${host} blocked automated access. The link may still open in your browser. Try another publicly accessible link that meets the assignment requirements. If the assignment allows it, provide screenshots or paste the relevant text instead; otherwise, contact course support.`;
+      return blockedMessage(url, source);
     }
     case "url_empty": {
       return `We opened ${url} but couldn't extract readable content. The page may require sign-in or load its content only in a browser. Try another publicly accessible link that meets the assignment requirements. If the assignment allows it, provide screenshots or paste the relevant text instead; otherwise, contact course support.`;
@@ -203,6 +230,9 @@ export function defaultIssueMessage(
       return `${url} is a kind of page we can't grade (such as a project board, an issue list or an editing page). Link directly to the file or repository that contains your work.`;
     }
     case "url_temporarily_unavailable": {
+      if (source?.httpStatus === 429) {
+        return `The site hosting ${url} is limiting how many requests we can make right now. Nothing is wrong with your answer. Wait a few minutes and try again, or use a different publicly accessible link if it keeps happening.`;
+      }
       return `We couldn't reach ${url} just now. Please try again in a few minutes. If it still fails, try another publicly accessible link that meets the assignment requirements. If the assignment allows it, provide screenshots or paste the relevant text instead; otherwise, contact course support.`;
     }
     case "file_wrong_format": {
