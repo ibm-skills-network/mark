@@ -27,6 +27,7 @@ const rowSelect = {
   enabled: true,
   pointsPerStep: true,
   maxBoost: true,
+  minScorePercent: true,
   updatedBy: true,
   updatedAt: true,
 } as const;
@@ -36,6 +37,7 @@ function settings(row: BoostConfig): BoostConfig {
     enabled: row.enabled,
     pointsPerStep: row.pointsPerStep,
     maxBoost: row.maxBoost,
+    minScorePercent: row.minScorePercent,
   };
 }
 

@@ -34,6 +34,7 @@ const saved = {
   enabled: false,
   pointsPerStep: 4,
   maxBoost: 3,
+  minScorePercent: 40,
   updatedBy: null,
   updatedAt: null,
 };
@@ -72,6 +73,7 @@ describe("GradingBoostPage", () => {
       ...saved,
       enabled: true,
       maxBoost: 2,
+      minScorePercent: 50,
       updatedBy: "noah@example.com",
       updatedAt: "2026-10-30T19:00:00.000Z",
     });
@@ -79,6 +81,9 @@ describe("GradingBoostPage", () => {
     fireEvent.click(await screen.findByRole("switch", { name: /enabled/i }));
     fireEvent.change(screen.getByLabelText(/most points per question/i), {
       target: { value: "2" },
+    });
+    fireEvent.change(screen.getByLabelText(/minimum score/i), {
+      target: { value: "50" },
     });
     expect(
       screen.getByRole("table", { name: /boost preview/i }),
@@ -89,7 +94,7 @@ describe("GradingBoostPage", () => {
     await waitFor(() =>
       expect(put).toHaveBeenCalledWith(
         "/api/v3/grading-settings/boost",
-        { enabled: true, pointsPerStep: 4, maxBoost: 2 },
+        { enabled: true, pointsPerStep: 4, maxBoost: 2, minScorePercent: 50 },
         { headers: { "x-admin-token": "tok" } },
       ),
     );

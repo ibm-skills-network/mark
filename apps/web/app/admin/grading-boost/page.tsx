@@ -32,6 +32,7 @@ interface BoostSetting {
   enabled: boolean;
   pointsPerStep: number;
   maxBoost: number;
+  minScorePercent: number;
   updatedBy: string | null;
   updatedAt: string | null;
 }
@@ -52,6 +53,7 @@ export default function GradingBoostPage() {
   const [enabled, setEnabled] = useState(false);
   const [pointsPerStep, setPointsPerStep] = useState("4");
   const [maxBoost, setMaxBoost] = useState("3");
+  const [minScorePercent, setMinScorePercent] = useState("40");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
@@ -71,6 +73,7 @@ export default function GradingBoostPage() {
     setEnabled(next.enabled);
     setPointsPerStep(String(next.pointsPerStep));
     setMaxBoost(String(next.maxBoost));
+    setMinScorePercent(String(next.minScorePercent));
   };
 
   useEffect(() => {
@@ -93,7 +96,9 @@ export default function GradingBoostPage() {
 
   const step = Number(pointsPerStep);
   const cap = Number(maxBoost);
-  const valid = inRange(step, 1, 100) && inRange(cap, 0, 20);
+  const minScore = Number(minScorePercent);
+  const valid =
+    inRange(step, 1, 100) && inRange(cap, 0, 20) && inRange(minScore, 0, 100);
 
   const save = async () => {
     const headers = adminHeaders();
@@ -107,7 +112,12 @@ export default function GradingBoostPage() {
     try {
       const next = await apiClient.put<BoostSetting>(
         ENDPOINT,
-        { enabled, pointsPerStep: step, maxBoost: cap },
+        {
+          enabled,
+          pointsPerStep: step,
+          maxBoost: cap,
+          minScorePercent: minScore,
+        },
         { headers },
       );
       show(next);
@@ -137,8 +147,9 @@ export default function GradingBoostPage() {
           <CardTitle>Effort boost</CardTitle>
           <p className="text-sm text-gray-600">
             Extra points on AI-graded questions when the grader judges the
-            learner made a genuine attempt but missed criteria. Never more than
-            the question&apos;s points.
+            learner made a genuine attempt but missed criteria. Only for
+            attempts at or above the minimum score, and never more than half of
+            the points already earned or past the question&apos;s points.
           </p>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -179,7 +190,7 @@ export default function GradingBoostPage() {
                 </span>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-4 sm:grid-cols-3">
                 <div className="space-y-2">
                   <Label htmlFor="points-per-step">
                     Question points per boost point (1–100)
@@ -206,6 +217,17 @@ export default function GradingBoostPage() {
                     onChange={(event) => setMaxBoost(event.target.value)}
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="min-score">Minimum score % (0–100)</Label>
+                  <Input
+                    id="min-score"
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={minScorePercent}
+                    onChange={(event) => setMinScorePercent(event.target.value)}
+                  />
+                </div>
               </div>
 
               {valid && (
@@ -213,7 +235,7 @@ export default function GradingBoostPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Question</TableHead>
-                      <TableHead>Boost for a genuine attempt</TableHead>
+                      <TableHead>Largest boost</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>

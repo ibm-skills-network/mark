@@ -77,7 +77,12 @@ describeWithDatabase("v3 grading boost setting endpoint", () => {
       .set("x-admin-token", token ?? ADMIN)
       .set("x-request-id", "rid-boost")
       .send(body as object);
-  const on = { enabled: true, pointsPerStep: 4, maxBoost: 3 };
+  const on = {
+    enabled: true,
+    pointsPerStep: 4,
+    maxBoost: 3,
+    minScorePercent: 40,
+  };
 
   it("reads as off with the default steps before anything is saved", async () => {
     const res = await http()
@@ -88,6 +93,7 @@ describeWithDatabase("v3 grading boost setting endpoint", () => {
       enabled: false,
       pointsPerStep: 4,
       maxBoost: 3,
+      minScorePercent: 40,
       updatedBy: null,
       updatedAt: null,
     });
@@ -136,7 +142,10 @@ describeWithDatabase("v3 grading boost setting endpoint", () => {
     [{ ...on, pointsPerStep: 2.5 }],
     [{ ...on, maxBoost: -1 }],
     [{ ...on, maxBoost: 21 }],
-    [{ enabled: true, pointsPerStep: 4 }],
+    [{ ...on, minScorePercent: -1 }],
+    [{ ...on, minScorePercent: 101 }],
+    [{ ...on, minScorePercent: 39.5 }],
+    [{ enabled: true, pointsPerStep: 4, maxBoost: 3 }],
     [{ ...on, updatedBy: "someone@example.com" }],
   ])("refuses %p with a generic 400 and writes nothing", async (body) => {
     const res = await put(body);

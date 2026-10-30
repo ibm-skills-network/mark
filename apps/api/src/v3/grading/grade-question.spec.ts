@@ -565,14 +565,12 @@ describe("prompt and request", () => {
     );
   });
 
-  it("defines a solid attempt by engagement with the task, not length or tone", () => {
+  it("defines a solid attempt as real effort at what the question asks", () => {
     const flat = GRADE_INSTRUCTIONS.replaceAll(/\s+/g, " ");
     expect(flat).toContain(
-      "solidAttempt: true when the learner made a genuine attempt at this question, whatever it scores:",
+      "solidAttempt: true only when the submission makes a real effort at what this question specifically asks for",
     );
-    expect(flat).toContain(
-      "Judge engagement with the task, never length, confidence or tone.",
-    );
+    expect(flat).toContain("off-topic or token answer");
   });
 
   it("asks for solidAttempt and its reason at the top level, strict-schema style", async () => {

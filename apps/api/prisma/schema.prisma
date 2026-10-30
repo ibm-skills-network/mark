@@ -1236,6 +1236,7 @@ model GradingBoostConfig {
   enabled       Boolean  @default(false)
   pointsPerStep Int      @default(4) /// one point per this many question points
   maxBoost      Int      @default(3) /// most points one question can gain
+  minScorePercent Int    @default(40) /// share of the question's points an attempt must earn to qualify
   updatedBy     String
   updatedAt     DateTime @updatedAt
 }
