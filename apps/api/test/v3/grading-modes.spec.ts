@@ -35,7 +35,11 @@ describeWithDatabase("v3 grading modes admin endpoint", () => {
   beforeAll(async () => {
     prisma = new PrismaClient({ datasourceUrl: databaseUrl });
     const assignment = await prisma.assignment.create({
-      data: { name: "v3 grading modes spec", type: "AI_GRADED", published: false },
+      data: {
+        name: "v3 grading modes spec",
+        type: "AI_GRADED",
+        published: false,
+      },
       select: { id: true },
     });
     assignmentId = assignment.id;
@@ -121,7 +125,12 @@ describeWithDatabase("v3 grading modes admin endpoint", () => {
   });
 
   it("logs each write with before and after", async () => {
-    await put({ questionType: "URL", assignmentId, mode: "live", effort: null });
+    await put({
+      questionType: "URL",
+      assignmentId,
+      mode: "live",
+      effort: null,
+    });
     await put({ questionType: "URL", assignmentId, mode: "off", effort: null });
     const updates = t.logs.filter((l) => l.event === "grading.modes.updated");
     expect(updates).toEqual([
@@ -141,8 +150,18 @@ describeWithDatabase("v3 grading modes admin endpoint", () => {
   });
 
   it("lists every switch with the shadow setting", async () => {
-    await put({ questionType: "UPLOAD", assignmentId, mode: "live", effort: "medium" });
-    await put({ questionType: "TEXT", assignmentId: null, mode: "off", effort: null });
+    await put({
+      questionType: "UPLOAD",
+      assignmentId,
+      mode: "live",
+      effort: "medium",
+    });
+    await put({
+      questionType: "TEXT",
+      assignmentId: null,
+      mode: "off",
+      effort: null,
+    });
     const res = await http()
       .get("/api/v3/admin/grading-modes")
       .set("x-admin-token", ADMIN);
@@ -158,10 +177,24 @@ describeWithDatabase("v3 grading modes admin endpoint", () => {
 
   it.each([
     [{}],
-    [{ questionType: "TRUE_FALSE", assignmentId: null, mode: "live", effort: null }],
+    [
+      {
+        questionType: "TRUE_FALSE",
+        assignmentId: null,
+        mode: "live",
+        effort: null,
+      },
+    ],
     [{ questionType: "TEXT", assignmentId: -1, mode: "live", effort: null }],
     [{ questionType: "TEXT", assignmentId: 1.5, mode: "live", effort: null }],
-    [{ questionType: "TEXT", assignmentId: 2_147_483_648, mode: "live", effort: null }],
+    [
+      {
+        questionType: "TEXT",
+        assignmentId: 2_147_483_648,
+        mode: "live",
+        effort: null,
+      },
+    ],
     [{ questionType: "TEXT", assignmentId: null, mode: "on", effort: null }],
     [{ questionType: "TEXT", assignmentId: null, mode: "live", effort: "max" }],
     [{ questionType: "TEXT", assignmentId: null, mode: "live" }],
@@ -201,7 +234,12 @@ describeWithDatabase("v3 grading modes admin endpoint", () => {
   });
 
   it("limits each admin to 10 writes a minute with a 429 envelope", async () => {
-    const body = { questionType: "TEXT", assignmentId: null, mode: "off", effort: null };
+    const body = {
+      questionType: "TEXT",
+      assignmentId: null,
+      mode: "off",
+      effort: null,
+    };
     const statuses: number[] = [];
     for (let index = 0; index < 10; index += 1) {
       statuses.push((await put(body)).status);
@@ -220,10 +258,17 @@ describeWithDatabase("v3 grading modes admin endpoint", () => {
   });
 
   it("lets only one of two racing first writes create the switch", async () => {
-    const body = { questionType: "UPLOAD", assignmentId: null, mode: "live", effort: null };
+    const body = {
+      questionType: "UPLOAD",
+      assignmentId: null,
+      mode: "live",
+      effort: null,
+    };
     const results = await Promise.all([put(body), put(body), put(body)]);
     for (const res of results) expect([200, 409]).toContain(res.status);
-    expect(results.filter((res) => res.status === 200).length).toBeGreaterThan(0);
+    expect(results.filter((res) => res.status === 200).length).toBeGreaterThan(
+      0,
+    );
     expect(await prisma.gradingModeConfig.count()).toBe(1);
   });
 
@@ -231,7 +276,12 @@ describeWithDatabase("v3 grading modes admin endpoint", () => {
     ["no admin token", undefined, 401],
     ["an author session", AUTHOR, 403],
   ])("refuses %s on read and write", async (_name, token, status) => {
-    const body = { questionType: "TEXT", assignmentId: null, mode: "live", effort: null };
+    const body = {
+      questionType: "TEXT",
+      assignmentId: null,
+      mode: "live",
+      effort: null,
+    };
     const read = http().get("/api/v3/admin/grading-modes");
     const write = http().put("/api/v3/admin/grading-modes").send(body);
     if (token) {
